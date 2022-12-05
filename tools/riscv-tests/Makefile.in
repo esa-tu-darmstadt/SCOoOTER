@@ -1,0 +1,104 @@
+prefix          := @prefix@
+abs_top_src_dir := @abs_top_srcdir@
+XLEN            := @XLEN@
+BUS ?= XLEN
+target_alias    := @target_alias@
+ifeq ($(target_alias),)
+RISCV_PREFIX_VAR :=
+else
+RISCV_PREFIX_VAR := RISCV_PREFIX=@target_alias@-
+endif
+instbasedir     := $(DESTDIR)$(prefix)
+bmarkdir        := $(abs_top_src_dir)/benchmarks
+isa_src_dir     := $(abs_top_src_dir)/isa
+debug_src_dir   := $(abs_top_src_dir)/debug
+
+all: benchmarks isa
+
+#install: all
+#	install -d $(instbasedir)/share/riscv-tests/isa
+#	install -d $(instbasedir)/share/riscv-tests/benchmarks
+#	install -p -m 644 `find isa -maxdepth 1 -type f` $(instbasedir)/share/riscv-tests/isa
+#	install -p -m 644 `find benchmarks -maxdepth 1 -type f` $(instbasedir)/share/riscv-tests/benchmarks
+
+# Function to find unique strings
+define uniq =
+  $(eval seen :=)
+  $(foreach _,$1,$(if $(filter $_,${seen}),,$(eval seen += $_)))
+  ${seen}
+endef
+
+OFLAGS+=-O binary -j .text.init -j .text
+
+install: sort
+	@mkdir -p ../../testPrograms/isa
+	@cp -r out/* ../../testPrograms/isa
+
+sort: all
+	#copy all binaries over
+	@mkdir -p out/all/elf
+	@$(eval ELFS:=$(filter-out %.dump, $(wildcard isa/rv*-*)) )
+	@$(eval ELFS_SHORT := $(notdir ${ELFS}))
+	@$(foreach bin, ${ELFS_SHORT}, cp isa/$(bin) out/all/elf/$(bin).elf ; )
+
+	#make binaries from ELF files
+	@mkdir -p out/all/bin
+	@$(foreach bin, ${ELFS_SHORT}, riscv$(XLEN)-unknown-elf-objcopy $(OFLAGS) out/all/elf/$(bin).elf out/all/bin/$(bin).bin ; )
+
+	#make verilog from ELF files
+	@mkdir -p out/all/ver
+	@$(foreach bin, ${ELFS_SHORT}, riscv$(XLEN)-unknown-elf-objcopy -O verilog out/all/elf/$(bin).elf out/all/ver/$(bin).verilog.txt ; )
+
+	#make BSV hex from verilog
+	@mkdir -p out/all/bsv_hex
+	@$(foreach ver, ${ELFS_SHORT}, python3 ../hexConverter/hexConverter.py out/all/ver/$(ver).verilog.txt -o out/all/bsv_hex/$(ver) -a $(BUS) -b 0x10000 ; )
+	
+	#make dump from ELF files
+	@mkdir -p out/all/dump
+	@$(foreach bin, ${ELFS_SHORT}, riscv$(XLEN)-unknown-elf-objdump -d out/all/elf/$(bin).elf > out/all/dump/$(bin).dump ; )
+
+	#find file prefixes
+	@$(eval ISA_NAMES:= $(sort $(foreach bin, ${ELFS}, $(firstword $(subst -, ,$(lastword $(subst /, , $(bin))))))) )
+	@$(eval ISA_NAMES_SHORT := $(subst rv,,$(ISA_NAMES)))
+
+	#copy all files to their respective output folder
+	@$(foreach isa, $(ISA_NAMES_SHORT), \
+		mkdir -p out/$(isa)/bin ; \
+		mkdir -p out/$(isa)/elf ; \
+		mkdir -p out/$(isa)/bsv_hex ; \
+		mkdir -p out/$(isa)/ver ; \
+		mkdir -p out/$(isa)/dump ; \
+		cp out/all/bin/*$(isa)* out/$(isa)/bin ; \
+		cp out/all/elf/*$(isa)* out/$(isa)/elf ; \
+		cp out/all/ver/*$(isa)* out/$(isa)/ver ; \
+		cp out/all/bsv_hex/*$(isa)* out/$(isa)/bsv_hex ; \
+		cp out/all/dump/*$(isa)* out/$(isa)/dump ; \
+		printf '@0000\n00000000\n' > out/$(isa)/bsv_hex/rv$(isa)-p-init-bram.bsv.txt ; \
+	)
+	@rm -rf out/all
+
+
+benchmarks:
+	mkdir -p benchmarks
+	$(MAKE) -C benchmarks -f $(bmarkdir)/Makefile src_dir=$(bmarkdir) XLEN=$(XLEN) $(RISCV_PREFIX_VAR)
+
+isa:
+	mkdir -p isa
+	$(MAKE) -C isa -f $(isa_src_dir)/Makefile src_dir=$(isa_src_dir) XLEN=$(XLEN) $(RISCV_PREFIX_VAR)
+
+debug-check:
+	mkdir -p debug
+	$(MAKE) -C debug -f $(debug_src_dir)/Makefile src_dir=$(debug_src_dir) XLEN=$(XLEN)
+
+debug-check-fast:
+	mkdir -p debug
+	$(MAKE) -C debug -f $(debug_src_dir)/Makefile src_dir=$(debug_src_dir) XLEN=$(XLEN) spike$(XLEN)
+
+clean:
+	[ ! -d isa ]        || $(MAKE) -C isa -f $(isa_src_dir)/Makefile src_dir=$(isa_src_dir) clean
+	[ ! -d benchmarks ] || $(MAKE) -C benchmarks -f $(bmarkdir)/Makefile src_dir=$(bmarkdir) clean
+	[ ! -d debug ]      || $(MAKE) -C debug -f $(debug_src_dir)/Makefile src_dir=$(debug_src_dir) clean
+	rm -rf out
+
+.PHONY: benchmarks isa clean sort install
+

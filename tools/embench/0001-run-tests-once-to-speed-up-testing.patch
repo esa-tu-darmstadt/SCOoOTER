@@ -1,0 +1,490 @@
+From 06419bd52f8b446b3c9f2a7687fb28b8b1463b69 Mon Sep 17 00:00:00 2001
+From: Markus Scheck <markus.scheck@stud.tu-darmstadt.de>
+Date: Fri, 4 Nov 2022 16:28:41 +0100
+Subject: [PATCH] run tests once to speed up testing
+
+---
+ src/aha-mont64/mont64.c           |  4 ++--
+ src/crc32/crc_32.c                |  4 ++--
+ src/cubic/basicmath_small.c       |  4 ++--
+ src/edn/libedn.c                  |  4 ++--
+ src/huffbench/libhuffbench.c      |  4 ++--
+ src/matmult-int/matmult-int.c     |  4 ++--
+ src/minver/libminver.c            |  4 ++--
+ src/nbody/nbody.c                 |  4 ++--
+ src/nettle-aes/nettle-aes.c       |  4 ++--
+ src/nettle-sha256/nettle-sha256.c |  4 ++--
+ src/nsichneu/libnsichneu.c        |  4 ++--
+ src/picojpeg/picojpeg_test.c      |  4 ++--
+ src/qrduino/qrtest.c              |  4 ++--
+ src/sglib-combined/combined.c     |  4 ++--
+ src/slre/libslre.c                |  4 ++--
+ src/st/libst.c                    |  4 ++--
+ src/statemate/libstatemate.c      |  4 ++--
+ src/ud/libud.c                    |  4 ++--
+ src/wikisort/libwikisort.c        |  4 ++--
+ support/main.c                    | 10 ++--------
+ support/support.h                 |  1 +
+ 21 files changed, 41 insertions(+), 46 deletions(-)
+
+diff --git a/src/aha-mont64/mont64.c b/src/aha-mont64/mont64.c
+index faeccdb..f6033b1 100644
+--- a/src/aha-mont64/mont64.c
++++ b/src/aha-mont64/mont64.c
+@@ -214,7 +214,7 @@ xbinGCD (uint64 a, uint64 b, volatile uint64 * pu, volatile uint64 * pv)
+ /* ------------------------------ main ------------------------------ */
+ static uint64 in_a, in_b, in_m;
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -232,7 +232,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/crc32/crc_32.c b/src/crc32/crc_32.c
+index a268113..48ea164 100644
+--- a/src/crc32/crc_32.c
++++ b/src/crc32/crc_32.c
+@@ -169,7 +169,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -187,7 +187,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/cubic/basicmath_small.c b/src/cubic/basicmath_small.c
+index a3d2839..a207ea9 100644
+--- a/src/cubic/basicmath_small.c
++++ b/src/cubic/basicmath_small.c
+@@ -44,7 +44,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -62,7 +62,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int
++int
+ benchmark_body (int rpt)
+ {
+   int  i;
+diff --git a/src/edn/libedn.c b/src/edn/libedn.c
+index 48a748d..83d4058 100644
+--- a/src/edn/libedn.c
++++ b/src/edn/libedn.c
+@@ -278,7 +278,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -296,7 +296,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int j;
+diff --git a/src/huffbench/libhuffbench.c b/src/huffbench/libhuffbench.c
+index f65e05a..77748f1 100644
+--- a/src/huffbench/libhuffbench.c
++++ b/src/huffbench/libhuffbench.c
+@@ -463,7 +463,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int rpt);
++int benchmark_body (int rpt);
+ 
+ void
+ warm_caches (int heat)
+@@ -481,7 +481,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline)) benchmark_body (int rpt)
++int __attribute__ ((noinline)) benchmark_body (int rpt)
+ {
+   int j;
+ 
+diff --git a/src/matmult-int/matmult-int.c b/src/matmult-int/matmult-int.c
+index 41b387e..8f36c8e 100644
+--- a/src/matmult-int/matmult-int.c
++++ b/src/matmult-int/matmult-int.c
+@@ -71,7 +71,7 @@ void Test (matrix A, matrix B, matrix Res);
+ void Initialize (matrix Array);
+ int RandomInteger (void);
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -89,7 +89,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/minver/libminver.c b/src/minver/libminver.c
+index 8015229..2bcb89d 100644
+--- a/src/minver/libminver.c
++++ b/src/minver/libminver.c
+@@ -246,7 +246,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -264,7 +264,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/nbody/nbody.c b/src/nbody/nbody.c
+index 423df9e..b271ab8 100644
+--- a/src/nbody/nbody.c
++++ b/src/nbody/nbody.c
+@@ -160,7 +160,7 @@ initialise_benchmark (void)
+ 
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -178,7 +178,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int j;
+diff --git a/src/nettle-aes/nettle-aes.c b/src/nettle-aes/nettle-aes.c
+index d85b9f6..de5464b 100644
+--- a/src/nettle-aes/nettle-aes.c
++++ b/src/nettle-aes/nettle-aes.c
+@@ -1137,7 +1137,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -1155,7 +1155,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/nettle-sha256/nettle-sha256.c b/src/nettle-sha256/nettle-sha256.c
+index 28f53d6..9c6c500 100644
+--- a/src/nettle-sha256/nettle-sha256.c
++++ b/src/nettle-sha256/nettle-sha256.c
+@@ -446,7 +446,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -464,7 +464,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/nsichneu/libnsichneu.c b/src/nsichneu/libnsichneu.c
+index 6952136..232418d 100644
+--- a/src/nsichneu/libnsichneu.c
++++ b/src/nsichneu/libnsichneu.c
+@@ -71,7 +71,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -90,7 +90,7 @@ benchmark (void)
+ 
+ 
+ /**void NSicherNeu()**/
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int j;
+diff --git a/src/picojpeg/picojpeg_test.c b/src/picojpeg/picojpeg_test.c
+index 134cde0..99252b0 100644
+--- a/src/picojpeg/picojpeg_test.c
++++ b/src/picojpeg/picojpeg_test.c
+@@ -162,7 +162,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -180,7 +180,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/qrduino/qrtest.c b/src/qrduino/qrtest.c
+index 2ce36ca..70d7d01 100644
+--- a/src/qrduino/qrtest.c
++++ b/src/qrduino/qrtest.c
+@@ -30,7 +30,7 @@ static char heap[HEAP_SIZE];
+ static const char *encode;
+ static int size;
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -48,7 +48,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   static const char *in_encode = "http://www.mageec.com";
+diff --git a/src/sglib-combined/combined.c b/src/sglib-combined/combined.c
+index de41b86..ae733ea 100644
+--- a/src/sglib-combined/combined.c
++++ b/src/sglib-combined/combined.c
+@@ -168,7 +168,7 @@ initialise_benchmark (void)
+ 
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -186,7 +186,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   volatile int cnt;
+diff --git a/src/slre/libslre.c b/src/slre/libslre.c
+index ee1353a..8fc4f15 100644
+--- a/src/slre/libslre.c
++++ b/src/slre/libslre.c
+@@ -569,7 +569,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -587,7 +587,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   volatile int ret;
+diff --git a/src/st/libst.c b/src/st/libst.c
+index ce5b391..2accd1d 100644
+--- a/src/st/libst.c
++++ b/src/st/libst.c
+@@ -64,7 +64,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -82,7 +82,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/statemate/libstatemate.c b/src/statemate/libstatemate.c
+index 2bf8e36..7baddd9 100644
+--- a/src/statemate/libstatemate.c
++++ b/src/statemate/libstatemate.c
+@@ -1431,7 +1431,7 @@ FH_DU (void)
+ 
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -1449,7 +1449,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int i;
+diff --git a/src/ud/libud.c b/src/ud/libud.c
+index a7a85bd..4158838 100644
+--- a/src/ud/libud.c
++++ b/src/ud/libud.c
+@@ -129,7 +129,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -148,7 +148,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   int  k;
+diff --git a/src/wikisort/libwikisort.c b/src/wikisort/libwikisort.c
+index 4bdc701..c95e2d2 100644
+--- a/src/wikisort/libwikisort.c
++++ b/src/wikisort/libwikisort.c
+@@ -1043,7 +1043,7 @@ initialise_benchmark (void)
+ }
+ 
+ 
+-static int benchmark_body (int  rpt);
++int benchmark_body (int  rpt);
+ 
+ void
+ warm_caches (int  heat)
+@@ -1061,7 +1061,7 @@ benchmark (void)
+ }
+ 
+ 
+-static int __attribute__ ((noinline))
++int __attribute__ ((noinline))
+ benchmark_body (int rpt)
+ {
+   long total, index, test_case;
+diff --git a/support/main.c b/support/main.c
+index e7baa46..1727537 100644
+--- a/support/main.c
++++ b/support/main.c
+@@ -29,21 +29,15 @@ main (int argc __attribute__ ((unused)),
+ 
+   initialise_board ();
+   initialise_benchmark ();
+-  warm_caches (WARMUP_HEAT);
+ 
+-  start_trigger ();
+-  result = benchmark ();
+-  stop_trigger ();
++  result = benchmark_body(1);
+ 
+   /* bmarks that use arrays will check a global array rather than int result */
+ 
+   correct = verify_benchmark (result);
+ 
+   #ifdef TAPASCO-PE
+-  if (!correct) {
+-    writeToCtrl(RETL, -1);
+-    writeToCtrl(RETH, -1);
+-  }
++  writeToCtrl(RETL, correct);
+   setIntr();
+   #endif
+ 
+diff --git a/support/support.h b/support/support.h
+index b68b81e..55112ee 100644
+--- a/support/support.h
++++ b/support/support.h
+@@ -52,6 +52,7 @@ void warm_caches (int temperature);
+    inlined! */
+ 
+ int benchmark (void) __attribute__ ((noinline));
++int __attribute__ ((noinline)) benchmark_body (int rpt);
+ 
+ /* Every benchmark must implement this to validate the result of the
+    benchmark. */
+-- 
+2.35.3
+

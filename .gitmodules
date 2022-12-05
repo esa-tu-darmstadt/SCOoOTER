@@ -1,0 +1,3 @@
+[submodule "tools/embench/embench-iot"]
+	path = tools/embench/embench-iot
+	url = git@gitlab.esa.informatik.tu-darmstadt.de:risc-v/benchmarks/embench-iot.git

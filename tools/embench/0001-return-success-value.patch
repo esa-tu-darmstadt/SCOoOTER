@@ -1,0 +1,32 @@
+From f452559967f9e34842cdb802d48d24a32c20b8f3 Mon Sep 17 00:00:00 2001
+From: Markus Scheck <markus.scheck@stud.tu-darmstadt.de>
+Date: Mon, 7 Nov 2022 12:15:55 +0100
+Subject: [PATCH] return success value
+
+---
+ support/main.c | 7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/support/main.c b/support/main.c
+index e7baa46..4bad403 100644
+--- a/support/main.c
++++ b/support/main.c
+@@ -37,13 +37,10 @@ main (int argc __attribute__ ((unused)),
+ 
+   /* bmarks that use arrays will check a global array rather than int result */
+ 
+-  correct = verify_benchmark (result);
++  
+ 
+   #ifdef TAPASCO-PE
+-  if (!correct) {
+-    writeToCtrl(RETL, -1);
+-    writeToCtrl(RETH, -1);
+-  }
++  writeToCtrl(RETL, verify_benchmark (result));
+   setIntr();
+   #endif
+ 
+-- 
+2.35.3
+
