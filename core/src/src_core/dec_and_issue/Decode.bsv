@@ -6,55 +6,55 @@ import Types :: *;
 //**********************************************
 // Functions to extract fields from instructions
 
-function OpCode getOpc(INST inst);
+function OpCode getOpc(Bit#(ILEN) inst);
     OpCode opc = unpack(inst[6:0]);
     return opc;
 endfunction
 
-function Bit#(7) getFunct7(INST inst);
+function Bit#(7) getFunct7(Bit#(ILEN) inst);
     return inst[31:25];
 endfunction
 
-function Bit#(3) getFunct3(INST inst);
+function Bit#(3) getFunct3(Bit#(ILEN) inst);
     return inst[14:12];
 endfunction
 
-function RADDR getRs1(INST inst);
+function RADDR getRs1(Bit#(ILEN) inst);
     return inst[19:15];
 endfunction
 
-function RADDR getRs2(INST inst);
+function RADDR getRs2(Bit#(ILEN) inst);
     return inst[24:20];
 endfunction
 
-function RADDR getRd(INST inst);
+function RADDR getRd(Bit#(ILEN) inst);
     return inst[11:7];
 endfunction
 
-function WORD getImmI(INST inst);
+function Bit#(XLEN) getImmI(Bit#(ILEN) inst);
     return signExtend(inst[31:20]);
 endfunction
 
-function WORD getImmS(INST inst);
+function Bit#(XLEN) getImmS(Bit#(ILEN) inst);
     return signExtend( {inst[31:25],inst[11:7]} );
 endfunction
 
-function WORD getImmB(INST inst);
+function Bit#(XLEN) getImmB(Bit#(ILEN) inst);
     return signExtend( {inst[31],inst[7],inst[30:25],inst[11:8],1'b0} );
 endfunction
 
-function WORD getImmU(INST inst);
+function Bit#(XLEN) getImmU(Bit#(ILEN) inst);
     return{inst[31:12],0};
 endfunction
 
-function WORD getImmJ(INST inst);
+function Bit#(XLEN) getImmJ(Bit#(ILEN) inst);
     return signExtend( {inst[31],inst[19:12],inst[20],inst[30:21],1'b0} );
 endfunction
 
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(INST inst, WORD pc);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),
@@ -78,13 +78,15 @@ endfunction
 //***************************************************
 // Functions to select correct fields based on opcode
 
-function Action print_inst(Instruction inst);
+function Action print_inst(t inst) provisos(
+    FShow#(t)
+);
     return (action
         $display(fshow(inst));
     endaction);
 endfunction
 
-function WORD select_imm(InstructionPredecode inst);
+function Bit#(XLEN) select_imm(InstructionPredecode inst);
     return case(inst.opc)
         LUI, AUIPC                         : inst.immU;
         JAL                                : inst.immJ;
@@ -244,9 +246,9 @@ function Instruction decode(InstructionPredecode inst);
         rl : unpack(inst.funct7[0]),
 
         //registers, contains 0 if unused (or 0 is specified in inst)
-        rs1 : inst.rs1,
-        rs2 : inst.rs2,
-        rd : inst.rd,
+        rs1 : tagged Raddr inst.rs1,
+        rs2 : tagged Raddr inst.rs2,
+        rd : tagged Raddr inst.rd,
 
         //set exception INVALID_INST if decode error
         exception : (getFunct(inst) == INVALID ? tagged Valid INVALID_INST : tagged Invalid),

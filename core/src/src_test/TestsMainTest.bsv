@@ -10,11 +10,13 @@ package TestsMainTest;
     import BRAM :: *;
 
     (* synthesize *)
-    module [Module] mkTestsMainTest(TestHandler);
+    module [Module] mkTestsMainTest(TestHandler) provisos(
+        Mul#(XLEN, IFUINST, ifuwidth)
+    );
 
-        Top dut <- mkSCOOOTER_riscv();
+        let dut <- mkSCOOOTER_riscv();
 
-        AXI4_Slave_Rd#(XLEN, IFUWIDTH, 0, 0) iram_axi <- mkAXI4_Slave_Rd(0, 0);
+        AXI4_Slave_Rd#(XLEN, ifuwidth, 0, 0) iram_axi <- mkAXI4_Slave_Rd(0, 0);
 
 	    mkConnection(iram_axi.fab ,dut.ifu_axi);
 
@@ -22,7 +24,7 @@ package TestsMainTest;
         cfg_i.allowWriteResponseBypass = False;
         cfg_i.loadFormat = tagged Hex "../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-add.bsv.txt";
         cfg_i.latency = 1;
-        BRAM1Port#(WORD, IFUWORD) ibram <- mkBRAM1Server(cfg_i);
+        BRAM1Port#(Bit#(XLEN), Bit#(ifuwidth)) ibram <- mkBRAM1Server(cfg_i);
 
 
         rule ifuread;
@@ -30,7 +32,7 @@ package TestsMainTest;
             ibram.portA.request.put(BRAMRequest{
                 write: False,
                 responseOnWrite: False,
-                address: r.addr,
+                address: (r.addr>>2)/fromInteger(valueOf(IFUINST)),
                 datain: ?
             });
 

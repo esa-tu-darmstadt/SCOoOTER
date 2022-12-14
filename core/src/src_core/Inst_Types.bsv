@@ -65,7 +65,7 @@ typedef enum {
 
 // Struct containing all possible fields
 typedef struct {
-    WORD pc;
+    Bit#(XLEN) pc;
     OpCode opc;
 
     //function fields
@@ -78,17 +78,23 @@ typedef struct {
     RADDR rd;
 
     //immediate fields
-    WORD immI;
-    WORD immS;
-    WORD immB;
-    WORD immU;
-    WORD immJ;
+    Bit#(XLEN) immI;
+    Bit#(XLEN) immS;
+    Bit#(XLEN) immB;
+    Bit#(XLEN) immU;
+    Bit#(XLEN) immJ;
 
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
+typedef union tagged {
+    RADDR Raddr;
+    Bit#(XLEN) Tag;
+    Bit#(XLEN) Operand;
+} Operand deriving(Bits, Eq, FShow);
+
 // struct containing condensed amount of fields
 typedef struct {
-    WORD pc;
+    Bit#(XLEN) pc;
     OpCode opc;
 
     //function fields for R type inst
@@ -99,12 +105,12 @@ typedef struct {
     Bool rl;
 
     //reg fields
-    RADDR rs2;
-    RADDR rs1;
-    RADDR rd;
+    Operand rs2;
+    Operand rs1;
+    Operand rd;
 
     //immediate fields
-    WORD imm;
+    Bit#(XLEN) imm;
 
     Maybe#(ExceptionType) exception;
 
