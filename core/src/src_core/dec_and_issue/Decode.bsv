@@ -1,7 +1,10 @@
 package Decode;
 
-import Inst_Types :: *;
-import Types :: *;
+import Inst_Types::*;
+import Types::*;
+import Interfaces::*;
+import MIMO::*;
+import Vector::*;
 
 ///////////////////////////////////////////////////
 // This package implements decoding of instructions
@@ -256,7 +259,7 @@ endfunction
 //*************************************************
 // Create a instruction struct with required fields
 function Instruction decode(InstructionPredecode inst);
-    return Instruction{
+    return Instruction {
         eut: get_exec_unit(inst),
 
         pc : inst.pc,
@@ -279,12 +282,33 @@ function Instruction decode(InstructionPredecode inst);
         exception : (getFunct(inst) == INVALID ? tagged Valid INVALID_INST : tagged Invalid),
 
         //immediate value, garbage if no immediate is used
-        imm : select_imm(inst)
+        imm : select_imm(inst),
+
+        tag : ? //will be set in issue logic
     };
 endfunction
 
-module mkDecode(DecodeIFC);
+(* synthesize *)
+module mkDecode(DecodeIFC) provisos (
+        Bits#(Instruction, instruction_width_t),
+        Mul#(INST_WINDOW, instruction_width_t, mimosize_t), //the output MIMO holds the amount of bits equal to the bit width of a predecoded inst and the mimo depth
+        Add#(__a, instruction_width_t, mimosize_t) // the MIMO should hold at least one predecoded instruction
+);
 
+    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst <- mkMIMO(defaultValue);
+    PulseWire clear_buffer <- mkPulseWire();
+
+    //TODO: synchronization with upstream! Now only enabled if max amount free
+    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc) if (decoded_inst.enqReadyN(fromInteger(valueOf(IFUINST))));
+        if (!clear_buffer) begin
+            let decoded_vec = Vector::map(compose(decode, uncurry(predecode)), Vector::zip(instructions, pc));
+            decoded_inst.enq(amount, decoded_vec);
+        end
+    endmethod
+
+    method MIMO::LUInt#(INST_WINDOW) count = decoded_inst.count();
+    method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst.deq(amount);
+    method Vector#(ISSUEWIDTH, Instruction) first = decoded_inst.first();
 endmodule
 
 endpackage

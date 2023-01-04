@@ -1,22 +1,23 @@
 package SCOOOTER_riscv;
 
-import BlueAXI :: *;
-import Interfaces :: *;
-import Fetch :: *;
-import Types :: *;
-import DecIssue :: *;
-import ReservationStation :: *;
-import BuildVector :: *;
-import Vector :: *;
-import List :: *;
-import Inst_Types :: *;
-import BuildList :: *;
-import Arith :: *;
+import BlueAXI::*;
+import Interfaces::*;
+import Fetch::*;
+import Types::*;
+import DecIssue::*;
+import ReservationStation::*;
+import BuildVector::*;
+import Vector::*;
+import List::*;
+import Inst_Types::*;
+import BuildList::*;
+import Arith::*;
 import ReorderBuffer :: *;
 import Debug::*;
 import Commit::*;
 import RegFileArch::*;
 import RegFileEvo::*;
+import Decode::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
@@ -25,9 +26,22 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         Log#(issuewidth_pad_t, issuewidth_log_t)
     );
 
-    IFU#(ifuwidth, 12) ifu <- mkFetch();
+    let ifu <- mkFetch();
+
+    let decode <- mkDecode();
 
     let arith <- mkArith();
+
+    rule fetch_to_decode;
+        let inst = ifu.first();
+        let cnt = ifu.count();
+        ifu.deq();
+
+        let instructions = Vector::map(tpl_1, inst);
+        let pcs = Vector::map(tpl_2, inst);
+
+        decode.put(cnt, instructions, pcs);
+    endrule
 
     let fu_vec = vec(arith);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
@@ -80,14 +94,14 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
 
     let dec_issue <- mkDecIssue(rs_vec, rob);
 
-    rule ifu_to_dec;
-        let data = ifu.first;
-        dec_issue.put(data, ( ifu.count > fromInteger(valueOf(ISSUEWIDTH)) ? fromInteger(valueOf(ISSUEWIDTH)) : truncate(ifu.count) ));
+    rule issue_to_dec;
+        let data = decode.first;
+        dec_issue.put(data, ( decode.count > fromInteger(valueOf(ISSUEWIDTH)) ? fromInteger(valueOf(ISSUEWIDTH)) : truncate(decode.count) ));
     endrule
 
-    rule ifu_to_dec_wipe;
+    rule issue_to_dec_wipe;
         let count = dec_issue.remove;
-        ifu.deq(count);
+        decode.deq(count);
     endrule
 
     rule dec_to_ifu;

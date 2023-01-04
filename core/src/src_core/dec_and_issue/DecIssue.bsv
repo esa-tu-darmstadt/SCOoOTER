@@ -14,7 +14,7 @@ import SpecialFIFOs::*;
 import TestFunctions::*;
 import Debug::*;
 
-module mkDecIssue#(Vector#(rs_count, ReservationStationIFC#(rs_addr_width, e)) rs_vec, RobIFC rob)(DecAndIssueIFC) provisos(
+module mkDecIssue#(Vector#(rs_count, ReservationStationIFC#(rs_addr_width, e)) rs_vec, RobIFC rob)(IssueIFC) provisos(
     Add#(ROBDEPTH, 1, r_a),
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
     Log#(issuewidth_pad_t, issuewidth_log_t),
@@ -93,10 +93,10 @@ module mkDecIssue#(Vector#(rs_count, ReservationStationIFC#(rs_addr_width, e)) r
             if(rs_enqctr[j] != 0) rs_vec[j].put(rs_enq[j], rs_enqctr[j]);
     endrule
 
-    method Action put(Vector#(ISSUEWIDTH, InstructionPredecode) instructions, UInt#(issuewidth_log_t) amount);
+    method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, UInt#(issuewidth_log_t) amount);
 
         // counter and release variable
-        UInt#(issuewidth_log_t) rem = 0; //TODO: rebuild type using provisos
+        UInt#(issuewidth_log_t) rem = 0;
         Bool issue_done = False;
 
         // get free space in all RS
@@ -114,7 +114,7 @@ module mkDecIssue#(Vector#(rs_count, ReservationStationIFC#(rs_addr_width, e)) r
         let rob_entry_idx_v = Vector::genWith(generate_tag(rob_idx));
 
         // decode all inst
-        let decoded_inst_v = Vector::map(squash_operands, Vector::map(decode, instructions));
+        let decoded_inst_v = Vector::map(squash_operands, instructions);
         decoded_inst_v = Vector::map(tag_instruction, Vector::zip(decoded_inst_v, rob_entry_idx_v));
 
         dbg_print(Decode, $format("instructions: ", fshow(decoded_inst_v)));

@@ -12,4 +12,6 @@ typedef Bit#(5) RADDR;
 
 typedef 16 ROBDEPTH;
 
+typedef 16 INST_WINDOW;
+
 endpackage

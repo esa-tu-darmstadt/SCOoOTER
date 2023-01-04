@@ -2,6 +2,7 @@ action
 actionvalue
 addrs
 BRAM
+buffercount
 cntrl
 creg
 endaction
@@ -24,10 +25,14 @@ instance
 iram
 issuewidth
 method
+MIMO
+mimosize
 misprediction
 module
 package
+predecode
 Predecode
+predecoded
 Raddr
 RADDR
 Randomizable
@@ -43,4 +48,5 @@ seq
 strb
 struct
 typedef
+uncurry
 wset

@@ -14,28 +14,26 @@ interface Top#(numeric type ifuwidth);
 endinterface
 
 // Instruction fetch unit iface
-interface IFU#(numeric type ifuwidth, numeric type buffercount);
+interface IFU;
     // AXI to IMEM
-    interface AXI4_Master_Rd_Fab#(XLEN, ifuwidth, 0, 0) ifu_axi;
+    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) ifu_axi;
     // mispredict signal
     method Action redirect(Bit#(XLEN) newPC);
     // output iface to other units
-    method MIMO::LUInt#(buffercount) count;
-    method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount);
-    method Vector#(ISSUEWIDTH, InstructionPredecode) first;
+    method MIMO::LUInt#(IFUINST) count;
+    method Action deq();
+    method Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32))) first();
 endinterface
 
-// decode and issue unit interface
 interface DecodeIFC;
-    method Action put(Vector#(ISSUEWIDTH, InstructionPredecode) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
-    method MIMO::LUInt#(buffercount) count;
+    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc);
+    method MIMO::LUInt#(INST_WINDOW) count;
     method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount);
-    method Vector#(ISSUEWIDTH, InstructionPredecode) first;
-    method Action redirect();
+    method Vector#(ISSUEWIDTH, Instruction) first;
 endinterface
 
-interface DecAndIssueIFC;
-    method Action put(Vector#(ISSUEWIDTH, InstructionPredecode) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
+interface IssueIFC;
+    method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
     (* always_ready, always_enabled *)
     method MIMO::LUInt#(ISSUEWIDTH) remove;
     method Bit#(XLEN) redirect_pc;

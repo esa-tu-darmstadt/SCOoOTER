@@ -12,15 +12,9 @@ import MIMO :: *;
 import Vector :: *;
 import Debug::*;
 
-module mkFetch(IFU#(ifuwidth, mimodepth)) provisos(
-        Mul#(XLEN, IFUINST, ifuwidth), //the width of the IFU axi must be as large as the size of a word times the issuewidth
-        Bits#(InstructionPredecode, predecodewidth), //a predecoded instruction is predecodewidth bits wide
-        Add#(ISSUEWIDTH, __a, mimodepth), //the depth of the output MIMO should be larger than instructions issued in one cycle
-        Add#(IFUINST, __b, mimodepth), //the depth of the output MIMO should be at least as wide as the IFU fetch width
-        Mul#(mimodepth, predecodewidth, mimosize), //the output MIMO holds the amount of bits equal to the bit width of a predecoded inst and the mimo depth
-        Add#(__c, predecodewidth, mimosize), // the MIMO should hold at least one predecoded instruction
-        Add#(__d, 2, mimodepth) // a MIMO must hold at least two elements otherwise it is a FIFO
-    );
+module mkFetch(IFU) provisos(
+        Mul#(XLEN, IFUINST, ifuwidth) //the width of the IFU axi must be as large as the size of a word times the issuewidth
+);
 
     //AXI for mem access
     AXI4_Master_Rd#(XLEN, ifuwidth, 0, 0) axi <- mkAXI4_Master_Rd(0, 0, False);
@@ -33,7 +27,10 @@ module mkFetch(IFU#(ifuwidth, mimodepth)) provisos(
     Reg#(Bit#(3)) epoch[2] <- mkCReg(2, 0);
     FIFO#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFO();
     FIFO#(Bit#(3)) inflight_epoch <- mkPipelineFIFO();
-    MIMO#(IFUINST, ISSUEWIDTH, mimodepth, InstructionPredecode) fetched_inst <- mkMIMO(defaultValue); //TODO: buffer size configurable
+    //holds outbound Instruction and PC
+    FIFO#(Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32)))) fetched_inst <- mkPipelineFIFO();
+    FIFO#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFO();
+
 
     //Requests data from memory
     //Explicit condition: Fires if the previous read has been evaluated
@@ -53,32 +50,34 @@ module mkFetch(IFU#(ifuwidth, mimodepth)) provisos(
 
     // Evaluates fetched instructions if there is enough space in the instruction window
     // TODO: make enqueued value dynamic
-    rule getReadResp (fetched_inst.enqReadyN(fromInteger(valueOf(IFUINST))) && inflight_epoch.first() == epoch[1]);
+    rule getReadResp (inflight_epoch.first() == epoch[1]);
         let r <- axi.response.get;
         Bit#(ifuwidth) dat = r.data;
         let acqpc = inflight_pcs.first(); inflight_pcs.deq();
         inflight_epoch.deq();
 
-        Vector#(IFUINST, InstructionPredecode) instructions = newVector; // temporary inst storage
+        Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32))) instructions = newVector; // temporary inst storage
         
         Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32; // pos of first useful instruction
 
-        Bit#(XLEN) amount = 0; // how many inst were usefully extracted // TODO: make type smaller
+        MIMO::LUInt#(IFUINST) amount = unpack(truncate( fromInteger(valueOf(IFUINST)) - (acqpc>>2)%fromInteger(valueOf(IFUINST)))); // how many inst were usefully extracted // TODO: make type smaller
 
         // Extract instructions
         // two conditions needed to keep static elaboration working
-        for(Bit#(XLEN) i = 0; i < fromInteger(valueOf(ifuwidth)) && startpoint+i < fromInteger(valueOf(ifuwidth)); i = i + fromInteger(valueOf(ILEN))) begin
-            Bit#(XLEN) by = dat[startpoint+i+31 : startpoint+i];
-            instructions[i/32] = predecode(by, acqpc + (i/8));
-            amount = amount + 1;
+        for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
+            if(fromInteger(i) < amount) begin
+                Bit#(XLEN) iword = dat[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
+                instructions[i] = tuple2(iword, acqpc + (fromInteger(i)*4));
+            end
         end
 
         // enq gathered instructions
-        fetched_inst.enq(unpack(truncate(amount)), instructions);
+        fetched_inst.enq(instructions);
+        fetched_amount.enq(amount);
 
         // advance program counter
         // TODO: branch predictor
-        pc[0] <= acqpc + (amount << 2);
+        pc[0] <= acqpc + (pack(extend(amount)) << 2);
     endrule
 
     interface ifu_axi = axi.fab;
@@ -88,9 +87,12 @@ module mkFetch(IFU#(ifuwidth, mimodepth)) provisos(
         epoch[0] <= epoch[0]+1;
         fetched_inst.clear();
     endmethod
-    method MIMO::LUInt#(mimodepth) count                   = fetched_inst.count;
-    method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount)     = fetched_inst.deq(amount);
-    method Vector#(ISSUEWIDTH, InstructionPredecode) first = fetched_inst.first;
+    method MIMO::LUInt#(IFUINST) count                                  = fetched_amount.first;
+    method Action deq();
+            fetched_inst.deq();
+            fetched_amount.deq();
+    endmethod
+    method Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32))) first() = fetched_inst.first;
 
 
 endmodule
