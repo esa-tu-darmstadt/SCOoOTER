@@ -3,6 +3,16 @@ package Decode;
 import Inst_Types :: *;
 import Types :: *;
 
+///////////////////////////////////////////////////
+// This package implements decoding of instructions
+//
+// The package consists of the following parts:
+// - Functions to extract specific fields from the inst
+// - A predecode function that returns a struct with all possible fields
+// - Functions to select and interpret the required fields per opcode
+// - A decode function that returns a fully decoded inst
+// - An implementation of a module capable of decoding instructions
+
 //**********************************************
 // Functions to extract fields from instructions
 
@@ -98,24 +108,37 @@ function Bit#(XLEN) select_imm(InstructionPredecode inst);
     endcase;
 endfunction
 
-function RADDR select_rs1(InstructionPredecode inst);
+function Operand select_rs1(InstructionPredecode inst);
     return case(inst.opc)
-        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM : inst.rs1;
-        default : 0;
+        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM : tagged Raddr inst.rs1;
+        default : tagged Operand 0;
     endcase;
 endfunction
 
-function RADDR select_rs2(InstructionPredecode inst);
+function Operand select_rs2(InstructionPredecode inst);
     return case(inst.opc)
-        OP, BRANCH, STORE, AMO : inst.rs2;
-        default : 0;
+        OP, BRANCH, STORE, AMO : tagged Raddr inst.rs2;
+        default : tagged Operand 0;
     endcase;
 endfunction
 
-function RADDR select_rd(InstructionPredecode inst);
+function Destination select_rd(InstructionPredecode inst);
     return case(inst.opc)
-        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO : inst.rd;
-        default : 0;
+        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO : tagged Raddr inst.rd;
+        default : tagged None;
+    endcase;
+endfunction
+
+function ExecUnitTag get_exec_unit(InstructionPredecode inst);
+    return case(inst.opc)
+        LOAD, STORE: LS;
+        LUI, AUIPC, OPIMM: ALU;
+        OP: case(inst.funct7)
+            7'b0000001: MULDIV;
+            default: ALU;
+            endcase
+        JAL, JALR, BRANCH: BR;
+        default: ALU;
     endcase;
 endfunction
 
@@ -234,6 +257,8 @@ endfunction
 // Create a instruction struct with required fields
 function Instruction decode(InstructionPredecode inst);
     return Instruction{
+        eut: get_exec_unit(inst),
+
         pc : inst.pc,
         //general opcode
         opc : inst.opc,
@@ -246,9 +271,9 @@ function Instruction decode(InstructionPredecode inst);
         rl : unpack(inst.funct7[0]),
 
         //registers, contains 0 if unused (or 0 is specified in inst)
-        rs1 : tagged Raddr inst.rs1,
-        rs2 : tagged Raddr inst.rs2,
-        rd : tagged Raddr inst.rd,
+        rs1 : select_rs1(inst),
+        rs2 : select_rs2(inst),
+        rd  : select_rd(inst),
 
         //set exception INVALID_INST if decode error
         exception : (getFunct(inst) == INVALID ? tagged Valid INVALID_INST : tagged Invalid),
@@ -257,5 +282,9 @@ function Instruction decode(InstructionPredecode inst);
         imm : select_imm(inst)
     };
 endfunction
+
+module mkDecode(DecodeIFC);
+
+endmodule
 
 endpackage

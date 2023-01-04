@@ -6,9 +6,12 @@ import Inst_Types :: *;
 import Vector :: *;
 import Types :: *;
 import List :: *;
+import Debug::*;
 
-module mkReservationStation#(List#(OpCode) operations)(ReservationStationIFC#(addrwidth, entries)) provisos (
-    Add#(a__, TLog#(TAdd#(1, entries)), addrwidth) //TODO: fancify
+module mkReservationStation#(List#(OpCode) operations, ExecUnitTag eut)(ReservationStationIFC#(addrwidth, entries)) provisos (
+    Add#(entries, 1, entries_pad_t),
+    Log#(entries_pad_t, entries_log_t),
+    Add#(a__, entries_log_t, addrwidth)
 );
 
     function Reg#(Maybe#(Instruction)) getEntry(Integer part, Array#(Reg#(Maybe#(Instruction))) element);
@@ -31,7 +34,6 @@ module mkReservationStation#(List#(OpCode) operations)(ReservationStationIFC#(ad
         for(Integer i = 0; i<valueOf(ISSUEWIDTH) && fromInteger(i)<count; i=i+1) begin
             let idx = fromMaybe(?, Vector::findElem(tagged Invalid, instdata));
             instdata[idx] = tagged Valid inst[i];
-            $display("[RS]: got ", fshow(inst[i]));
         end
         writeVReg(instruction_buffer_insert_v, instdata);
     endmethod
@@ -45,8 +47,9 @@ module mkReservationStation#(List#(OpCode) operations)(ReservationStationIFC#(ad
         return inst;
     endmethod
 
-    interface free = extend(Vector::countElem(tagged Invalid, readVReg(instruction_buffer_insert_v)));
-    interface supported_opc = operations;
+    method UInt#(addrwidth) free = extend(Vector::countElem(tagged Invalid, readVReg(instruction_buffer_insert_v)));
+    method List#(OpCode) supported_opc = operations;
+    method ExecUnitTag unit_type = eut;
 endmodule
 
 endpackage

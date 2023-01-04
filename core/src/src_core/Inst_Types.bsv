@@ -15,10 +15,17 @@ typedef enum {
     ECALL, EBREAK, // SYSTEM
     MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU, //MULDIV
     LR, SC, SWAP, MIN, MAX, MINU, MAXU, //ATOMIC
-    INVALID, NONE // Internally used if decode error or no function needed
+    INVALID, NONE // Internally used if decode error resp. no function needed
 } OpFunction deriving(Bits, Eq, FShow);
 
 // Exception enum (maybe move to maybe here?)
+typedef enum {
+    ALU,
+    LS,
+    MULDIV,
+    BR
+} ExecUnitTag deriving(Bits, Eq, FShow);
+
 typedef enum {
     NONE,
     INVALID_INST
@@ -88,12 +95,19 @@ typedef struct {
 
 typedef union tagged {
     RADDR Raddr;
-    Bit#(XLEN) Tag;
+    UInt#(TLog#(ROBDEPTH)) Tag;
     Bit#(XLEN) Operand;
 } Operand deriving(Bits, Eq, FShow);
 
+typedef union tagged {
+    RADDR Raddr;
+    Bit#(XLEN) MemAddr;
+    void None;
+} Destination deriving(Bits, Eq, FShow);
+
 // struct containing condensed amount of fields
 typedef struct {
+    ExecUnitTag eut;
     Bit#(XLEN) pc;
     OpCode opc;
 
@@ -107,7 +121,10 @@ typedef struct {
     //reg fields
     Operand rs2;
     Operand rs1;
-    Operand rd;
+    Destination rd;
+
+    //tag field for ROB
+    UInt#(TLog#(ROBDEPTH)) tag;
 
     //immediate fields
     Bit#(XLEN) imm;
@@ -116,5 +133,37 @@ typedef struct {
 
 } Instruction deriving(Bits, Eq, FShow);
 
+typedef struct {
+    UInt#(TLog#(ROBDEPTH)) tag;
+    union tagged {
+        Bit#(XLEN) Result;
+        ExceptionType Except;
+    } result;
+} Result deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(XLEN) pc;
+    RADDR destination;
+    union tagged {
+        UInt#(TLog#(ROBDEPTH)) Tag;
+        Bit#(XLEN) Result;
+        ExceptionType Except;
+    } result;
+} RobEntry deriving(Bits, FShow);
+
+typedef struct {
+    RADDR addr;
+    Bit#(XLEN) data;
+} RegWrite deriving(Bits, FShow);
+
+typedef struct {
+    RADDR addr;
+    UInt#(TLog#(ROBDEPTH)) tag;
+} RegReservation deriving(Bits, FShow);
+
+typedef union tagged {
+    UInt#(TLog#(ROBDEPTH)) Tag;
+    Bit#(XLEN) Value;
+} EvoResponse deriving(Bits, FShow);
 
 endpackage
