@@ -1,0 +1,28 @@
+{
+    "dictionaryDefinitions": [
+        {
+            "name": "dict_bluespec",
+            "path": "dict/bluespec.txt",
+            "addWords": true
+        },
+        {
+            "name": "dict_makefile",
+            "path": "dict/makefile.txt",
+            "addWords": true
+        }
+    ],
+    "languageSettings": [
+        {
+            "languageId": "makefile",
+            "dictionaries": [
+                "dict_makefile"
+            ]
+        },
+        {
+            "languageId": "bsv",
+            "dictionaries": [
+                "dict_bluespec"
+            ]
+        }
+    ]
+}
