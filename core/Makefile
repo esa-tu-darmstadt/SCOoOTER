@@ -22,6 +22,7 @@ RUN_FLAGS:=
 EXTRA_BSV_LIBS += $(PWD)/src/src_core
 EXTRA_BSV_LIBS += $(PWD)/src/src_core/ifu
 EXTRA_BSV_LIBS += $(PWD)/src/src_core/dec_and_issue
+EXTRA_BSV_LIBS += $(PWD)/src/src_core/units
 EXTRA_BSV_LIBS += $(PWD)/src/src_test
 
 PROJECT_NAME=SCOOOTER_riscv
