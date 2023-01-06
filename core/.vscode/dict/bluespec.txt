@@ -16,12 +16,14 @@ endpackage
 endrule
 endseq
 enqctr
+fflush
 FIFOF
 fshow
 function
 IFUINST
 ifuwidth
 instance
+instdata
 iram
 issuewidth
 method
