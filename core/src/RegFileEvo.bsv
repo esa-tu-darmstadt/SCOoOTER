@@ -54,12 +54,12 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
             
             //for every request from issue logic
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                //if the instruction is valid
-                if(fromInteger(i) < num) begin
+                let reg_addr = reservations[i].addr;
+                //if the instruction and reg is valid
+                if(fromInteger(i) < num && reg_addr != 0) begin
                     //store the tag to the regfile
-                    let reg_addr = reservations[i].addr;
                     let tag = reservations[i].tag;
-                    local_entries[reg_addr] = tagged Tag tag;
+                    local_entries[reg_addr-1] = tagged Tag tag;
                 end
             end
 
@@ -74,9 +74,9 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
 
         for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
             let reg_addr = reg_addrs[i];
-            let entry = registers_port0[reg_addr];
+            let entry = registers_port1[reg_addr-1];
 
-            response[i] = case (entry) matches
+            response[i] = reg_addr == 0 ? tagged Value 0 : case (entry) matches
                 tagged Invalid  : tagged Value committed_regs[reg_addr];
                 tagged Tag .t   : tagged Tag t;
                 tagged Value .v : tagged Value v;

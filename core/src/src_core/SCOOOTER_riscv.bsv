@@ -4,7 +4,6 @@ import BlueAXI::*;
 import Interfaces::*;
 import Fetch::*;
 import Types::*;
-import DecIssue::*;
 import ReservationStation::*;
 import BuildVector::*;
 import Vector::*;
@@ -18,6 +17,7 @@ import Commit::*;
 import RegFileArch::*;
 import RegFileEvo::*;
 import Decode::*;
+import Issue::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
@@ -75,11 +75,11 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     endrule
 
     // ALU unit
-    ReservationStationIFC#(8,6) rs_alu <- mkReservationStation(list(LUI, AUIPC, OP, OPIMM), ALU);
+    ReservationStationIFC#(6) rs_alu <- mkReservationStation(ALU, result_bus_vec);
     //MEM unit
-    ReservationStationIFC#(8,6) rs_mem <- mkReservationStation(list(LOAD, STORE, AMO, MISCMEM),LS); // if f ext: LOAD_FP, STORE_FP
+    ReservationStationIFC#(6) rs_mem <- mkReservationStation(LS, result_bus_vec);
     //branch unit
-    ReservationStationIFC#(8,6) rs_br <- mkReservationStation(list(BRANCH, JALR, JAL),BR); // if f ext: LOAD_FP, STORE_FP
+    ReservationStationIFC#(6) rs_br <- mkReservationStation(BR, result_bus_vec);
 
     rule rs_to_arith;
         let i <- rs_alu.get();
@@ -90,24 +90,24 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    Vector#(3, ReservationStationIFC#(8,6)) rs_vec = vec(rs_alu, rs_mem, rs_br);
+    let rs_vec = vec(rs_alu, rs_mem, rs_br);
 
-    let dec_issue <- mkDecIssue(rs_vec, rob);
+    let issue <- mkIssue(rs_vec, rob, regfile_evo);
 
     rule issue_to_dec;
         let data = decode.first;
-        dec_issue.put(data, ( decode.count > fromInteger(valueOf(ISSUEWIDTH)) ? fromInteger(valueOf(ISSUEWIDTH)) : truncate(decode.count) ));
+        issue.put(data, ( decode.count > fromInteger(valueOf(ISSUEWIDTH)) ? fromInteger(valueOf(ISSUEWIDTH)) : truncate(decode.count) ));
     endrule
 
     rule issue_to_dec_wipe;
-        let count = dec_issue.remove;
+        let count = issue.remove;
         decode.deq(count);
     endrule
 
-    rule dec_to_ifu;
+    /*rule dec_to_ifu;
         let new_pc = dec_issue.redirect_pc;
         ifu.redirect(new_pc);
-    endrule
+    endrule*/
 
     rule flush_prints;
         $fflush();

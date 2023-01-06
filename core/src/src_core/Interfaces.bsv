@@ -36,15 +36,14 @@ interface IssueIFC;
     method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
     (* always_ready, always_enabled *)
     method MIMO::LUInt#(ISSUEWIDTH) remove;
-    method Bit#(XLEN) redirect_pc;
 endinterface
 
-interface ReservationStationIFC#(numeric type addrwidth, numeric type entries);
+interface ReservationStationIFC#(numeric type entries);
     method ActionValue#(Instruction) get;
-    method UInt#(addrwidth) free;
+    method Bool free;
     method List#(OpCode) supported_opc;
     method ExecUnitTag unit_type;
-    method Action put(Vector#(ISSUEWIDTH, Instruction) inst, MIMO::LUInt#(ISSUEWIDTH) count);
+    method Action put(Instruction inst);
 endinterface
 
 interface FunctionalUnitIFC;

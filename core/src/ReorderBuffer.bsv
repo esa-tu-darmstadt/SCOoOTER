@@ -166,8 +166,19 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
         reserve_fun(reserve_buffer_data.first(), reserve_buffer_count.first());
     endrule
 
-    method UInt#(issuewidth_log_t) available = ready();
-    method UInt#(size_log_t) free = empty_slots();
+    Wire#(UInt#(issuewidth_log_t)) ready_precalc <- mkBypassWire();
+    Wire#(UInt#(size_log_t)) empty_precalc <- mkBypassWire();
+
+    rule bypass_rdy;
+        ready_precalc <= ready();
+    endrule
+
+    rule bypass_free;
+        empty_precalc <= empty_slots();
+    endrule
+
+    method UInt#(issuewidth_log_t) available = ready_precalc;
+    method UInt#(size_log_t) free = empty_precalc;
     method UInt#(size_logidx_t) current_idx = head_r;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issuewidth_log_t) num);
         action

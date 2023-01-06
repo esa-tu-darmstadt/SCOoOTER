@@ -24,7 +24,7 @@ endmethod
 
 method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     actionvalue
-        for(Integer i = 0; fromInteger(i) < count; i=i+1) begin
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH) && fromInteger(i) < count; i=i+1) begin
             dbg_print(Commit, $format(fshow(instructions[i])));
         end
 
