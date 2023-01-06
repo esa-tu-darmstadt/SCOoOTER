@@ -31,6 +31,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     let decode <- mkDecode();
 
     let arith <- mkArith();
+    let arith2 <- mkArith();
 
     rule fetch_to_decode;
         let inst = ifu.first();
@@ -43,7 +44,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         decode.put(cnt, instructions, pcs);
     endrule
 
-    let fu_vec = vec(arith);
+    let fu_vec = vec(arith, arith2);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -76,6 +77,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
 
     // ALU unit
     ReservationStationIFC#(6) rs_alu <- mkReservationStation(ALU, result_bus_vec);
+    ReservationStationIFC#(6) rs_alu2 <- mkReservationStation(ALU, result_bus_vec);
     //MEM unit
     ReservationStationIFC#(6) rs_mem <- mkReservationStation(LS, result_bus_vec);
     //branch unit
@@ -86,11 +88,16 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         arith.put(i);
     endrule
 
+    rule rs_to_arith2;
+        let i <- rs_alu2.get();
+        arith2.put(i);
+    endrule
+
     rule print_res;
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    let rs_vec = vec(rs_alu, rs_mem, rs_br);
+    let rs_vec = vec(rs_alu, rs_alu2, rs_mem, rs_br);
 
     let issue <- mkIssue(rs_vec, rob, regfile_evo);
 
@@ -103,11 +110,6 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         let count = issue.remove;
         decode.deq(count);
     endrule
-
-    /*rule dec_to_ifu;
-        let new_pc = dec_issue.redirect_pc;
-        ifu.redirect(new_pc);
-    endrule*/
 
     rule flush_prints;
         $fflush();

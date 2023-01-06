@@ -7,6 +7,7 @@ import Interfaces::*;
 import FIFO::*;
 import SpecialFIFOs::*;
 import Debug::*;
+import TestFunctions::*;
 
 module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(RobIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
@@ -22,7 +23,9 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
 );
 
     //internal store
-    Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_v <- replicateM(mkReg(unpack(0)));
+    Vector#(ROBDEPTH, Array#(Reg#(RobEntry))) internal_store_v <- replicateM(mkCReg(2, unpack(0)));
+    Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_port0_v = Vector::map(disassemble_creg(0), internal_store_v);
+    Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_port1_v = Vector::map(disassemble_creg(1), internal_store_v);
     //pointers for head and tail
     Reg#(UInt#(size_logidx_t)) head_r <- mkReg(0);
     Reg#(UInt#(size_logidx_t)) tail_r <- mkReg(0);
@@ -60,7 +63,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
         Bool done = False;
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             let idx = truncate_index(tail_r+fromInteger(i));
-            let inst = internal_store_v[idx];
+            let inst = internal_store_port0_v[idx];
             if(!done && (fromInteger(i) < full_slots()))
                 if(inst.result matches tagged Tag .e)
                     done = True;
@@ -87,7 +90,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
                 // calculate new idx
                 let new_idx = truncate_index(head_r + fromInteger(i));
                 if(fromInteger(i) < count)
-                    internal_store_v[new_idx] <= new_entries[i];
+                    internal_store_port1_v[new_idx] <= new_entries[i];
             end
 
             // calculate new head
@@ -103,7 +106,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
                 // calculate new idx
                 let deq_idx = truncate_index(tail_r + fromInteger(i));
-                tmp_res[i] = internal_store_v[deq_idx];
+                tmp_res[i] = internal_store_port0_v[deq_idx];
             end
 
             return tmp_res;
@@ -119,6 +122,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
 
     rule read_cdb;
         dbg_print(ROB, $format("result_bus: ", fshow(result_bus_vec)));
+        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
 
         for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
             let current_result_maybe = result_bus_vec[i];
@@ -126,7 +130,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
             if(isValid(current_result_maybe)) begin
                 let current_result = fromMaybe(?, current_result_maybe);
                 let current_idx = current_result.tag;
-                let entry = internal_store_v[current_idx];
+                let entry = local_store[current_idx];
 
                 // TODO: find prettier way
                 if(entry.result matches tagged Except .e) begin
@@ -136,9 +140,11 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
                         tagged Except .e : entry.result = tagged Except e;
                     endcase
 
-                internal_store_v[current_idx] <= entry;
+                local_store[current_idx] = entry;
             end
         end
+
+        Vector::writeVReg(internal_store_port0_v, local_store);
 
 
     endrule
@@ -150,7 +156,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
             let current_ptr = truncate_index(tail_r + fromInteger(i));
 
             if( (current_ptr != head_r || full_r[0]) && !done )
-                dbg_print(ROB, $format("Stored ", i, " ", fshow(internal_store_v[current_ptr])));
+                dbg_print(ROB, $format("Stored ", i, " ", fshow(internal_store_port0_v[current_ptr])));
             else done = True;
         end
     endrule
@@ -158,7 +164,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
     FIFO#(Vector#(ISSUEWIDTH, RobEntry)) reserve_buffer_data <- mkBypassFIFO();
     FIFO#(UInt#(issuewidth_log_t)) reserve_buffer_count <- mkBypassFIFO();
 
-    (* conflict_free = "read_cdb, process_reservation" *)
+    //(* conflict_free = "read_cdb, process_reservation" *)
     rule process_reservation;
         reserve_buffer_data.deq();
         reserve_buffer_count.deq();

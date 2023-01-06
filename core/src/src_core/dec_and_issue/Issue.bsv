@@ -9,6 +9,12 @@ import Debug::*;
 
 module mkIssue#(Vector#(rs_count, ReservationStationIFC#(e)) rs_vec, RobIFC rob, RegFileEvoIFC rf)(IssueIFC) provisos(
     Log#(ROBDEPTH, size_logidx_t),
+    Add#(ROBDEPTH, 1, robsize_pad_t),
+    Log#(robsize_pad_t, robsize_log_t),
+    Max#(issue_amount_t, robsize_log_t, issue_robamount_t),
+    Add#(__d, issue_amount_t, issue_robamount_t),
+    Add#(__e, robsize_log_t, issue_robamount_t),
+    Add#(__f, issuewidth_log_t, issue_robamount_t),
 
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
     Log#(issuewidth_pad_t, issuewidth_log_t),
@@ -18,7 +24,7 @@ module mkIssue#(Vector#(rs_count, ReservationStationIFC#(e)) rs_vec, RobIFC rob,
     Add#(__a, 1, issue_amount_t),
 
     Add#(__b, rs_count_log_t, issue_amount_t),
-    Add#(__b, issuewidth_log_t, issue_amount_t)
+    Add#(__c, issuewidth_log_t, issue_amount_t)
 );
 
 function Bool get_rdy(ReservationStationIFC#(e) rs) = rs.free();
@@ -90,10 +96,12 @@ endrule
 function Bool is_rdy_rs(ExecUnitTag eut, Tuple2#(ExecUnitTag, Bool) entry) = (eut == tpl_1(entry) && tpl_2(entry));
 
 //TODO: use less sequential algorithm
-function UInt#(rs_count_log_t) find_nth(UInt#(rs_count_log_t) num, Tuple2#(ExecUnitTag, Bool) cmp, Vector#(rs_count, Tuple2#(ExecUnitTag, Bool)) vec);
-    UInt#(rs_count_log_t) found = 0;
-    UInt#(rs_count_log_t) out = ?;
-    for(Integer i = 0; i < valueOf(rs_count); i = i + 1) begin
+function UInt#(a) find_nth(UInt#(a) num, b cmp, Vector#(c, b) vec) provisos(
+    Eq#(b)
+);
+    UInt#(a) found = 0;
+    UInt#(a) out = ?;
+    for(Integer i = 0; i < valueOf(c); i = i + 1) begin
         if(vec[i] == cmp) begin
             found = found + 1;
             if(found == num) out = fromInteger(i);
@@ -125,7 +133,7 @@ rule count_possible_issue;
             end
         end
 
-        needed_rs_idx[i] = find_nth(need_issue_cnt, tuple2(instructions[i].eut, True), rs_free_type_vec);
+        needed_rs_idx[i] = truncate(find_nth(need_issue_cnt, tuple2(instructions[i].eut, True), rs_free_type_vec));
 
         //if more inst to issue than available, this inst cannot issue
         can_issue[i] = (rdy_cnt >= need_issue_cnt);
@@ -139,11 +147,10 @@ rule count_possible_issue;
     endcase;
 
     //how much space is in ROB?
-    UInt#(ISSUEWIDTH) rob_avail = truncate(rob.free());
-    let rob_av_ext = rob.free();
-    UInt#(ISSUEWIDTH) rs_avail = truncate(max_issue_rs);
+    UInt#(issue_robamount_t) rob_av_ext = extend(rob.free());
+    UInt#(issue_robamount_t) rs_avail = extend(max_issue_rs);
 
-    UInt#(ISSUEWIDTH) max_issue = (extend(max_issue_rs) > rob_av_ext ? rob_avail : rs_avail);
+    UInt#(issuewidth_log_t) max_issue = (extend(max_issue_rs) > rob_av_ext ? truncate(rob_av_ext) : truncate(rs_avail));
 
     possible_issue_amount <= max_issue > inst_in_cnt ? inst_in_cnt : max_issue;
 
