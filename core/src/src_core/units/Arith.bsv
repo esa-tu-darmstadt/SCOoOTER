@@ -48,11 +48,10 @@ rule calculate;
         SUB: (op1 - op2);
     endcase;
 
-    out.enq(Result {result : tagged Result result, tag : inst.tag});
+    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag});
 endrule
 
 rule propagate_result;
-
     out.deq();
     let res = out.first();
     out_valid.wset(res);
@@ -66,7 +65,6 @@ endmethod
 
 method Maybe#(Result) get() =
     out_valid.wget();
-
 endmodule
 
 endpackage

@@ -26,6 +26,8 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
 
     Wire#(Vector#(31, Bit#(XLEN))) arch_regs_wire <- mkWire();
 
+    Reg#(UInt#(XLEN)) epoch <- mkReg(0);
+
     //sniff from result bus
     rule result_bus;
         Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port0);
@@ -48,18 +50,20 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
     endrule
 
     //set the correct tag corresponding to a register
-    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
         action
             Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port1);
             
             //for every request from issue logic
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                let reg_addr = reservations[i].addr;
-                //if the instruction and reg is valid
-                if(fromInteger(i) < num && reg_addr != 0) begin
-                    //store the tag to the regfile
-                    let tag = reservations[i].tag;
-                    local_entries[reg_addr-1] = tagged Tag tag;
+                if(epochs[i] == epoch) begin
+                    let reg_addr = reservations[i].addr;
+                    //if the instruction and reg is valid
+                    if(fromInteger(i) < num && reg_addr != 0) begin
+                        //store the tag to the regfile
+                        let tag = reservations[i].tag;
+                        local_entries[reg_addr-1] = tagged Tag tag;
+                    end
                 end
             end
 

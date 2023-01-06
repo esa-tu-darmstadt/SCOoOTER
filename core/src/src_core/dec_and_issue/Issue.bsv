@@ -168,7 +168,9 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         destination : inst.rd.Raddr,
         result : (isValid(inst.exception) ?
             tagged Except fromMaybe(?, inst.exception) :
-            tagged Tag idx)
+            tagged Tag idx),
+        pred_pc : (inst.pc+4),
+        epoch : inst.epoch
     };
 endfunction
 
@@ -180,10 +182,11 @@ endrule
 
 function RegReservation inst_to_regres(Instruction ins, UInt#(size_logidx_t) idx) 
     = RegReservation { addr : (ins.rd matches tagged Raddr .rd ? rd : 0), tag: idx };
+function UInt#(XLEN) inst_to_epoch(Instruction ins) = ins.epoch;
 rule set_regfile_tags;
     let reservations = Vector::map(uncurry(inst_to_regres), Vector::zip(inst_in, rob_entry_idx_v));
-
-    rf.set_tags(reservations, possible_issue_amount);
+    let epochs = Vector::map(inst_to_epoch, inst_in);
+    rf.set_tags(reservations, epochs, possible_issue_amount);
 endrule
 
 rule assemble_instructions;

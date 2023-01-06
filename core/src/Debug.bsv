@@ -14,7 +14,8 @@ typedef enum {
     Fetch,
     ALU,
     Commit,
-    Regs
+    Regs,
+    BRU
 } DbgTag deriving(Eq, FShow);
 
 // List of currently allowed prints

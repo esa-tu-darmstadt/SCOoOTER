@@ -134,11 +134,18 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
 
                 // TODO: find prettier way
                 if(entry.result matches tagged Except .e) begin
-                end else
+                end else begin
+                    // result
                     case (current_result.result) matches
                         tagged Result .r : entry.result = tagged Result r;
                         tagged Except .e : entry.result = tagged Except e;
                     endcase
+                    //next pc
+                    case (current_result.new_pc) matches
+                        tagged Valid .v: entry.next_pc = v;
+                        tagged Invalid : entry.next_pc = entry.pc+4;
+                    endcase
+                end
 
                 local_store[current_idx] = entry;
             end

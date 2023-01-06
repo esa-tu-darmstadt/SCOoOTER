@@ -18,6 +18,8 @@ import RegFileArch::*;
 import RegFileEvo::*;
 import Decode::*;
 import Issue::*;
+import Branch::*;
+import Mem::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
@@ -32,6 +34,8 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
 
     let arith <- mkArith();
     let arith2 <- mkArith();
+    let branch <- mkBranch();
+    let mem <- mkMem();
 
     rule fetch_to_decode;
         let inst = ifu.first();
@@ -40,11 +44,12 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
 
         let instructions = Vector::map(tpl_1, inst);
         let pcs = Vector::map(tpl_2, inst);
+        let epochs = Vector::map(tpl_3, inst);
 
-        decode.put(cnt, instructions, pcs);
+        decode.put(cnt, instructions, pcs, epochs);
     endrule
 
-    let fu_vec = vec(arith, arith2);
+    let fu_vec = vec(arith, branch, mem);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -93,11 +98,21 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         arith2.put(i);
     endrule
 
+    rule rs_to_br;
+        let i <- rs_br.get();
+        branch.put(i);
+    endrule
+
+    rule rs_to_mem;
+        let i <- rs_mem.get();
+        mem.put(i);
+    endrule
+
     rule print_res;
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    let rs_vec = vec(rs_alu, rs_alu2, rs_mem, rs_br);
+    let rs_vec = vec(rs_alu, rs_mem, rs_br);
 
     let issue <- mkIssue(rs_vec, rob, regfile_evo);
 
@@ -113,6 +128,12 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
 
     rule flush_prints;
         $fflush();
+    endrule
+
+    rule commit_to_fetch;
+        let new_pc = commit.redirect_pc();
+        regfile_evo.flush();
+        ifu.redirect(new_pc);
     endrule
 
     interface ifu_axi = ifu.ifu_axi;

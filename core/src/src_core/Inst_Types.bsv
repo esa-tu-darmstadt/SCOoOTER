@@ -91,6 +91,8 @@ typedef struct {
     Bit#(XLEN) immU;
     Bit#(XLEN) immJ;
 
+    UInt#(XLEN) epoch;
+
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
 typedef union tagged {
@@ -131,10 +133,12 @@ typedef struct {
 
     Maybe#(ExceptionType) exception;
 
+    UInt#(XLEN) epoch;
 } Instruction deriving(Bits, Eq, FShow);
 
 typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag;
+    Maybe#(Bit#(XLEN)) new_pc;
     union tagged {
         Bit#(XLEN) Result;
         ExceptionType Except;
@@ -149,6 +153,9 @@ typedef struct {
         Bit#(XLEN) Result;
         ExceptionType Except;
     } result;
+    Bit#(XLEN) next_pc;
+    Bit#(XLEN) pred_pc;
+    UInt#(XLEN) epoch;
 } RobEntry deriving(Bits, FShow);
 
 typedef struct {

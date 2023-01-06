@@ -24,11 +24,11 @@ module mkFetch(IFU) provisos(
     // port 1 is used to redirect the program counter
     //port 0 is used to advance the PC
     Reg#(Bit#(XLEN)) pc[3] <- mkCReg(3, fromInteger(valueof(RESETVEC)));
-    Reg#(Bit#(3)) epoch[2] <- mkCReg(2, 0);
+    Reg#(UInt#(XLEN)) epoch[2] <- mkCReg(2, 0);
     FIFO#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFO();
-    FIFO#(Bit#(3)) inflight_epoch <- mkPipelineFIFO();
+    FIFO#(UInt#(XLEN)) inflight_epoch <- mkPipelineFIFO();
     //holds outbound Instruction and PC
-    FIFO#(Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32)))) fetched_inst <- mkPipelineFIFO();
+    FIFO#(Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(32)))) fetched_inst <- mkPipelineFIFO();
     FIFO#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFO();
 
 
@@ -56,7 +56,7 @@ module mkFetch(IFU) provisos(
         let acqpc = inflight_pcs.first(); inflight_pcs.deq();
         inflight_epoch.deq();
 
-        Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32))) instructions = newVector; // temporary inst storage
+        Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) instructions = newVector; // temporary inst storage
         
         Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32; // pos of first useful instruction
 
@@ -67,7 +67,7 @@ module mkFetch(IFU) provisos(
         for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
             if(fromInteger(i) < amount) begin
                 Bit#(XLEN) iword = dat[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
-                instructions[i] = tuple2(iword, acqpc + (fromInteger(i)*4));
+                instructions[i] = tuple3(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first());
             end
         end
 
@@ -85,14 +85,13 @@ module mkFetch(IFU) provisos(
         pc[1] <= newpc;
         dbg_print(Fetch, $format("Redirected: ", newpc));
         epoch[0] <= epoch[0]+1;
-        fetched_inst.clear();
     endmethod
     method MIMO::LUInt#(IFUINST) count                                  = fetched_amount.first;
     method Action deq();
             fetched_inst.deq();
             fetched_amount.deq();
     endmethod
-    method Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32))) first() = fetched_inst.first;
+    method Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) first() = fetched_inst.first;
 
 
 endmodule

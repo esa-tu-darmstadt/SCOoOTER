@@ -22,11 +22,11 @@ interface IFU;
     // output iface to other units
     method MIMO::LUInt#(IFUINST) count;
     method Action deq();
-    method Vector#(IFUINST, Tuple2#(Bit#(32), Bit#(32))) first();
+    method Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) first();
 endinterface
 
 interface DecodeIFC;
-    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc);
+    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc, Vector#(IFUINST, UInt#(XLEN)) epochs);
     method MIMO::LUInt#(INST_WINDOW) count;
     method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount);
     method Vector#(ISSUEWIDTH, Instruction) first;
@@ -65,6 +65,7 @@ endinterface
 interface CommitIFC;
     method ActionValue#(UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
+    method Bit#(XLEN) redirect_pc();
 endinterface
 
 interface RegFileIFC;
@@ -76,7 +77,7 @@ endinterface
 
 interface RegFileEvoIFC;
     //set the correct tag corresponding to a register
-    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     //read 2 regs per instruction
     method Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) read_regs(Vector#(TMul#(2, ISSUEWIDTH), RADDR) registers);
     //input the architectural registers post-commit

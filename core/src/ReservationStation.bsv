@@ -26,9 +26,28 @@ module mkReservationStation#(ExecUnitTag eut, Vector#(size_res_bus_t, Maybe#(Res
     Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port1_v = Vector::map(disassemble_creg(1), instruction_buffer_v);
 
     rule listen_to_cdb;
-        let instructions_to_update = Vector::readVReg(instruction_buffer_port0_v);
+        for(Integer j = 0; j < valueOf(entries); j=j+1) begin
 
-        for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
+            if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
+                Instruction current_instruction = inst;
+
+                for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
+                    if( result_bus_vec[i] matches tagged Valid .res &&&
+                        current_instruction.rs1 matches tagged Tag .t &&& 
+                        t == res.tag)
+                        current_instruction.rs1 = tagged Operand res.result.Result;
+
+                    if( result_bus_vec[i] matches tagged Valid .res &&&
+                        current_instruction.rs2 matches tagged Tag .t &&& 
+                        t == res.tag)
+                        current_instruction.rs2 = tagged Operand res.result.Result;
+                end
+
+                instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
+            end
+        end
+
+        /*for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
             let current_result_maybe = result_bus_vec[i];
 
             if(current_result_maybe matches tagged Valid .current_result) begin
@@ -37,26 +56,24 @@ module mkReservationStation#(ExecUnitTag eut, Vector#(size_res_bus_t, Maybe#(Res
 
                 // test each instructions operands
                 for(Integer j = 0; j < valueOf(entries); j=j+1) begin
-                    let current_instruction = instructions_to_update[j];
+                    let current_instruction = instructions_to_update[j].Valid;
 
-                    if(current_instruction matches tagged Valid .inst) begin
-
-                        //test rs1
-                        if(inst.rs1 matches tagged Tag .t &&& t == current_tag) begin
-                            //instructions_to_update[j].Valid.rs1 = tagged Operand current_val;
-                        end
-
-                        //test rs2
-                        if(inst.rs2 matches tagged Tag .t &&& t == current_tag) begin
-                            //instructions_to_update[j].Valid.rs2 = tagged Operand current_val;
-                        end
+                    //test rs1
+                    if(current_instruction.rs1.Tag == current_tag) begin
+                        instructions_to_update[j].Valid.rs1 = tagged Operand current_val;
                     end
 
+                    //test rs2
+                    //if(current_instruction.rs2 matches tagged Tag .t &&& t == current_tag) begin
+                    //    instructions_to_update[j].Valid.rs2 = tagged Operand current_val;
+                    //end
                 end
-            end
-        end
 
-        Vector::writeVReg(instruction_buffer_port0_v, instructions_to_update);
+                
+            end
+        end*/
+
+       // Vector::writeVReg(instruction_buffer_port0_v, instructions_to_update);
 
     endrule
 

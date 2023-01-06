@@ -67,7 +67,7 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(XLEN) epoch);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),
@@ -83,7 +83,9 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc);
         immS : getImmS(inst),
         immB : getImmB(inst),
         immU : getImmU(inst),
-        immJ : getImmJ(inst)
+        immJ : getImmJ(inst),
+
+        epoch : epoch
     };
 
 endfunction
@@ -128,7 +130,7 @@ endfunction
 function Destination select_rd(InstructionPredecode inst);
     return case(inst.opc)
         LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO : tagged Raddr inst.rd;
-        default : tagged None;
+        default : tagged Raddr 0; //TODO: fix tagging downstream
     endcase;
 endfunction
 
@@ -284,8 +286,13 @@ function Instruction decode(InstructionPredecode inst);
         //immediate value, garbage if no immediate is used
         imm : select_imm(inst),
 
-        tag : ? //will be set in issue logic
+        tag : ?, //will be set in issue logic
+        epoch : inst.epoch
     };
+endfunction
+
+function InstructionPredecode predecode_uncurry(Tuple3#(Bit#(ILEN), Bit#(XLEN), UInt#(XLEN)) in);
+    return predecode(tpl_1(in), tpl_2(in), tpl_3(in));
 endfunction
 
 (* synthesize *)
@@ -299,9 +306,9 @@ module mkDecode(DecodeIFC) provisos (
     PulseWire clear_buffer <- mkPulseWire();
 
     //TODO: synchronization with upstream! Now only enabled if max amount free
-    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc) if (decoded_inst.enqReadyN(fromInteger(valueOf(IFUINST))));
+    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc, Vector#(IFUINST, UInt#(XLEN)) epoch) if (decoded_inst.enqReadyN(fromInteger(valueOf(IFUINST))));
         if (!clear_buffer) begin
-            let decoded_vec = Vector::map(compose(decode, uncurry(predecode)), Vector::zip(instructions, pc));
+            let decoded_vec = Vector::map(compose(decode, predecode_uncurry), Vector::zip3(instructions, pc, epoch));
             decoded_inst.enq(amount, decoded_vec);
         end
     endmethod
