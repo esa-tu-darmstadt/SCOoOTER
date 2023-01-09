@@ -16,7 +16,10 @@ typedef union tagged {
     void Invalid;
 } EvoEntry deriving(Bits, Eq, FShow);
 
-module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(RegFileEvoIFC);
+(* synthesize *)
+module mkRegFileEvo(RegFileEvoIFC);
+
+    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
     Vector#(31, Array#(Reg#(EvoEntry))) registers <- replicateM(mkCReg(3, tagged Invalid));
     //derived Reg ifaces from CReg
@@ -28,20 +31,21 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
 
     Reg#(UInt#(XLEN)) epoch <- mkReg(0);
 
+
+    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res);
+        return (res matches tagged Valid .res_v &&& res_v.tag == current_tag ? True : False);
+    endfunction
     //sniff from result bus
-    rule result_bus;
+    rule result_bus_r;
         Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port0);
         
-        //for every result
-        for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
-            //if the result is valid
-            if(result_bus_vec[i] matches tagged Valid .result) begin
-                //find its tag in the regfile
-                EvoEntry compare_to = tagged Tag result.tag;
-                let idx = Vector::findElem(compare_to, local_entries);
-                //and update the value if the tag exists
-                if(idx matches tagged Valid .register) begin
-                    local_entries[register] = tagged Value result.result.Result;
+        for(Integer i = 0; i < 31; i=i+1) begin
+            let current_entry = local_entries[i];
+
+            if(current_entry matches tagged Tag .current_tag) begin
+                let result = Vector::find(test_result(current_tag), Vector::reverse(result_bus_vec));
+                if(result matches tagged Valid .found_result) begin
+                    local_entries[i] = tagged Value found_result.Valid.result.Result;
                 end
             end
         end
@@ -49,25 +53,41 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
         Vector::writeVReg(registers_port0, local_entries);
     endrule
 
-    //set the correct tag corresponding to a register
-    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
-        action
-            Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port1);
+    Wire#(Vector#(ISSUEWIDTH, RegReservation)) reservations_w <- mkWire();
+    Wire#(Vector#(ISSUEWIDTH, UInt#(XLEN))) epochs_w <- mkWire();
+    Wire#(UInt#(TLog#(TAdd#(1, ISSUEWIDTH)))) num_w <- mkWire();
+
+    PulseWire clear_w <- mkPulseWire();
+
+    rule set_tags_r;
+        Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port1);
             
             //for every request from issue logic
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                if(epochs[i] == epoch) begin
-                    let reg_addr = reservations[i].addr;
+                if(epochs_w[i] == epoch) begin
+                    let reg_addr = reservations_w[i].addr;
                     //if the instruction and reg is valid
-                    if(fromInteger(i) < num && reg_addr != 0) begin
+                    if(fromInteger(i) < num_w && reg_addr != 0) begin
                         //store the tag to the regfile
-                        let tag = reservations[i].tag;
+                        let tag = reservations_w[i].tag;
                         local_entries[reg_addr-1] = tagged Tag tag;
                     end
                 end
             end
 
             Vector::writeVReg(registers_port1, local_entries);
+    endrule
+
+rule clear_r(clear_w);
+    Vector::writeVReg(registers_port2, replicate(tagged Invalid));
+endrule
+
+    //set the correct tag corresponding to a register
+    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+        action
+            reservations_w <= reservations;
+            epochs_w <= epochs;
+            num_w <= num;
         endaction
     endmethod
 
@@ -95,12 +115,15 @@ module mkRegFileEvo#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(Reg
             arch_regs_wire <= regs;
         endaction
     endmethod
+
     //inform about misprediction
     method Action flush();
-        action
-            for(Integer i = 0; i < 31; i=i+1)
-                registers_port2[i] <= tagged Invalid;
-        endaction
+        clear_w.send();
+
+    endmethod
+
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+        result_bus_vec <= bus_in;
     endmethod
 endmodule
 

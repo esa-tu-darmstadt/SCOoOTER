@@ -1,19 +1,41 @@
 package ReservationStation;
 
 import Interfaces :: *;
-import List :: *;
 import Inst_Types :: *;
 import Vector :: *;
 import Types :: *;
-import List :: *;
 import Debug::*;
 import TestFunctions::*;
 
-module mkReservationStation#(ExecUnitTag eut, Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(ReservationStationIFC#(entries)) provisos (
+
+// Synthesizable wrappers
+(* synthesize *)
+module mkReservationStationALU6(ReservationStationIFC#(6));
+    ReservationStationIFC#(6) m <- mkReservationStation(ALU);
+    return m;
+endmodule
+
+// Synthesizable wrappers
+(* synthesize *)
+module mkReservationStationBR6(ReservationStationIFC#(6));
+    ReservationStationIFC#(6) m <- mkReservationStation(BR);
+    return m;
+endmodule
+
+// Synthesizable wrappers
+(* synthesize *)
+module mkReservationStationMEM6(ReservationStationIFC#(6));
+    ReservationStationIFC#(6) m <- mkReservationStation(LS);
+    return m;
+endmodule
+
+module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) provisos (
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),
     Log#(entries, entries_idx_t)
 );
+
+    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
     function Bool isReady(Maybe#(Instruction) inst);
         return (inst matches tagged Valid .i &&& i.rs1 matches tagged Operand .v1 &&& i.rs2 matches tagged Operand .v2 ? True : False);
@@ -31,7 +53,7 @@ module mkReservationStation#(ExecUnitTag eut, Vector#(size_res_bus_t, Maybe#(Res
             if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
 
-                for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
+                for(Integer i = 0; i < valueOf(NUM_FU); i=i+1) begin
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
                         t == res.tag)
@@ -46,35 +68,6 @@ module mkReservationStation#(ExecUnitTag eut, Vector#(size_res_bus_t, Maybe#(Res
                 instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
             end
         end
-
-        /*for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
-            let current_result_maybe = result_bus_vec[i];
-
-            if(current_result_maybe matches tagged Valid .current_result) begin
-                let current_tag = current_result.tag;
-                let current_val = current_result.result.Result;
-
-                // test each instructions operands
-                for(Integer j = 0; j < valueOf(entries); j=j+1) begin
-                    let current_instruction = instructions_to_update[j].Valid;
-
-                    //test rs1
-                    if(current_instruction.rs1.Tag == current_tag) begin
-                        instructions_to_update[j].Valid.rs1 = tagged Operand current_val;
-                    end
-
-                    //test rs2
-                    //if(current_instruction.rs2 matches tagged Tag .t &&& t == current_tag) begin
-                    //    instructions_to_update[j].Valid.rs2 = tagged Operand current_val;
-                    //end
-                end
-
-                
-            end
-        end*/
-
-       // Vector::writeVReg(instruction_buffer_port0_v, instructions_to_update);
-
     endrule
 
     Wire#(Instruction) inst_to_insert <- mkWire();
@@ -111,6 +104,10 @@ module mkReservationStation#(ExecUnitTag eut, Vector#(size_res_bus_t, Maybe#(Res
 
     method Bool free = Vector::elem(tagged Invalid, instruction_buffer_read_v);
     method ExecUnitTag unit_type = eut;
+
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+        result_bus_vec <= bus_in;
+    endmethod
 endmodule
 
 endpackage

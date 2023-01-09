@@ -18,6 +18,8 @@ RWire#(Result) out_valid <- mkRWire();
 rule calculate;
     let inst = in.first(); in.deq();
 
+    dbg_print(ALU, $format("got instruction: ", fshow(inst)));
+
     let op1 = case (inst.opc)
         LUI: 0;
         AUIPC: inst.pc;
@@ -48,6 +50,8 @@ rule calculate;
         SUB: (op1 - op2);
     endcase;
 
+    dbg_print(ALU, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
+
     out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag});
 endrule
 
@@ -60,7 +64,6 @@ endrule
 
 method Action put(Instruction inst);
     in.enq(inst);
-    dbg_print(ALU, $format("got instruction: ", fshow(inst)));
 endmethod
 
 method Maybe#(Result) get() =

@@ -49,17 +49,17 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         decode.put(cnt, instructions, pcs, epochs);
     endrule
 
-    let fu_vec = vec(arith, branch, mem);
+    let fu_vec = vec(arith, branch, mem, arith2);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
-    RobIFC rob <- mkReorderBuffer(result_bus_vec);
+    RobIFC rob <- mkReorderBuffer();
 
     CommitIFC commit <- mkCommit();
 
     RegFileIFC regfile_arch <- mkRegFile();
 
-    RegFileEvoIFC regfile_evo <- mkRegFileEvo(result_bus_vec);
+    RegFileEvoIFC regfile_evo <- mkRegFileEvo();
 
     rule connect_commit_regs;
         let requests <- commit.get_write_requests();
@@ -81,12 +81,21 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     endrule
 
     // ALU unit
-    ReservationStationIFC#(6) rs_alu <- mkReservationStation(ALU, result_bus_vec);
-    ReservationStationIFC#(6) rs_alu2 <- mkReservationStation(ALU, result_bus_vec);
+    ReservationStationIFC#(6) rs_alu <- mkReservationStationALU6();
+    ReservationStationIFC#(6) rs_alu2 <- mkReservationStationALU6();
     //MEM unit
-    ReservationStationIFC#(6) rs_mem <- mkReservationStation(LS, result_bus_vec);
+    ReservationStationIFC#(6) rs_mem <- mkReservationStationMEM6();
     //branch unit
-    ReservationStationIFC#(6) rs_br <- mkReservationStation(BR, result_bus_vec);
+    ReservationStationIFC#(6) rs_br <- mkReservationStationBR6();
+
+    rule propagate_result_bus;
+        rs_alu.result_bus(result_bus_vec);
+        rs_alu2.result_bus(result_bus_vec);
+        rs_mem.result_bus(result_bus_vec);
+        rs_br.result_bus(result_bus_vec);
+        regfile_evo.result_bus(result_bus_vec);
+        rob.result_bus(result_bus_vec);
+    endrule
 
     rule rs_to_arith;
         let i <- rs_alu.get();
@@ -112,9 +121,43 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    let rs_vec = vec(rs_alu, rs_mem, rs_br);
+    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2);
 
-    let issue <- mkIssue(rs_vec, rob, regfile_evo);
+    let issue <- mkIssue();
+
+
+    function Bool get_rdy(ReservationStationIFC#(e) rs) = rs.free();
+    function ExecUnitTag get_op_type(ReservationStationIFC#(e) rs) = rs.unit_type();
+
+    rule connect_rs_issue;
+        let rdy_inst_vec = Vector::map(get_rdy   , rs_vec);
+        issue.rs_ready(rdy_inst_vec);
+    endrule
+
+    rule connect_rs_issue2;
+        let type_vec = Vector::map(get_op_type   , rs_vec);
+        issue.rs_type(type_vec);
+    endrule
+
+    rule connect_rs_issue3;
+        let issue_bus = issue.get_issue();
+        for(Integer i = 0; i < valueOf(NUM_RS); i = i+1) begin
+            if(issue_bus[i] matches tagged Valid .inst)
+                rs_vec[i].put(inst);
+        end
+    endrule
+
+    Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) evo_wire <- mkWire();
+    rule issue_to_rf_evo;
+        let req = issue.request_addrs();
+        let resp = regfile_evo.read_regs(req);
+        evo_wire <= resp;
+    endrule
+
+    rule issue_to_rf_evo2;
+        let resp = evo_wire;
+        issue.response_regs(resp);
+    endrule
 
     rule issue_to_dec;
         let data = decode.first;
@@ -134,6 +177,16 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         let new_pc = commit.redirect_pc();
         regfile_evo.flush();
         ifu.redirect(new_pc);
+    endrule
+
+    rule connect_rob_issue;
+        issue.rob_free(rob.free());
+        issue.rob_current_idx(rob.current_idx());
+    endrule
+
+    rule connect_rob_issue2;
+        let req = issue.get_reservation();
+        rob.reserve(tpl_1(req), tpl_2(req));
     endrule
 
     interface ifu_axi = ifu.ifu_axi;

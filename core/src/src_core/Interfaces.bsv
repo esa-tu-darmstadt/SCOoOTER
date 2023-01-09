@@ -34,16 +34,33 @@ endinterface
 
 interface IssueIFC;
     method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
-    (* always_ready, always_enabled *)
     method MIMO::LUInt#(ISSUEWIDTH) remove;
+
+    method Vector#(TMul#(2, ISSUEWIDTH), RADDR) request_addrs();
+    method Action response_regs(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response);
+    method Tuple3#(Vector#(ISSUEWIDTH, RegReservation), Vector#(ISSUEWIDTH, UInt#(XLEN)), MIMO::LUInt#(ISSUEWIDTH)) request_tags;
+
+    (* always_ready, always_enabled *)
+    method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
+    (* always_ready, always_enabled *)
+    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
+    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
+
+    method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
+    method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
+
+    method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
 endinterface
 
 interface ReservationStationIFC#(numeric type entries);
     method ActionValue#(Instruction) get;
+    (* always_ready, always_enabled *)
     method Bool free;
-    method List#(OpCode) supported_opc;
+    (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
     method Action put(Instruction inst);
+    (* always_ready, always_enabled *)
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
 endinterface
 
 interface FunctionalUnitIFC;
@@ -60,6 +77,8 @@ interface RobIFC;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method Vector#(ISSUEWIDTH, RobEntry) get();
     method Action complete_instructions(UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
+
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
 endinterface
 
 interface CommitIFC;
@@ -85,6 +104,8 @@ interface RegFileEvoIFC;
     method Action committed_state(Vector#(31, Bit#(XLEN)) regs);
     //inform about misprediction
     method Action flush();
+    (* always_ready, always_enabled *)
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
 endinterface
 
 endpackage

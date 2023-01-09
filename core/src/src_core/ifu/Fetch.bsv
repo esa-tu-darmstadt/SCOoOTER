@@ -12,6 +12,7 @@ import MIMO :: *;
 import Vector :: *;
 import Debug::*;
 
+(* synthesize *)
 module mkFetch(IFU) provisos(
         Mul#(XLEN, IFUINST, ifuwidth) //the width of the IFU axi must be as large as the size of a word times the issuewidth
 );

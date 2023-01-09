@@ -9,7 +9,8 @@ import SpecialFIFOs::*;
 import Debug::*;
 import TestFunctions::*;
 
-module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(RobIFC) provisos (
+(* synthesize *)
+module mkReorderBuffer(RobIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
     Log#(issuewidth_pad_t, issuewidth_log_t),
     Add#(ROBDEPTH, 1, size_pad_t),
@@ -21,6 +22,7 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
 
     Log#(TAdd#(ROBDEPTH, 1), size_log_t) // WHY?!
 );
+    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
     //internal store
     Vector#(ROBDEPTH, Array#(Reg#(RobEntry))) internal_store_v <- replicateM(mkCReg(2, unpack(0)));
@@ -120,35 +122,40 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
         endaction
     endfunction
 
+
+    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res);
+        return (res matches tagged Valid .res_v &&& res_v.tag == current_tag ? True : False);
+    endfunction
     rule read_cdb;
         dbg_print(ROB, $format("result_bus: ", fshow(result_bus_vec)));
         Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
 
-        for(Integer i = 0; i < valueOf(size_res_bus_t); i=i+1) begin
-            let current_result_maybe = result_bus_vec[i];
+        for(Integer i = 0; i < valueOf(ROBDEPTH); i=i+1) begin
+            let current_entry = local_store[i];
 
-            if(isValid(current_result_maybe)) begin
-                let current_result = fromMaybe(?, current_result_maybe);
-                let current_idx = current_result.tag;
-                let entry = local_store[current_idx];
+            if(current_entry. result matches tagged Tag .tag) begin
+                let produced_result = Vector::find(test_result(tag), result_bus_vec);
 
-                // TODO: find prettier way
-                if(entry.result matches tagged Except .e) begin
-                end else begin
-                    // result
-                    case (current_result.result) matches
-                        tagged Result .r : entry.result = tagged Result r;
-                        tagged Except .e : entry.result = tagged Except e;
+                if(produced_result matches tagged Valid .found_result &&&
+                   found_result matches tagged Valid .unpacked_result) begin
+
+                    case (unpacked_result.result) matches
+                        tagged Result .r : current_entry.result = tagged Result r;
+                        tagged Except .e : current_entry.result = tagged Except e;
                     endcase
                     //next pc
-                    case (current_result.new_pc) matches
-                        tagged Valid .v: entry.next_pc = v;
-                        tagged Invalid : entry.next_pc = entry.pc+4;
+                    case (unpacked_result.new_pc) matches
+                        tagged Valid .v: current_entry.next_pc = v;
+                        tagged Invalid : current_entry.next_pc = current_entry.pc+4;
                     endcase
+
                 end
 
-                local_store[current_idx] = entry;
             end
+
+            local_store[i] = current_entry;
+
+
         end
 
         Vector::writeVReg(internal_store_port0_v, local_store);
@@ -206,6 +213,10 @@ module mkReorderBuffer#(Vector#(size_res_bus_t, Maybe#(Result)) result_bus_vec)(
     action
         deq_instructions(count);
     endaction
+    endmethod
+
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+        result_bus_vec <= bus_in;
     endmethod
     
 endmodule
