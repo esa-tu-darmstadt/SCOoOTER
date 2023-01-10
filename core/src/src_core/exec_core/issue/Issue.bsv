@@ -5,6 +5,9 @@ import Inst_Types::*;
 import Interfaces::*;
 import Vector::*;
 import Debug::*;
+import GetPutCustom::*;
+import GetPut::*;
+import ClientServer::*;
 
 (* synthesize *)
 module mkIssue(IssueIFC) provisos(
@@ -191,17 +194,14 @@ rule reserve_rob;
     rob_entry_wire <= rob_entries;
 endrule
 
-Wire#(Tuple3#(Vector#(ISSUEWIDTH, RegReservation), Vector#(ISSUEWIDTH, UInt#(XLEN)), UInt#(issuewidth_log_t))) tag_res <- mkWire();
+Wire#(RegReservations) tag_res <- mkWire();
 
-function RegReservation inst_to_regres(Instruction ins, UInt#(size_logidx_t) idx) 
-    = RegReservation { addr : (ins.rd matches tagged Raddr .rd ? rd : 0), tag: idx };
-function UInt#(XLEN) inst_to_epoch(Instruction ins) = ins.epoch;
+function RegReservation inst_to_register_reservation(Instruction ins, UInt#(size_logidx_t) idx) 
+    = RegReservation { addr : (ins.rd matches tagged Raddr .rd ? rd : 0), tag: idx, epoch: ins.epoch };
 rule set_regfile_tags;
-    Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_regres), Vector::zip(inst_in, rob_entry_idx_v));
-    Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs = Vector::map(inst_to_epoch, inst_in);
-    //rf.set_tags(reservations, epochs, possible_issue_amount);
+    Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_register_reservation), Vector::zip(inst_in, rob_entry_idx_v));
 
-    tag_res <= tuple3(reservations, epochs, possible_issue_amount);
+    tag_res <= RegReservations {reservations: reservations, count: possible_issue_amount};
 endrule
 
 Wire#(Vector#(NUM_RS, Maybe#(Instruction))) instructions_rs_v <- mkWire();
@@ -243,12 +243,10 @@ rule assemble_instructions;
     //TODO: assembly of the issue bus is not yet ideal and is unregistered
 
     //then assemble issue bus
-    //Vector#(NUM_RS, Bool) active_rs = replicate(False);
     Vector#(NUM_RS, Maybe#(Instruction)) instructions_rs = replicate(tagged Invalid);
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
         if(fromInteger(i) < possible_issue_amount) begin
-            //active_rs[needed_rs_idx_w[i]] = True;
             instructions_rs[needed_rs_idx_w[i]] = tagged Valid instructions[i];
         end
     end
@@ -256,43 +254,12 @@ rule assemble_instructions;
     instructions_rs_v <= instructions_rs;
 
     dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
-
-    //now issue
-    /*for(Integer i = 0; i < valueOf(NUM_RS); i = i+1) begin
-        if(active_rs[i] == True) begin
-            rs_vec[i].put(instructions_rs[i]);
-            dbg_print(Issue, $format("enqueue to RS"));
-        end
-    end*/
-
-
-
 endrule
+
+function UInt#(32) inst_to_epoch(Instruction inst) = inst.epoch;
 
 method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
     return instructions_rs_v;
-endmethod
-
-method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
-    inst_in <= instructions;
-    inst_in_cnt <= amount;
-    //dbg_print(Issue, $format("got ", amount, "instructions"));
-    //dbg_print(Issue, $format(fshow(instructions)));
-endmethod
-
-method MIMO::LUInt#(ISSUEWIDTH) remove;
-    return possible_issue_amount;
-endmethod
-
-method Vector#(TMul#(2, ISSUEWIDTH), RADDR) request_addrs();
-    return req_addrs;
-endmethod
-method Action response_regs(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response);
-    gathered_operands <= response;
-endmethod
-
-method Tuple3#(Vector#(ISSUEWIDTH, RegReservation), Vector#(ISSUEWIDTH, UInt#(XLEN)), UInt#(issuewidth_log_t)) request_tags;
-    return tag_res;
 endmethod
 
 method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
@@ -323,6 +290,38 @@ method Tuple2#(Vector#(ISSUEWIDTH, Tuple3#(RADDR, UInt#(TLog#(ROBDEPTH)), UInt#(
 
     return tuple2(raddr_and_tag, possible_issue_amount);
 endmethod
+
+interface PutSC decoded_inst;
+    method Action put(DecodeResponse dec);
+        inst_in <= dec.instructions;
+        inst_in_cnt <= dec.count;
+    endmethod
+    method MIMO::LUInt#(ISSUEWIDTH) deq() = possible_issue_amount;
+endinterface
+
+interface Client read_registers;
+
+    interface Get request;
+        method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) get();
+            actionvalue
+                return req_addrs;
+            endactionvalue
+        endmethod
+    endinterface
+
+    interface Put response;
+        method Action put(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) resp) = gathered_operands._write(resp);
+    endinterface
+
+endinterface
+
+interface Get reserve_registers;
+    method ActionValue#(RegReservations) get();
+        actionvalue
+            return tag_res;
+        endactionvalue
+    endmethod
+endinterface
 
 endmodule
 

@@ -20,6 +20,8 @@ import Decode::*;
 import Issue::*;
 import Branch::*;
 import Mem::*;
+import GetPut::*;
+import Connectable :: *;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
@@ -39,17 +41,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     let branch <- mkBranch();
     let mem <- mkMem();
 
-    rule fetch_to_decode;
-        let inst = ifu.first();
-        let cnt = ifu.count();
-        ifu.deq();
-
-        let instructions = Vector::map(tpl_1, inst);
-        let pcs = Vector::map(tpl_2, inst);
-        let epochs = Vector::map(tpl_3, inst);
-
-        decode.put(cnt, instructions, pcs, epochs);
-    endrule
+    mkConnection(ifu.instructions, decode.instructions);
 
     let fu_vec = vec(arith, branch, mem, arith2, arith3, arith4);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
@@ -164,26 +156,8 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     endrule
 
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) evo_wire <- mkWire();
-    rule issue_to_rf_evo;
-        let req = issue.request_addrs();
-        let resp = regfile_evo.read_regs(req);
-        evo_wire <= resp;
-    endrule
 
-    rule issue_to_rf_evo2;
-        let resp = evo_wire;
-        issue.response_regs(resp);
-    endrule
-
-    rule issue_to_dec;
-        let data = decode.first;
-        issue.put(data, ( decode.count > fromInteger(valueOf(ISSUEWIDTH)) ? fromInteger(valueOf(ISSUEWIDTH)) : truncate(decode.count) ));
-    endrule
-
-    rule issue_to_dec_wipe;
-        let count = issue.remove;
-        decode.deq(count);
-    endrule
+    mkConnection(issue.decoded_inst, decode.decoded_inst);
 
     rule flush_prints;
         $fflush();
@@ -205,20 +179,10 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         rob.reserve(tpl_1(req), tpl_2(req));
     endrule
 
-    function RegReservation to_regres(RADDR addr, UInt#(TLog#(ROBDEPTH)) tag) = RegReservation {addr:addr, tag:tag};
-    rule connect_issue_evo;
-        let tags_out = issue.set_tags();
-        let tags = Vector::map(tpl_2, tpl_1(tags_out));
-        let raddrs = Vector::map(tpl_1, tpl_1(tags_out));
-        let epochs = Vector::map(tpl_3, tpl_1(tags_out));
-        let count = tpl_2(tags_out);
+    mkConnection(issue.read_registers, regfile_evo.read_registers);
+    mkConnection(issue.reserve_registers, regfile_evo.reserve_registers);
 
-        let reservations = Vector::map(uncurry(to_regres), Vector::zip(raddrs, tags));
-
-        regfile_evo.set_tags(reservations, epochs, count);
-    endrule
-
-    interface ifu_axi = ifu.ifu_axi;
+    interface imem_axi = ifu.imem_axi;
 
 endmodule
 

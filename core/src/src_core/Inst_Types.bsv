@@ -1,6 +1,7 @@
 package Inst_Types;
 
-import Types :: *;
+import Types::*;
+import Vector::*;
 
 // Type definitions for instructions
 
@@ -166,11 +167,33 @@ typedef struct {
 typedef struct {
     RADDR addr;
     UInt#(TLog#(ROBDEPTH)) tag;
+    UInt#(XLEN) epoch;
 } RegReservation deriving(Bits, FShow);
+
+typedef struct {
+    Vector#(ISSUEWIDTH, RegReservation) reservations;
+    UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
+} RegReservations deriving(Bits, FShow);
 
 typedef union tagged {
     UInt#(TLog#(ROBDEPTH)) Tag;
     Bit#(XLEN) Value;
 } EvoResponse deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(32) instruction;
+    Bit#(32) pc;
+    UInt#(XLEN) epoch;
+} FetchedInstruction deriving(Bits, FShow);
+
+typedef struct {
+    UInt#(TLog#(TAdd#(IFUINST,1))) count;
+    Vector#(IFUINST, FetchedInstruction) instructions;
+} FetchResponse deriving(Bits, FShow);
+
+typedef struct {
+    UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
+    Vector#(ISSUEWIDTH, Instruction) instructions;
+} DecodeResponse deriving(Bits, FShow);
 
 endpackage

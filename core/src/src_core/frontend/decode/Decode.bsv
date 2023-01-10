@@ -5,6 +5,8 @@ import Types::*;
 import Interfaces::*;
 import MIMO::*;
 import Vector::*;
+import GetPut::*;
+import GetPutCustom::*;
 
 ///////////////////////////////////////////////////
 // This package implements decoding of instructions
@@ -291,8 +293,8 @@ function Instruction decode(InstructionPredecode inst);
     };
 endfunction
 
-function InstructionPredecode predecode_uncurry(Tuple3#(Bit#(ILEN), Bit#(XLEN), UInt#(XLEN)) in);
-    return predecode(tpl_1(in), tpl_2(in), tpl_3(in));
+function InstructionPredecode predecode_instruction_struct(FetchedInstruction in);
+    return predecode(in.instruction, in.pc, in.epoch);
 endfunction
 
 (* synthesize *)
@@ -302,20 +304,28 @@ module mkDecode(DecodeIFC) provisos (
         Add#(__a, instruction_width_t, mimosize_t) // the MIMO should hold at least one predecoded instruction
 );
 
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst <- mkMIMO(defaultValue);
+    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkMIMO(defaultValue);
     PulseWire clear_buffer <- mkPulseWire();
 
-    //TODO: synchronization with upstream! Now only enabled if max amount free
-    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc, Vector#(IFUINST, UInt#(XLEN)) epoch) if (decoded_inst.enqReadyN(fromInteger(valueOf(IFUINST))));
-        if (!clear_buffer) begin
-            let decoded_vec = Vector::map(compose(decode, predecode_uncurry), Vector::zip3(instructions, pc, epoch));
-            decoded_inst.enq(amount, decoded_vec);
-        end
-    endmethod
+    interface Put instructions;
+        method Action put(FetchResponse inst_from_decode) if (decoded_inst_m.enqReadyN(fromInteger(valueOf(IFUINST))));
+            if (!clear_buffer) begin
+                let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
+                decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
+            end
+        endmethod
+    endinterface
 
-    method MIMO::LUInt#(INST_WINDOW) count = decoded_inst.count();
-    method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst.deq(amount);
-    method Vector#(ISSUEWIDTH, Instruction) first = decoded_inst.first();
+    interface GetSC decoded_inst;
+        method DecodeResponse first;
+            
+            let inst_vec = decoded_inst_m.first();
+            MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
+            return DecodeResponse {count: amount_loc, instructions: inst_vec};
+        endmethod
+        method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst_m.deq(amount);
+    endinterface    
+    
 endmodule
 
 endpackage

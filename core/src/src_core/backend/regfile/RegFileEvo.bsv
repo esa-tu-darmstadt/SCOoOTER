@@ -6,6 +6,8 @@ import Vector::*;
 import Interfaces::*;
 import TestFunctions::*;
 import Debug::*;
+import ClientServer::*;
+import GetPut::*;
 
 // Union for holding data in the evolving RegFile
 // The evolving RegFile stores which tag corresponds to
@@ -56,8 +58,8 @@ module mkRegFileEvo(RegFileEvoIFC);
     endrule
 
     Wire#(Vector#(ISSUEWIDTH, RegReservation)) reservations_w <- mkWire();
-    Wire#(Vector#(ISSUEWIDTH, UInt#(XLEN))) epochs_w <- mkWire();
     Wire#(UInt#(TLog#(TAdd#(1, ISSUEWIDTH)))) num_w <- mkWire();
+    Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
 
     PulseWire clear_w <- mkPulseWire();
 
@@ -66,7 +68,7 @@ module mkRegFileEvo(RegFileEvoIFC);
             
         //for every request from issue logic
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            if(epochs_w[i] == epoch) begin
+            if(reservations_w[i].epoch == epoch) begin
                 let reg_addr = reservations_w[i].addr;
                 //if the instruction and reg is valid
                 if(fromInteger(i) < num_w && reg_addr != 0) begin
@@ -91,33 +93,6 @@ module mkRegFileEvo(RegFileEvoIFC);
             dbg_print(RegEvo, $format(i+1, ": ", fshow(registers_port1[i]), " ", arch_regs_wire[i]));
     endrule
 
-    //set the correct tag corresponding to a register
-    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
-        action
-            reservations_w <= reservations;
-            epochs_w <= epochs;
-            num_w <= num;
-        endaction
-    endmethod
-
-    //read 2 regs per instruction
-    method Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) read_regs(Vector#(TMul#(2, ISSUEWIDTH), RADDR) reg_addrs);
-        Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response;
-        Vector#(31, Bit#(XLEN)) committed_regs = arch_regs_wire;
-
-        for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
-            let reg_addr = reg_addrs[i];
-            let entry = registers_port1[reg_addr-1];
-
-            response[i] = (reg_addr == 0 ? tagged Value 0 : case (entry) matches
-                tagged Invalid  : tagged Value committed_regs[reg_addr-1];
-                tagged Tag .t   : tagged Tag t;
-                tagged Value .v : tagged Value v;
-            endcase);
-        end
-
-        return response;
-    endmethod
     //input the architectural registers post-commit
     method Action committed_state(Vector#(31, Bit#(XLEN)) regs);
         action
@@ -133,6 +108,47 @@ module mkRegFileEvo(RegFileEvoIFC);
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
         result_bus_vec <= bus_in;
     endmethod
+
+    interface Server read_registers;
+    
+        interface Put request;
+            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RADDR) req);
+                Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response;
+                Vector#(31, Bit#(XLEN)) committed_regs = arch_regs_wire;
+
+                for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
+                    let reg_addr = req[i];
+                    let entry = registers_port1[reg_addr-1];
+
+                    response[i] = (reg_addr == 0 ? tagged Value 0 : case (entry) matches
+                        tagged Invalid  : tagged Value committed_regs[reg_addr-1];
+                        tagged Tag .t   : tagged Tag t;
+                        tagged Value .v : tagged Value v;
+                        endcase);
+                end
+
+                register_responses_w <= response;
+            endmethod
+        endinterface
+
+        interface Get response;
+            method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) get();
+                actionvalue
+                    return register_responses_w;
+                endactionvalue
+            endmethod
+        endinterface
+    
+    endinterface
+    
+    interface Put reserve_registers;
+        method Action put(RegReservations in);
+            action
+                reservations_w <= in.reservations;
+                num_w <= in.count;
+            endaction
+        endmethod
+    endinterface
 endmodule
 
 endpackage

@@ -13,7 +13,7 @@ import Vector :: *;
 import Debug::*;
 
 (* synthesize *)
-module mkFetch(IFU) provisos(
+module mkFetch(FetchIFC) provisos(
         Mul#(XLEN, IFUINST, ifuwidth) //the width of the IFU axi must be as large as the size of a word times the issuewidth
 );
 
@@ -57,7 +57,7 @@ module mkFetch(IFU) provisos(
         let acqpc = inflight_pcs.first(); inflight_pcs.deq();
         inflight_epoch.deq();
 
-        Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) instructions = newVector; // temporary inst storage
+        Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) instructions_v = newVector; // temporary inst storage
         
         Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32; // pos of first useful instruction
 
@@ -68,12 +68,12 @@ module mkFetch(IFU) provisos(
         for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
             if(fromInteger(i) < amount) begin
                 Bit#(XLEN) iword = dat[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
-                instructions[i] = tuple3(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first());
+                instructions_v[i] = tuple3(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first());
             end
         end
 
         // enq gathered instructions
-        fetched_inst.enq(instructions);
+        fetched_inst.enq(instructions_v);
         fetched_amount.enq(amount);
 
         // advance program counter
@@ -81,18 +81,28 @@ module mkFetch(IFU) provisos(
         pc[0] <= acqpc + (pack(extend(amount)) << 2);
     endrule
 
-    interface ifu_axi = axi.fab;
+    function FetchedInstruction build_fetch_resp(Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN)) in)
+        = FetchedInstruction {instruction: tpl_1(in), pc: tpl_2(in), epoch: tpl_3(in)};
+
+    interface imem_axi = axi.fab;
+
     method Action redirect(Bit#(XLEN) newpc);
         pc[1] <= newpc;
         dbg_print(Fetch, $format("Redirected: ", newpc));
         epoch[0] <= epoch[0]+1;
     endmethod
-    method MIMO::LUInt#(IFUINST) count                                  = fetched_amount.first;
-    method Action deq();
+    
+    interface GetS instructions;
+        method FetchResponse first();
+            let inst_vector = fetched_inst.first();
+            let fetched_inst = Vector::map(build_fetch_resp, inst_vector);
+            return FetchResponse {count: fetched_amount.first(), instructions: fetched_inst};
+        endmethod
+        method Action deq();
             fetched_inst.deq();
             fetched_amount.deq();
-    endmethod
-    method Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) first() = fetched_inst.first;
+        endmethod
+    endinterface
 
 
 endmodule

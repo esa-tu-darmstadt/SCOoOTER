@@ -6,39 +6,40 @@ import Inst_Types :: *;
 import MIMO :: *;
 import Vector :: *;
 import List :: *;
+import GetPut::*;
+import GetPutCustom::*;
+import ClientServer::*;
 
 // Toplevel interface to external world
 interface Top#(numeric type ifuwidth);
-    (* prefix= "axi_master_ifu" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, ifuwidth, 0, 0) ifu_axi;
+    (* prefix= "axi_master_fetch" *)
+    interface AXI4_Master_Rd_Fab#(XLEN, ifuwidth, 0, 0) imem_axi;
 endinterface
 
 // Instruction fetch unit iface
-interface IFU;
+interface FetchIFC;
     // AXI to IMEM
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) ifu_axi;
+    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
     // mispredict signal
     method Action redirect(Bit#(XLEN) newPC);
-    // output iface to other units
-    method MIMO::LUInt#(IFUINST) count;
-    method Action deq();
-    method Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) first();
+    // output
+    interface GetS#(FetchResponse) instructions;
 endinterface
 
 interface DecodeIFC;
-    method Action put(MIMO::LUInt#(IFUINST) amount, Vector#(IFUINST, Bit#(XLEN)) instructions, Vector#(IFUINST, Bit#(XLEN)) pc, Vector#(IFUINST, UInt#(XLEN)) epochs);
-    method MIMO::LUInt#(INST_WINDOW) count;
-    method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount);
-    method Vector#(ISSUEWIDTH, Instruction) first;
+    // insert instructions here
+    method Put#(FetchResponse) instructions;
+    //output
+    interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
 endinterface
 
 interface IssueIFC;
-    method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
-    method MIMO::LUInt#(ISSUEWIDTH) remove;
+    //instruction input
+    interface PutSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
 
-    method Vector#(TMul#(2, ISSUEWIDTH), RADDR) request_addrs();
-    method Action response_regs(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response);
-    method Tuple3#(Vector#(ISSUEWIDTH, RegReservation), Vector#(ISSUEWIDTH, UInt#(XLEN)), MIMO::LUInt#(ISSUEWIDTH)) request_tags;
+    //connection to regfile_evo
+    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
+    interface Get#(RegReservations) reserve_registers;
 
     (* always_ready, always_enabled *)
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
@@ -97,10 +98,14 @@ interface RegFileIFC;
 endinterface
 
 interface RegFileEvoIFC;
+
+    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
+    interface Put#(RegReservations) reserve_registers;
+
     //set the correct tag corresponding to a register
-    method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    //method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     //read 2 regs per instruction
-    method Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) read_regs(Vector#(TMul#(2, ISSUEWIDTH), RADDR) registers);
+    //method Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) read_regs(Vector#(TMul#(2, ISSUEWIDTH), RADDR) registers);
     //input the architectural registers post-commit
     (* always_ready, always_enabled *)
     method Action committed_state(Vector#(31, Bit#(XLEN)) regs);

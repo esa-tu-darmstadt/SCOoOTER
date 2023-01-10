@@ -18,7 +18,7 @@ package TestsMainTest;
 
         AXI4_Slave_Rd#(XLEN, ifuwidth, 0, 0) iram_axi <- mkAXI4_Slave_Rd(0, 0);
 
-	    mkConnection(iram_axi.fab ,dut.ifu_axi);
+	    mkConnection(iram_axi.fab ,dut.imem_axi);
 
         BRAM_Configure cfg_i = defaultValue;
         cfg_i.allowWriteResponseBypass = False;
