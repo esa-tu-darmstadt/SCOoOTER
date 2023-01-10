@@ -5,6 +5,7 @@ import Types::*;
 import Vector::*;
 import Interfaces::*;
 import TestFunctions::*;
+import Debug::*;
 
 // Union for holding data in the evolving RegFile
 // The evolving RegFile stores which tag corresponds to
@@ -38,14 +39,15 @@ module mkRegFileEvo(RegFileEvoIFC);
     //sniff from result bus
     rule result_bus_r;
         Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port0);
-        
+
         for(Integer i = 0; i < 31; i=i+1) begin
             let current_entry = local_entries[i];
 
             if(current_entry matches tagged Tag .current_tag) begin
-                let result = Vector::find(test_result(current_tag), Vector::reverse(result_bus_vec));
+                let result = Vector::find(test_result(current_tag), result_bus_vec);
                 if(result matches tagged Valid .found_result) begin
                     local_entries[i] = tagged Value found_result.Valid.result.Result;
+                    dbg_print(RegEvo, $format("Setting reg ", i+1, found_result.Valid.result.Result));
                 end
             end
         end
@@ -62,25 +64,32 @@ module mkRegFileEvo(RegFileEvoIFC);
     rule set_tags_r;
         Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port1);
             
-            //for every request from issue logic
-            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                if(epochs_w[i] == epoch) begin
-                    let reg_addr = reservations_w[i].addr;
-                    //if the instruction and reg is valid
-                    if(fromInteger(i) < num_w && reg_addr != 0) begin
-                        //store the tag to the regfile
-                        let tag = reservations_w[i].tag;
-                        local_entries[reg_addr-1] = tagged Tag tag;
-                    end
+        //for every request from issue logic
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
+            if(epochs_w[i] == epoch) begin
+                let reg_addr = reservations_w[i].addr;
+                //if the instruction and reg is valid
+                if(fromInteger(i) < num_w && reg_addr != 0) begin
+                    //store the tag to the regfile
+                    let tag = reservations_w[i].tag;
+                    local_entries[reg_addr-1] = tagged Tag tag;
+                    dbg_print(RegEvo, $format("Setting tag: ", reg_addr, tag));
                 end
             end
+        end
 
-            Vector::writeVReg(registers_port1, local_entries);
+        Vector::writeVReg(registers_port1, local_entries);
     endrule
 
-rule clear_r(clear_w);
-    Vector::writeVReg(registers_port2, replicate(tagged Invalid));
-endrule
+    rule clear_r(clear_w);
+        Vector::writeVReg(registers_port2, replicate(tagged Invalid));
+        epoch <= epoch+1;
+    endrule
+
+    rule print_debug;
+        for(Integer i = 0; i < 31; i=i+1)
+            dbg_print(RegEvo, $format(i+1, ": ", fshow(registers_port1[i]), " ", arch_regs_wire[i]));
+    endrule
 
     //set the correct tag corresponding to a register
     method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
@@ -100,11 +109,11 @@ endrule
             let reg_addr = reg_addrs[i];
             let entry = registers_port1[reg_addr-1];
 
-            response[i] = reg_addr == 0 ? tagged Value 0 : case (entry) matches
-                tagged Invalid  : tagged Value committed_regs[reg_addr];
+            response[i] = (reg_addr == 0 ? tagged Value 0 : case (entry) matches
+                tagged Invalid  : tagged Value committed_regs[reg_addr-1];
                 tagged Tag .t   : tagged Tag t;
                 tagged Value .v : tagged Value v;
-            endcase;
+            endcase);
         end
 
         return response;
@@ -119,7 +128,6 @@ endrule
     //inform about misprediction
     method Action flush();
         clear_w.send();
-
     endmethod
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);

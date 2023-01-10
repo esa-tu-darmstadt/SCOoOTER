@@ -26,8 +26,10 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
 
         Bool done = False;
 
+        UInt#(XLEN) epoch_loc = epoch;
+
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            if(instructions[i].epoch == epoch) begin
+            if(instructions[i].epoch == epoch_loc) begin
                 // write registers
                 if(fromInteger(i) < count &&& instructions[i].result matches tagged Result .r &&& !done) begin
                     dbg_print(Commit, $format(fshow(instructions[i])));
@@ -36,13 +38,15 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
 
                 // check branch
                 if(fromInteger(i) < count && instructions[i].next_pc != instructions[i].pred_pc && !done) begin
-                    epoch <= epoch + 1;
+                    epoch_loc = epoch_loc + 1;
                     // generate mispredict signal for IFU
                     redirect_pc_w <= instructions[i].next_pc;
                     done = True;
                 end
             end
         end
+
+        epoch <= epoch_loc;
 
         out_buffer.enq(temp_requests);
 

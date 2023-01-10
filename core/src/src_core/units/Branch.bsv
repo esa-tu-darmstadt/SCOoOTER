@@ -49,6 +49,7 @@ endrule
 
 rule calculate_target;
     let inst = in_f.first();
+    dbg_print(BRU, $format("got instruction: ", fshow(inst)));
 
     Bit#(XLEN) current_pc = inst.pc;
     Bit#(XLEN) imm = inst.imm;
@@ -69,12 +70,12 @@ rule build_response_packet;
         result: (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result (inst.pc+4)),
         new_pc: condition_w ? tagged Valid target_w : tagged Invalid
     };
+    dbg_print(BRU, $format("produced result:: ", fshow(resp)));
     out_f.enq(resp);
     in_f.deq();
 endrule
 
 method Action put(Instruction inst);
-    dbg_print(BRU, $format("got instruction: ", fshow(inst)));
     in_f.enq(inst);
 endmethod
 

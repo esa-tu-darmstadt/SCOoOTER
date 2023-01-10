@@ -15,11 +15,12 @@ typedef enum {
     ALU,
     Commit,
     Regs,
+    RegEvo,
     BRU
 } DbgTag deriving(Eq, FShow);
 
 // List of currently allowed prints
-List#(DbgTag) current_tags = list(Commit, ALU, Regs);
+List#(DbgTag) current_tags = list(Commit, Regs);
 
 //  Function for printing text with a yellow label
 function Action dbg_print(DbgTag tag, Fmt text);

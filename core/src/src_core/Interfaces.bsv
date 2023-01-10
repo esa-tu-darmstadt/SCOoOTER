@@ -50,6 +50,8 @@ interface IssueIFC;
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
 
     method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
+
+    method Tuple2#(Vector#(ISSUEWIDTH, Tuple3#(RADDR, UInt#(TLog#(ROBDEPTH)), UInt#(XLEN))), MIMO::LUInt#(ISSUEWIDTH)) set_tags();
 endinterface
 
 interface ReservationStationIFC#(numeric type entries);

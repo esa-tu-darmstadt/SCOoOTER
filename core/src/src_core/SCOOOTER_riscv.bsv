@@ -34,6 +34,8 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
 
     let arith <- mkArith();
     let arith2 <- mkArith();
+    let arith3 <- mkArith();
+    let arith4 <- mkArith();
     let branch <- mkBranch();
     let mem <- mkMem();
 
@@ -49,7 +51,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         decode.put(cnt, instructions, pcs, epochs);
     endrule
 
-    let fu_vec = vec(arith, branch, mem, arith2);
+    let fu_vec = vec(arith, branch, mem, arith2, arith3, arith4);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -83,6 +85,8 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     // ALU unit
     ReservationStationIFC#(6) rs_alu <- mkReservationStationALU6();
     ReservationStationIFC#(6) rs_alu2 <- mkReservationStationALU6();
+    ReservationStationIFC#(6) rs_alu3 <- mkReservationStationALU6();
+    ReservationStationIFC#(6) rs_alu4 <- mkReservationStationALU6();
     //MEM unit
     ReservationStationIFC#(6) rs_mem <- mkReservationStationMEM6();
     //branch unit
@@ -91,6 +95,8 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     rule propagate_result_bus;
         rs_alu.result_bus(result_bus_vec);
         rs_alu2.result_bus(result_bus_vec);
+        rs_alu3.result_bus(result_bus_vec);
+        rs_alu4.result_bus(result_bus_vec);
         rs_mem.result_bus(result_bus_vec);
         rs_br.result_bus(result_bus_vec);
         regfile_evo.result_bus(result_bus_vec);
@@ -107,6 +113,16 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         arith2.put(i);
     endrule
 
+    rule rs_to_arith3;
+        let i <- rs_alu3.get();
+        arith3.put(i);
+    endrule
+
+    rule rs_to_arith4;
+        let i <- rs_alu4.get();
+        arith4.put(i);
+    endrule
+
     rule rs_to_br;
         let i <- rs_br.get();
         branch.put(i);
@@ -121,7 +137,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2);
+    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2, rs_alu3, rs_alu4);
 
     let issue <- mkIssue();
 
@@ -187,6 +203,19 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     rule connect_rob_issue2;
         let req = issue.get_reservation();
         rob.reserve(tpl_1(req), tpl_2(req));
+    endrule
+
+    function RegReservation to_regres(RADDR addr, UInt#(TLog#(ROBDEPTH)) tag) = RegReservation {addr:addr, tag:tag};
+    rule connect_issue_evo;
+        let tags_out = issue.set_tags();
+        let tags = Vector::map(tpl_2, tpl_1(tags_out));
+        let raddrs = Vector::map(tpl_1, tpl_1(tags_out));
+        let epochs = Vector::map(tpl_3, tpl_1(tags_out));
+        let count = tpl_2(tags_out);
+
+        let reservations = Vector::map(uncurry(to_regres), Vector::zip(raddrs, tags));
+
+        regfile_evo.set_tags(reservations, epochs, count);
     endrule
 
     interface ifu_axi = ifu.ifu_axi;

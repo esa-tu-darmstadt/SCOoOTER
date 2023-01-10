@@ -47,6 +47,12 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port0_v = Vector::map(disassemble_creg(0), instruction_buffer_v);
     Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port1_v = Vector::map(disassemble_creg(1), instruction_buffer_v);
 
+    rule print_innards;
+        for(Integer i = 0; i < valueOf(entries); i=i+1) begin
+            dbg_print(RS, $format("ROB ", fshow(eut), " ", i, " ", fshow(instruction_buffer_port1_v[i])));
+        end
+    endrule
+
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin
 

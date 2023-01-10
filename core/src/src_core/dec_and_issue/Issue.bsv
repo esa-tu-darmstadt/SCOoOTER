@@ -51,6 +51,8 @@ Wire#(UInt#(issuewidth_log_t)) possible_issue_amount <- mkWire();
 Wire#(Vector#(ISSUEWIDTH, UInt#(rs_count_log_t))) needed_rs_idx_w <- mkWire();
 Wire#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) req_addrs <- mkWire();
 
+function RADDR inst_to_raddr(Instruction inst) = (inst.rd matches tagged Raddr .r ? r : 0);
+
 rule gather_operands;
     let instructions = inst_in;
 
@@ -60,6 +62,8 @@ rule gather_operands;
         request_addrs[2*i] = inst_in[i].rs1.Raddr;
         request_addrs[2*i+1] = inst_in[i].rs2.Raddr;
     end
+
+    dbg_print(Issue, $format("Requesting operands: ", fshow(request_addrs)));
 
     req_addrs <= request_addrs;
 endrule
@@ -75,7 +79,8 @@ rule resolve_cross_dependencies;
         
         for(Integer j = i; j > 0; j = j-1) begin
             //check rs1
-            if(inst_in[j-1].rd matches tagged Raddr .rd_addr &&& 
+            if(inst_in[j-1].rd matches tagged Raddr .rd_addr &&&
+                rd_addr != 0 &&&
                 inst_in[i].rs1 matches tagged Raddr .rs1_addr &&&
                 rd_addr == rs1_addr &&& !found_rs1 )
                 begin
@@ -83,7 +88,8 @@ rule resolve_cross_dependencies;
                     found_rs1 = True;
                 end
             //check rs2
-            if(inst_in[j-1].rd matches tagged Raddr .rd_addr &&& 
+            if(inst_in[j-1].rd matches tagged Raddr .rd_addr &&&
+                rd_addr != 0 &&&
                 inst_in[i].rs2 matches tagged Raddr .rs2_addr &&&
                 rd_addr == rs2_addr &&& !found_rs2 )
                 begin
@@ -158,9 +164,9 @@ rule count_possible_issue;
 
     needed_rs_idx_w <= needed_rs_idx;
 
-    dbg_print(Issue, $format("possible issue (rs): ", max_issue_rs));
-    dbg_print(Issue, $format("possible issue (rob): ", rob_av_ext));
-    dbg_print(Issue, $format("possible issue (inst_in): ", inst_in_cnt));
+    //dbg_print(Issue, $format("possible issue (rs): ", max_issue_rs));
+    //dbg_print(Issue, $format("possible issue (rob): ", rob_av_ext));
+    //dbg_print(Issue, $format("possible issue (inst_in): ", inst_in_cnt));
 
 endrule
 
@@ -202,6 +208,8 @@ Wire#(Vector#(NUM_RS, Maybe#(Instruction))) instructions_rs_v <- mkWire();
 
 rule assemble_instructions;
     Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
+
+    dbg_print(Issue, $format("Got operands: ", fshow(gathered_operands)));
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
 
@@ -247,6 +255,8 @@ rule assemble_instructions;
 
     instructions_rs_v <= instructions_rs;
 
+    dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
+
     //now issue
     /*for(Integer i = 0; i < valueOf(NUM_RS); i = i+1) begin
         if(active_rs[i] == True) begin
@@ -266,8 +276,8 @@ endmethod
 method Action put(Vector#(ISSUEWIDTH, Instruction) instructions, MIMO::LUInt#(ISSUEWIDTH) amount);
     inst_in <= instructions;
     inst_in_cnt <= amount;
-    dbg_print(Issue, $format("got ", amount, "instructions"));
-    dbg_print(Issue, $format(fshow(instructions)));
+    //dbg_print(Issue, $format("got ", amount, "instructions"));
+    //dbg_print(Issue, $format(fshow(instructions)));
 endmethod
 
 method MIMO::LUInt#(ISSUEWIDTH) remove;
@@ -302,6 +312,16 @@ endmethod
 
 method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
     op_type_vec <= in;
+endmethod
+
+method Tuple2#(Vector#(ISSUEWIDTH, Tuple3#(RADDR, UInt#(TLog#(ROBDEPTH)), UInt#(XLEN))), MIMO::LUInt#(ISSUEWIDTH)) set_tags();
+    Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
+
+    let raddrs = Vector::map(inst_to_raddr, instructions);
+    let epochs = Vector::map(inst_to_epoch, instructions);
+    let raddr_and_tag = Vector::zip3(raddrs, rob_entry_idx_v, epochs);
+
+    return tuple2(raddr_and_tag, possible_issue_amount);
 endmethod
 
 endmodule

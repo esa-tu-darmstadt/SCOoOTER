@@ -11,7 +11,7 @@ import ConfigReg::*;
 module mkRegFile(RegFileIFC);
 
     //stateful registers
-    Vector#(31, Reg#(Bit#(XLEN))) regs <- replicateM(mkConfigRegU());
+    Vector#(31, Reg#(Bit#(XLEN))) regs <- replicateM(mkRegU());
 
     rule print_debug;
         for(Integer i = 0; i < 31; i=i+1)
