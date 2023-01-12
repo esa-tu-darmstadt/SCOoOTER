@@ -54,7 +54,7 @@ Wire#(UInt#(issuewidth_log_t)) possible_issue_amount <- mkWire();
 Wire#(Vector#(ISSUEWIDTH, UInt#(rs_count_log_t))) needed_rs_idx_w <- mkWire();
 Wire#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) req_addrs <- mkWire();
 
-function RADDR inst_to_raddr(Instruction inst) = (inst.rd matches tagged Raddr .r ? r : 0);
+function RADDR inst_to_raddr(Instruction inst) = (inst.rd);
 
 rule gather_operands;
     let instructions = inst_in;
@@ -81,9 +81,10 @@ rule resolve_cross_dependencies;
         Bool found_rs2 = False;
         
         for(Integer j = i; j > 0; j = j-1) begin
+
+            let rd_addr = inst_in[j-1].rd;
             //check rs1
-            if(inst_in[j-1].rd matches tagged Raddr .rd_addr &&&
-                rd_addr != 0 &&&
+            if( rd_addr != 0 &&&
                 inst_in[i].rs1 matches tagged Raddr .rs1_addr &&&
                 rd_addr == rs1_addr &&& !found_rs1 )
                 begin
@@ -91,8 +92,7 @@ rule resolve_cross_dependencies;
                     found_rs1 = True;
                 end
             //check rs2
-            if(inst_in[j-1].rd matches tagged Raddr .rd_addr &&&
-                rd_addr != 0 &&&
+            if( rd_addr != 0 &&&
                 inst_in[i].rs2 matches tagged Raddr .rs2_addr &&&
                 rd_addr == rs2_addr &&& !found_rs2 )
                 begin
@@ -166,23 +166,19 @@ rule count_possible_issue;
     possible_issue_amount <= max_issue > inst_in_cnt ? inst_in_cnt : max_issue;
 
     needed_rs_idx_w <= needed_rs_idx;
-
-    //dbg_print(Issue, $format("possible issue (rs): ", max_issue_rs));
-    //dbg_print(Issue, $format("possible issue (rob): ", rob_av_ext));
-    //dbg_print(Issue, $format("possible issue (inst_in): ", inst_in_cnt));
-
 endrule
 
 function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logidx_t) idx);
     return RobEntry {
         pc : inst.pc,
-        destination : inst.rd.Raddr,
+        destination : inst.rd,
         result : (isValid(inst.exception) ?
             tagged Except fromMaybe(?, inst.exception) :
             tagged Tag idx),
         pred_pc : (inst.pc+4),
         epoch : inst.epoch,
-        next_pc : ?
+        next_pc : ?,
+        mem_wr : ?
     };
 endfunction
 
@@ -197,7 +193,7 @@ endrule
 Wire#(RegReservations) tag_res <- mkWire();
 
 function RegReservation inst_to_register_reservation(Instruction ins, UInt#(size_logidx_t) idx) 
-    = RegReservation { addr : (ins.rd matches tagged Raddr .rd ? rd : 0), tag: idx, epoch: ins.epoch };
+    = RegReservation { addr : ins.rd, tag: idx, epoch: ins.epoch };
 rule set_regfile_tags;
     Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_register_reservation), Vector::zip(inst_in, rob_entry_idx_v));
 

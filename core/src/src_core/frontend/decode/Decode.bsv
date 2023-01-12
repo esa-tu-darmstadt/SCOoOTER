@@ -129,10 +129,10 @@ function Operand select_rs2(InstructionPredecode inst);
     endcase;
 endfunction
 
-function Destination select_rd(InstructionPredecode inst);
+function RADDR select_rd(InstructionPredecode inst);
     return case(inst.opc)
-        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO : tagged Raddr inst.rd;
-        default : tagged Raddr 0; //TODO: fix tagging downstream
+        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO : inst.rd;
+        default : 0;
     endcase;
 endfunction
 

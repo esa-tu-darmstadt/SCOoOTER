@@ -18,7 +18,15 @@ RWire#(Result) out_valid <- mkRWire();
 rule calculate;
     let inst = in.first(); in.deq();
 
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag});
+    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
+
+    Maybe#(MemWr) write_req = tagged Invalid;
+
+    if(inst.opc == STORE && inst.funct == W) begin
+            write_req = tagged Valid MemWr {mem_addr : final_addr, data : inst.rs2.Operand, store_mask : 'b1111};
+    end
+
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, mem_wr : write_req});
 endrule
 
 rule propagate_result;

@@ -56,7 +56,7 @@ rule calculate_target;
 
     Bit#(XLEN) target = case (inst.opc)
         JAL, BRANCH:   (current_pc + imm);
-        JALR:          ((inst.rs1.Operand + imm) & ~1);
+        JALR:          ((inst.rs1.Operand + imm) & 'hfffffffe);
     endcase;
 
     target_w <= target;
@@ -68,7 +68,8 @@ rule build_response_packet;
     let resp = Result {
         tag:    inst.tag,
         result: (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result (inst.pc+4)),
-        new_pc: condition_w ? tagged Valid target_w : tagged Invalid
+        new_pc: condition_w ? tagged Valid target_w : tagged Invalid,
+        mem_wr : tagged Invalid
     };
     dbg_print(BRU, $format("produced result:: ", fshow(resp)));
     out_f.enq(resp);

@@ -44,15 +44,15 @@ rule calculate;
         AND: (op1 & op2);
         OR: (op1 | op2);
         XOR: (op1 ^ op2);
-        SRL: zeroExtend(op1 >> op2);
+        SRL: op1 >> op2;
         SLL: truncate(op1 << op2);
-        SRA: signExtend(op1 >> op2);
+        SRA: pack(op1_s >> op2);
         SUB: (op1 - op2);
     endcase;
 
     dbg_print(ALU, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
 
-    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag});
+    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag, mem_wr : tagged Invalid});
 endrule
 
 rule propagate_result;

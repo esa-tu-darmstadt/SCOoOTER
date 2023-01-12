@@ -11,9 +11,10 @@ import GetPutCustom::*;
 import ClientServer::*;
 
 // Toplevel interface to external world
-interface Top#(numeric type ifuwidth);
+interface Top;
     (* prefix= "axi_master_fetch" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, ifuwidth, 0, 0) imem_axi;
+    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) dmem_axi;
 endinterface
 
 // Instruction fetch unit iface
@@ -55,13 +56,16 @@ interface IssueIFC;
     method Tuple2#(Vector#(ISSUEWIDTH, Tuple3#(RADDR, UInt#(TLog#(ROBDEPTH)), UInt#(XLEN))), MIMO::LUInt#(ISSUEWIDTH)) set_tags();
 endinterface
 
+interface ReservationStationPutIFC;
+    interface Put#(Instruction) instruction;
+    method Bool can_insert;
+endinterface
+
 interface ReservationStationIFC#(numeric type entries);
     method ActionValue#(Instruction) get;
-    (* always_ready, always_enabled *)
-    method Bool free;
+    interface ReservationStationPutIFC in;
     (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
-    method Action put(Instruction inst);
     (* always_ready, always_enabled *)
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
 endinterface
@@ -88,6 +92,7 @@ interface CommitIFC;
     method ActionValue#(UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Bit#(XLEN) redirect_pc();
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) dmem_axi;
 endinterface
 
 interface RegFileIFC;

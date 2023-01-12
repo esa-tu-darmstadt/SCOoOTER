@@ -24,7 +24,7 @@ import GetPut::*;
 import Connectable :: *;
 
 (* synthesize *)
-module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
+module mkSCOOOTER_riscv(Top) provisos(
         Mul#(XLEN, IFUINST, ifuwidth),
         Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
         Log#(issuewidth_pad_t, issuewidth_log_t)
@@ -134,16 +134,16 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     let issue <- mkIssue();
 
 
-    function Bool get_rdy(ReservationStationIFC#(e) rs) = rs.free();
+    function Bool get_rdy(ReservationStationIFC#(e) rs) = rs.in.can_insert();
     function ExecUnitTag get_op_type(ReservationStationIFC#(e) rs) = rs.unit_type();
 
     rule connect_rs_issue;
-        let rdy_inst_vec = Vector::map(get_rdy   , rs_vec);
+        let rdy_inst_vec = Vector::map(get_rdy, rs_vec);
         issue.rs_ready(rdy_inst_vec);
     endrule
 
     rule connect_rs_issue2;
-        let type_vec = Vector::map(get_op_type   , rs_vec);
+        let type_vec = Vector::map(get_op_type, rs_vec);
         issue.rs_type(type_vec);
     endrule
 
@@ -151,7 +151,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
         let issue_bus = issue.get_issue();
         for(Integer i = 0; i < valueOf(NUM_RS); i = i+1) begin
             if(issue_bus[i] matches tagged Valid .inst)
-                rs_vec[i].put(inst);
+                rs_vec[i].in.instruction.put(inst);
         end
     endrule
 
@@ -183,6 +183,7 @@ module mkSCOOOTER_riscv(Top#(ifuwidth)) provisos(
     mkConnection(issue.reserve_registers, regfile_evo.reserve_registers);
 
     interface imem_axi = ifu.imem_axi;
+    interface dmem_axi = commit.dmem_axi;
 
 endmodule
 

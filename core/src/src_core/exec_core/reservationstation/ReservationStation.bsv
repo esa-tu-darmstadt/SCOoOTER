@@ -1,11 +1,12 @@
 package ReservationStation;
 
-import Interfaces :: *;
-import Inst_Types :: *;
-import Vector :: *;
-import Types :: *;
+import Interfaces::*;
+import Inst_Types::*;
+import Vector::*;
+import Types::*;
 import Debug::*;
 import TestFunctions::*;
+import GetPut::*;
 
 
 // Synthesizable wrappers
@@ -94,12 +95,6 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 
     let instruction_buffer_read_v = Vector::readVReg(instruction_buffer_port0_v);
 
-    //TODO: test CDB here as well or do not latch in issue stage
-    method Action put(Instruction inst) if (Vector::elem(tagged Invalid, instruction_buffer_read_v));
-        inst_to_insert <= inst;
-        inst_to_insert_idx <= Vector::findElem(tagged Invalid, instruction_buffer_read_v).Valid;
-    endmethod
-
     method ActionValue#(Instruction) get if (Vector::any(isReady, instruction_buffer_read_v));
         let idx = fromMaybe(?, Vector::findIndex(isReady, instruction_buffer_read_v));
         let inst = fromMaybe(?, instruction_buffer_read_v[idx]);
@@ -108,12 +103,21 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         return inst;
     endmethod
 
-    method Bool free = Vector::elem(tagged Invalid, instruction_buffer_read_v);
     method ExecUnitTag unit_type = eut;
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
         result_bus_vec <= bus_in;
     endmethod
+
+    interface ReservationStationPutIFC in;
+        interface Put instruction;
+            method Action put(Instruction inst) if (Vector::elem(tagged Invalid, instruction_buffer_read_v));
+                inst_to_insert <= inst;
+                inst_to_insert_idx <= Vector::findElem(tagged Invalid, instruction_buffer_read_v).Valid;
+            endmethod
+        endinterface
+        method Bool can_insert = Vector::elem(tagged Invalid, instruction_buffer_read_v);
+    endinterface
 endmodule
 
 endpackage

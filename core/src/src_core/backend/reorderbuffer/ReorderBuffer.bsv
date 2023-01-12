@@ -139,6 +139,9 @@ module mkReorderBuffer(RobIFC) provisos (
                 if(produced_result matches tagged Valid .found_result &&&
                    found_result matches tagged Valid .unpacked_result) begin
 
+                    //writes
+                    current_entry.mem_wr = unpacked_result.mem_wr;
+
                     case (unpacked_result.result) matches
                         tagged Result .r : current_entry.result = tagged Result r;
                         tagged Except .e : current_entry.result = tagged Except e;

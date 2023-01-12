@@ -124,7 +124,7 @@ typedef struct {
     //reg fields
     Operand rs2;
     Operand rs1;
-    Destination rd;
+    RADDR rd;
 
     //tag field for ROB
     UInt#(TLog#(ROBDEPTH)) tag;
@@ -138,12 +138,19 @@ typedef struct {
 } Instruction deriving(Bits, Eq, FShow);
 
 typedef struct {
+    UInt#(XLEN) mem_addr;
+    Bit#(XLEN) data;
+    Bit#(TDiv#(XLEN, 8)) store_mask;
+} MemWr deriving(Bits, FShow);
+
+typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag;
     Maybe#(Bit#(XLEN)) new_pc;
     union tagged {
         Bit#(XLEN) Result;
         ExceptionType Except;
     } result;
+    Maybe#(MemWr) mem_wr;
 } Result deriving(Bits, FShow);
 
 typedef struct {
@@ -157,6 +164,7 @@ typedef struct {
     Bit#(XLEN) next_pc;
     Bit#(XLEN) pred_pc;
     UInt#(XLEN) epoch;
+    Maybe#(MemWr) mem_wr;
 } RobEntry deriving(Bits, FShow);
 
 typedef struct {
