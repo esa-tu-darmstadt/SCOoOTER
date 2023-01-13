@@ -1,18 +1,23 @@
 package Testbench;
-    import Vector :: *;
-    import StmtFSM :: *;
-
-    import TestHelper :: *;
-
-    // Project Modules
-    import `RUN_TEST :: *;
-
-    typedef 1 TestAmount;
+    `ifdef ISA_TB
+        import TestsISA::*;
+    `endif
+    import TestbenchProgram::*;
 
     (* synthesize *)
     module [Module] mkTestbench();
-        Vector#(TestAmount, TestHandler) testVec;
-        testVec[0] <- `TESTNAME ();
+
+        `ifdef ISA_TB
+            let testsISA <- mkTestsISA();
+        `endif
+
+        `ifdef CUSTOM_TB
+            let testCustom <- mkTestProgram("../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-blt.bsv.txt", "custom", 'hffffffff, 'hffffffff);
+
+            rule start;
+                testCustom.go();
+            endrule
+        `endif
     endmodule
 
 endpackage

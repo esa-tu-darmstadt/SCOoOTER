@@ -117,7 +117,7 @@ endfunction
 
 function Operand select_rs1(InstructionPredecode inst);
     return case(inst.opc)
-        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM : tagged Raddr inst.rs1;
+        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR : tagged Raddr inst.rs1;
         default : tagged Operand 0;
     endcase;
 endfunction

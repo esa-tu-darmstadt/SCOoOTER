@@ -18,12 +18,10 @@ EXTRA_BSV_LIBS:=
 EXTRA_LIBRARIES:=
 RUN_FLAGS:=
 
+TB?=ISA_TB
+
 # Add subdirectories
-EXTRA_BSV_LIBS += $(PWD)/src/src_core
-EXTRA_BSV_LIBS += $(PWD)/src/src_core/ifu
-EXTRA_BSV_LIBS += $(PWD)/src/src_core/dec_and_issue
-EXTRA_BSV_LIBS += $(PWD)/src/src_core/units
-EXTRA_BSV_LIBS += $(PWD)/src/src_test
+EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
 
 PROJECT_NAME=SCOOOTER_riscv
 
@@ -34,6 +32,7 @@ endif
 # Default flags
 EXTRA_FLAGS= +RTS -K65535000 -RTS -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)"
 EXTRA_FLAGS+=-show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
+EXTRA_FLAGS+=-D $(TB)
 
 ###
 # User configuration

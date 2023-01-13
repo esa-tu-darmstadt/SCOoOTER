@@ -71,7 +71,7 @@ rule build_response_packet;
         new_pc: condition_w ? tagged Valid target_w : tagged Invalid,
         mem_wr : tagged Invalid
     };
-    dbg_print(BRU, $format("produced result:: ", fshow(resp)));
+    dbg_print(BRU, $format("produced result: ", fshow(resp)));
     out_f.enq(resp);
     in_f.deq();
 endrule

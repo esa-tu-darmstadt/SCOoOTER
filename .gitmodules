@@ -7,3 +7,6 @@
 [submodule "core/libraries/BlueLib"]
 	path = core/libraries/BlueLib
 	url = https://github.com/esa-tu-darmstadt/BlueLib.git
+[submodule "tools/riscv-tests"]
+	path = tools/riscv-tests
+	url = https://github.com/riscv-software-src/riscv-tests.git
