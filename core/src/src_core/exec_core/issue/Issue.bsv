@@ -8,6 +8,7 @@ import Debug::*;
 import GetPutCustom::*;
 import GetPut::*;
 import ClientServer::*;
+import ReorderBuffer::*;
 
 (* synthesize *)
 module mkIssue(IssueIFC) provisos(
@@ -44,7 +45,7 @@ Wire#(Vector#(NUM_RS, ExecUnitTag)) op_type_vec <- mkWire();
 let rs_free_type_vec = Vector::zip(op_type_vec, rdy_inst_vec);
 
 //get next indices
-function UInt#(rob_addr_t) generate_tag(UInt#(rob_addr_t) base, Integer i) = base + fromInteger(i);
+function UInt#(rob_addr_t) generate_tag(UInt#(rob_addr_t) base, Integer i) = truncate_index(base, fromInteger(i));
 Vector#(ISSUEWIDTH, UInt#(size_logidx_t)) rob_entry_idx_v = Vector::genWith(generate_tag(rob_idx_w));
 
 //wires for transporting parts
@@ -66,7 +67,7 @@ rule gather_operands;
         request_addrs[2*i+1] = inst_in[i].rs2.Raddr;
     end
 
-    dbg_print(Issue, $format("Requesting operands: ", fshow(request_addrs)));
+    //dbg_print(Issue, $format("Requesting operands: ", fshow(request_addrs)));
 
     req_addrs <= request_addrs;
 endrule
@@ -83,10 +84,12 @@ rule resolve_cross_dependencies;
         for(Integer j = i; j > 0; j = j-1) begin
 
             let rd_addr = inst_in[j-1].rd;
+            let epoch = inst_in[j-1].epoch;
             //check rs1
             if( rd_addr != 0 &&&
                 inst_in[i].rs1 matches tagged Raddr .rs1_addr &&&
-                rd_addr == rs1_addr &&& !found_rs1 )
+                rd_addr == rs1_addr &&& !found_rs1 &&&
+                inst_in[i].epoch == epoch)
                 begin
                     cross_dependant_operands[2*i].wset(rob_entry_idx_v[j-1]);
                     found_rs1 = True;
@@ -94,7 +97,8 @@ rule resolve_cross_dependencies;
             //check rs2
             if( rd_addr != 0 &&&
                 inst_in[i].rs2 matches tagged Raddr .rs2_addr &&&
-                rd_addr == rs2_addr &&& !found_rs2 )
+                rd_addr == rs2_addr &&& !found_rs2 &&&
+                inst_in[i].epoch == epoch)
                 begin
                     cross_dependant_operands[2*i+1].wset(rob_entry_idx_v[j-1]);
                     found_rs2 = True;
@@ -205,7 +209,7 @@ Wire#(Vector#(NUM_RS, Maybe#(Instruction))) instructions_rs_v <- mkWire();
 rule assemble_instructions;
     Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
 
-    dbg_print(Issue, $format("Got operands: ", fshow(gathered_operands)));
+    //dbg_print(Issue, $format("Got operands: ", fshow(gathered_operands)));
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
 

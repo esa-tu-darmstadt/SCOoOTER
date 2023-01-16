@@ -30,6 +30,13 @@ module mkReservationStationMEM6(ReservationStationIFC#(6));
     return m;
 endmodule
 
+// Synthesizable wrappers
+(* synthesize *)
+module mkReservationStationMULDIV6(ReservationStationIFC#(6));
+    ReservationStationIFC#(6) m <- mkReservationStation(MULDIV);
+    return m;
+endmodule
+
 module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) provisos (
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),

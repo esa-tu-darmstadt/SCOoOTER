@@ -4,7 +4,7 @@
 TOP_MODULE=mkSCOOOTER_riscv
 TESTBENCH_MODULE=mkTestbench
 IGNORE_MODULES=mkTestbench mkTestsMainTest
-MAIN_MODULE=SCOOOTER_riscv
+MAIN_MODULE=src_core/SCOOOTER_riscv
 TESTBENCH_FILE=src/src_test/Testbench.bsv
 
 # Initialize

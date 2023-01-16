@@ -1,7 +1,6 @@
 prefix          := @prefix@
 abs_top_src_dir := @abs_top_srcdir@
 XLEN            := @XLEN@
-BUS ?= XLEN
 target_alias    := @target_alias@
 ifeq ($(target_alias),)
 RISCV_PREFIX_VAR :=
@@ -51,7 +50,7 @@ sort: all
 
 	#make BSV hex from verilog
 	@mkdir -p out/all/bsv_hex
-	@$(foreach ver, ${ELFS_SHORT}, python3 ../hexConverter/hexConverter.py out/all/ver/$(ver).verilog.txt -o out/all/bsv_hex/$(ver) -a $(BUS) -b 0x10000 ; )
+	@$(foreach bin, ${ELFS_SHORT}, python3 ../hexConverter/hexConverter.py out/all/bin/$(bin).bin -o out/all/bsv_hex/$(bin) -b 0x10000 ; )
 	
 	#make dump from ELF files
 	@mkdir -p out/all/dump

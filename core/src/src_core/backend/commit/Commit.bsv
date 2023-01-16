@@ -63,7 +63,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
         //Bodged Memory Write (may skip over writes but sufficient for TB)
         let first_mem_req = Vector::findIndex(check_entry_for_mem_access, instructions);
         if(first_mem_req matches tagged Valid .first_mem_idx &&&
-            first_mem_idx < count_committed &&&
+            first_mem_idx <= truncate(count_committed) &&&
             instructions[first_mem_idx].epoch == epoch) begin
                 axi4_write_data_single(axi, pack(instructions[first_mem_idx].mem_wr.Valid.mem_addr), instructions[first_mem_idx].mem_wr.Valid.data, 'b1111);
             end

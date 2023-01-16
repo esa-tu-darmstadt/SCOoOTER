@@ -1,6 +1,3 @@
-[submodule "tools/embench/embench-iot"]
-	path = tools/embench/embench-iot
-	url = git@gitlab.esa.informatik.tu-darmstadt.de:risc-v/benchmarks/embench-iot.git
 [submodule "core/libraries/BlueAXI"]
 	path = core/libraries/BlueAXI
 	url = https://github.com/esa-tu-darmstadt/BlueAXI.git
@@ -10,3 +7,6 @@
 [submodule "tools/riscv-tests"]
 	path = tools/riscv-tests
 	url = https://github.com/riscv-software-src/riscv-tests.git
+[submodule "tools/embench/embench-iot"]
+	path = tools/embench/embench-iot
+	url = ../benchmarks/embench-iot
