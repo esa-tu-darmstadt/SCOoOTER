@@ -22,6 +22,7 @@ import Branch::*;
 import Mem::*;
 import GetPut::*;
 import Connectable :: *;
+import Div::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(
@@ -37,13 +38,13 @@ module mkSCOOOTER_riscv(Top) provisos(
     let arith <- mkArith();
     let arith2 <- mkArith();
     let arith3 <- mkArith();
-    let arith4 <- mkArith();
+    let md <- mkDiv();
     let branch <- mkBranch();
     let mem <- mkMem();
 
     mkConnection(ifu.instructions, decode.instructions);
 
-    let fu_vec = vec(arith, branch, mem, arith2, arith3, arith4);
+    let fu_vec = vec(arith, branch, mem, arith2, arith3, md);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -78,7 +79,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     ReservationStationIFC#(6) rs_alu <- mkReservationStationALU6();
     ReservationStationIFC#(6) rs_alu2 <- mkReservationStationALU6();
     ReservationStationIFC#(6) rs_alu3 <- mkReservationStationALU6();
-    ReservationStationIFC#(6) rs_alu4 <- mkReservationStationALU6();
+    ReservationStationIFC#(6) rs_md <- mkReservationStationMULDIV6();
     //MEM unit
     ReservationStationIFC#(6) rs_mem <- mkReservationStationMEM6();
     //branch unit
@@ -88,7 +89,7 @@ module mkSCOOOTER_riscv(Top) provisos(
         rs_alu.result_bus(result_bus_vec);
         rs_alu2.result_bus(result_bus_vec);
         rs_alu3.result_bus(result_bus_vec);
-        rs_alu4.result_bus(result_bus_vec);
+        rs_md.result_bus(result_bus_vec);
         rs_mem.result_bus(result_bus_vec);
         rs_br.result_bus(result_bus_vec);
         regfile_evo.result_bus(result_bus_vec);
@@ -110,9 +111,9 @@ module mkSCOOOTER_riscv(Top) provisos(
         arith3.put(i);
     endrule
 
-    rule rs_to_arith4;
-        let i <- rs_alu4.get();
-        arith4.put(i);
+    rule rs_to_md;
+        let i <- rs_md.get();
+        md.put(i);
     endrule
 
     rule rs_to_br;
@@ -129,7 +130,7 @@ module mkSCOOOTER_riscv(Top) provisos(
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2, rs_alu3, rs_alu4);
+    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2, rs_alu3, rs_md);
 
     let issue <- mkIssue();
 

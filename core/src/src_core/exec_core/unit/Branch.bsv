@@ -64,7 +64,7 @@ rule calculate_target;
 endrule
 
 rule build_response_packet;
-    let inst = in_f.first();
+    let inst = in_f.first(); in_f.deq();
     let resp = Result {
         tag:    inst.tag,
         result: (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result (inst.pc+4)),
@@ -73,7 +73,6 @@ rule build_response_packet;
     };
     dbg_print(BRU, $format("produced result: ", fshow(resp)));
     out_f.enq(resp);
-    in_f.deq();
 endrule
 
 method Action put(Instruction inst);

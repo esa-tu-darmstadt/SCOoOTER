@@ -9,8 +9,45 @@ import SpecialFIFOs::*;
 import Debug::*;
 import TestFunctions::*;
 
+//allow the index to wrap around
+//TODO: only needed if size is not pwr2, as the index can naturally overflow here
+function UInt#(size_logidx_t) truncate_index(UInt#(size_logidx_t) new_idx, UInt#(size_logidx_t) add) provisos (
+    Add#(1, size_logidx_t, size_log_t),
+
+    // needed to test if robdepth is a pwr of two
+    Log#(ROBDEPTH, robdepth_log_t),
+    Add#(1, robdepth_dec_t, ROBDEPTH),
+    Max#(1, robdepth_dec_t, robdepth_dec_pos_t),
+    Log#(robdepth_dec_pos_t, robdepth_test_t)
+);
+
+    UInt#(size_logidx_t) output_idx;
+
+    //if ROBDEPTH is not a pwr of two, explicitly implement rollover
+    if( valueOf(robdepth_log_t) == valueOf(robdepth_test_t) ) begin
+
+        UInt#(size_log_t) new_idx_ext = extend(new_idx);
+        UInt#(size_log_t) add_ext = extend(add);
+        UInt#(size_log_t) max_idx = fromInteger(valueOf(ROBDEPTH));
+    
+        UInt#(size_log_t) overflow_idx = new_idx_ext + add_ext;
+
+        output_idx = overflow_idx >= max_idx ?
+                        truncate( overflow_idx - max_idx ) :
+                        truncate( overflow_idx );
+    // if robdepth is power of two, the index will roll over naturally
+    end else output_idx = new_idx + add;
+
+    return output_idx;
+endfunction
+
 (* synthesize *)
-module mkReorderBuffer(RobIFC) provisos (
+module mkReorderBuffer(RobIFC);
+    let m <- mkReorderBuffer_in();
+    return m;
+endmodule
+
+module mkReorderBuffer_in(RobIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
     Log#(issuewidth_pad_t, issuewidth_log_t),
     Add#(ROBDEPTH, 1, size_pad_t),
@@ -18,10 +55,9 @@ module mkReorderBuffer(RobIFC) provisos (
     Log#(ROBDEPTH, size_logidx_t),
     Add#(__a, issuewidth_log_t, size_log_t),
     Add#(a__, size_logidx_t, size_log_t),
-    Add#(b__, 1, size_logidx_t),
-
-    Log#(TAdd#(ROBDEPTH, 1), size_log_t) // WHY?!
+    Max#(issuewidth_log_t, size_logidx_t, count_width_t)
 );
+
     Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
     //internal store
@@ -35,15 +71,6 @@ module mkReorderBuffer(RobIFC) provisos (
     //head and tail are regarded, we add a flag to
     //avoid sacrificing one storage space
     Reg#(Bool) full_r[2] <- mkCReg(2, False);
-
-    //allow the index to wrap around
-    //TODO: only needed if size is not pwr2, as the index can naturally overflow here
-    function UInt#(size_logidx_t) truncate_index(UInt#(size_logidx_t) new_idx);
-        UInt#(size_log_t) max_idx = fromInteger(valueOf(ROBDEPTH));
-        
-        return (new_idx >= truncate(max_idx) ? 
-            new_idx - truncate(max_idx) : new_idx);
-    endfunction
 
     //find out how many slots are full
     function UInt#(size_log_t) full_slots;
@@ -64,7 +91,7 @@ module mkReorderBuffer(RobIFC) provisos (
         UInt#(issuewidth_log_t) cnt = 0;
         Bool done = False;
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            let idx = truncate_index(tail_r+fromInteger(i));
+            let idx = truncate_index(tail_r, fromInteger(i));
             let inst = internal_store_port0_v[idx];
             if(!done && (fromInteger(i) < full_slots()))
                 if(inst.result matches tagged Tag .e)
@@ -87,18 +114,23 @@ module mkReorderBuffer(RobIFC) provisos (
                 err_print(ROB, $format("Error while insert - inserting too much! - free: ", empty_slots, " in: ", count));
             end
 
+            Vector#(ROBDEPTH, RobEntry) local_values = Vector::readVReg(internal_store_port1_v);
+
             // insert elements
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
                 // calculate new idx
-                let new_idx = truncate_index(head_r + fromInteger(i));
+                let new_idx = truncate_index(head_r, fromInteger(i));
                 if(fromInteger(i) < count)
-                    internal_store_port1_v[new_idx] <= new_entries[i];
+                    local_values[new_idx] = new_entries[i];
             end
 
+            Vector::writeVReg(internal_store_port1_v, local_values);
+
+            UInt#(count_width_t) count_ext = extend(count);
             // calculate new head
-            head_r <= truncate_index(head_r + extend(count));
+            head_r <= truncate_index(head_r, truncate(count_ext));
             // set full flag if full
-            if(tail_r == truncate_index(head_r + extend(count))) full_r[0] <= True;
+            if(tail_r == truncate_index(head_r, truncate(count_ext))) full_r[0] <= True;
         endaction
     endfunction
 
@@ -107,7 +139,7 @@ module mkReorderBuffer(RobIFC) provisos (
 
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
                 // calculate new idx
-                let deq_idx = truncate_index(tail_r + fromInteger(i));
+                let deq_idx = truncate_index(tail_r, fromInteger(i));
                 tmp_res[i] = internal_store_port0_v[deq_idx];
             end
 
@@ -117,7 +149,8 @@ module mkReorderBuffer(RobIFC) provisos (
     function Action deq_instructions(UInt#(issuewidth_log_t) count);
         action
             // calculate new tail
-            tail_r <= truncate_index(tail_r + extend(count));
+            UInt#(count_width_t) count_ext = extend(count);
+            tail_r <= truncate_index(tail_r, truncate(count_ext));
             if(count > 0) full_r[1] <= False;
         endaction
     endfunction
@@ -167,10 +200,10 @@ module mkReorderBuffer(RobIFC) provisos (
     endrule
 
     rule debug_print_full_contents;
-        dbg_print(ROB, $format("Head: ", head_r, " Tail: ", tail_r));
+        //dbg_print(ROB, $format("Head: ", head_r, " Tail: ", tail_r));
         Bool done = False;
         for(Integer i = 0; i<valueOf(ROBDEPTH); i=i+1) begin
-            let current_ptr = truncate_index(tail_r + fromInteger(i));
+            let current_ptr = truncate_index(tail_r, fromInteger(i));
 
             if( (current_ptr != head_r || full_r[0]) && !done )
                 dbg_print(ROB, $format("Stored ", i, " ", fshow(internal_store_port0_v[current_ptr])));

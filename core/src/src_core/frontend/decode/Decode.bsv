@@ -221,6 +221,7 @@ function OpFunction getFunct(InstructionPredecode inst);
                     'b010 : MULHSU;
                     'b011 : MULHU;
                     'b100 : DIV;
+                    'b101 : DIVU;
                     'b110 : REM;
                     'b111 : REMU;
                     default: INVALID;

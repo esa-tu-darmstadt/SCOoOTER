@@ -1,6 +1,5 @@
 package TestbenchProgram;
     import StmtFSM :: *;
-    import TestHelper :: *;
     import SCOOOTER_riscv :: *;
     import Interfaces :: *;
     import Types :: *;

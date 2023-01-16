@@ -1,0 +1,123 @@
+image: fedora:36
+
+variables:
+  BLUESPECDIR: "/opt/cad/bluespec/latest/lib"
+  BLUESPEC_HOME: "/opt/cad/bluespec/latest"
+  XILINX_VIVADO: "/opt/cad/xilinx/vitis/Vivado/2020.2"
+  XILINX_LICENSE_FILE: "/opt/cad/keys/xilinx"
+
+stages:
+  - deps
+  - build
+  - isa
+
+before_script:
+  # vivado dependency
+  - dnf install -y libxcrypt-compat libXtst langpacks-en ncurses-compat-libs libXrender
+  # BSV tools dependency
+  - dnf install -y make nano git which zip python3 glibc.i686 gcc gcc-c++ diffutils
+  # libtcl
+  - dnf install -y tcl tcl-devel
+  - ln -s /lib64/libtcl8.6.so /lib64/libtcl8.5.so
+  # gcc dependencies
+  - dnf install -y wget tar xz patch libtool
+
+  # BLUESPEC
+  - export PATH="$BLUESPEC_HOME/bin:$PATH"
+
+  # Vivado
+  - export PATH="${XILINX_VIVADO}/bin:${PATH}"
+  - export LC_ALL=C
+  
+  # cloning submodules
+  - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.esa.informatik.tu-darmstadt.de/".insteadOf "https://gitlab.esa.informatik.tu-darmstadt.de/"
+  - git submodule deinit -f .
+  - git submodule sync
+  - git submodule update --init --recursive
+  
+    # RV GCC
+  - wget https://random-oracles.org/riscv/riscv-gnu-toolchain-newlib-multilib-jul-10-2020.tar.xz
+  - tar -xf riscv-gnu-toolchain-newlib-multilib-jul-10-2020.tar.xz
+  - export PATH="$(pwd)/riscv-gnu-toolchain-newlib-multilib-jul-10-2020/bin:${PATH}"
+
+deps:
+  stage: deps
+  script:
+
+  # BSV tools
+  - git clone https://github.com/esa-tu-darmstadt/BSVTools.git
+  - pushd core
+  - ../BSVTools/bsvAdd.py
+  - popd
+  
+  # Build ISA testbench
+  - pushd tools/riscv-tests
+  - cp -r ../riscv-tests-override/* .
+  - ls
+  - ./configure
+  - make install BUS=128
+  - popd
+
+  # Build embench
+  #- pushd tools/embench
+  #- pushd embench-iot
+  #- git reset --hard HEAD
+  #- popd
+  #- make patch
+  #- make
+  #- popd
+  
+  artifacts:
+    paths:
+      - core/.bsv_tools
+      - BSVTools/*
+      - testPrograms/*
+
+buildSimple:
+  stage: build
+  script:
+  - |
+    cp testConfigs/simple.bsv core/src/Config.bsv
+    cd core
+    make SIM_TYPE=VERILOG ip
+    
+buildMedium:
+  stage: build
+  script:
+  - |
+    cp testConfigs/medium.bsv core/src/Config.bsv
+    cd core
+    make SIM_TYPE=VERILOG ip
+    
+buildHigh:
+  stage: build
+  script:
+  - |
+    cp testConfigs/high.bsv core/src/Config.bsv
+    cd core
+    make SIM_TYPE=VERILOG ip
+
+run_isaTb_simple:
+  stage: isa
+  script:
+    - cp testConfigs/simple.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=ISA_TB
+    - popd
+    
+run_isaTb_medium:
+  stage: isa
+  script:
+    - cp testConfigs/medium.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=ISA_TB
+    - popd
+    
+run_isaTb_high:
+  stage: isa
+  script:
+    - cp testConfigs/high.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=ISA_TB
+    - popd
+

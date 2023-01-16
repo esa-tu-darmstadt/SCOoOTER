@@ -179,10 +179,7 @@ _start:                                                                 \
         j reset_vector;                                                 \
         .align 2;                                                       \
 trap_vector:                                                            \
-        nop;                                                            \
-        nop;                                                            \
 reset_vector:                                                           \
-        nop;                                                            \
 1:
 
 //-----------------------------------------------------------------------
@@ -204,6 +201,12 @@ reset_vector:                                                           \
 	addi a5, a5, 0x10;                                             \
 	addi a4, x0, 1;                                                \
 	sw a4, 0(a5);                                                  \
+	nop;                                                           \
+	nop;                                                           \
+	nop;                                                           \
+	nop;                                                           \
+	nop;                                                           \
+	nop;                                                           \
 	RVTEST_SET_INTERRUPT                                           \
 	jal inf;                                                       \
 
@@ -215,6 +218,12 @@ reset_vector:                                                           \
         addi a5, a5, 0x10;                                             \
         addi a4, x0, -1;                                               \
         sw a4, 0(a5);                                                  \
+        nop;                                                           \
+        nop;                                                           \
+        nop;                                                           \
+        nop;                                                           \
+        nop;                                                           \
+        nop;                                                           \
         RVTEST_SET_INTERRUPT                                           \
 	jal inf;                                                       \
 
