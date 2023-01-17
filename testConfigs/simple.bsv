@@ -16,7 +16,7 @@ typedef 2 INST_WINDOW;
 // 0: single cycle
 // 1: multi cycle
 // 2: pipelined
-typedef 0 DIV_STRATEGY;
+typedef 0 MUL_DIV_STRATEGY;
 
 typedef 6 NUM_FU;
 typedef 6 NUM_RS;
