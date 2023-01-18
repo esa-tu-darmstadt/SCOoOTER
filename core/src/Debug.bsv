@@ -17,6 +17,7 @@ typedef enum {
     Regs,
     RegEvo,
     BRU,
+    MULDIV,
     None
 } DbgTag deriving(Eq, FShow);
 
