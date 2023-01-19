@@ -50,9 +50,16 @@ rule calculate;
         SUB: (op1 - op2);
     endcase;
 
-    dbg_print(ALU, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
+    let res = Result {
+        result : (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result result), 
+        new_pc : tagged Invalid,
+        tag : inst.tag, 
+        mem_wr : tagged Invalid
+    };
 
-    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag, mem_wr : tagged Invalid});
+    dbg_print(ALU, $format("generated result: ", fshow(res)));
+
+    out.enq(res);
 endrule
 
 rule propagate_result;

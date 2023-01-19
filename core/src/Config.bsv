@@ -1,6 +1,6 @@
 package Config;
 
-typedef 4 IFUINST;
+typedef 6 IFUINST;
 typedef 6 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
@@ -16,7 +16,7 @@ typedef 16 INST_WINDOW;
 // 0: single cycle
 // 1: multi cycle
 // 2: pipelined
-typedef 0 MUL_DIV_STRATEGY;
+typedef 1 MUL_DIV_STRATEGY;
 
 typedef 6 NUM_FU;
 typedef 6 NUM_RS;

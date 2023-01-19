@@ -8,6 +8,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import Debug::*;
 import TestFunctions::*;
+import GetPut::*;
 
 //allow the index to wrap around
 //TODO: only needed if size is not pwr2, as the index can naturally overflow here

@@ -176,9 +176,7 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
     return RobEntry {
         pc : inst.pc,
         destination : inst.rd,
-        result : (isValid(inst.exception) ?
-            tagged Except fromMaybe(?, inst.exception) :
-            tagged Tag idx),
+        result : (tagged Tag idx),
         pred_pc : (inst.pc+4),
         epoch : inst.epoch,
         next_pc : ?,
