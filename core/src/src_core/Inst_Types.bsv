@@ -144,6 +144,11 @@ typedef struct {
 } MemWr deriving(Bits, FShow);
 
 typedef struct {
+    Bit#(XLEN) data;
+    Bit#(TDiv#(XLEN, 8)) store_mask;
+} MaskedWord deriving(Bits, FShow);
+
+typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag;
     Maybe#(Bit#(XLEN)) new_pc;
     union tagged {

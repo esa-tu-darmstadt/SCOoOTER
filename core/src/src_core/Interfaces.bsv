@@ -136,6 +136,7 @@ endinterface
 interface StoreBufferIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
     interface Get#(MemWr) write;
+    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
 endinterface
 
 endpackage

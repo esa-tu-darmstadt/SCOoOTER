@@ -14,6 +14,7 @@ interface InternalStoreIFC#(numeric type entries);
     method Bool enqReadyN(UInt#(TLog#(TAdd#(ISSUEWIDTH, 1))) count);
     method Action deq();
     method MemWr first();
+    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
 endinterface
 
 
@@ -103,14 +104,39 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     method MemWr first() if (full_slots > 0);
         return storage[tail_r];
     endmethod
+    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+        Maybe#(MaskedWord) result = tagged Invalid;
+        for(Integer i = 0; i < valueOf(entries); i=i+1) begin
+            let current_idx = truncate_index(tail_r, fromInteger(i));
+            if(current_idx != head_r || full_r[0] && addr == storage[current_idx].mem_addr) begin
+                result = tagged Valid MaskedWord { data: storage[current_idx].data, store_mask: storage[current_idx].store_mask };
+            end
+        end
+        return result;
+    endmethod
 endmodule
+
+
 
 (* synthesize *)
 module mkStoreBuffer(StoreBufferIFC);
 
     InternalStoreIFC#(16) internal_buf <- mkInternalStore;
-
+    Wire#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) input_bypass_w <- mkDWire(replicate(tagged Invalid));
     FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) in_f <- mkPipelineFIFO();
+
+    rule generate_flatten;
+        let writes_in = tpl_1(in_f.first());
+        let cnt_in = tpl_2(in_f.first());
+
+        // remove entries beyond count
+        Vector#(ISSUEWIDTH, Maybe#(MemWr)) cleaned_maybes;
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
+            cleaned_maybes[i] = fromInteger(i) < cnt_in ? writes_in[i] : tagged Invalid;
+        end
+
+        input_bypass_w <= cleaned_maybes;
+    endrule
 
     rule flatten_incoming;
         let writes_in = tpl_1(in_f.first());
@@ -145,6 +171,18 @@ module mkStoreBuffer(StoreBufferIFC);
             internal_buf.enq(count, flattened);
         end
     endrule
+
+    function Bool find_addr(UInt#(XLEN) addr, Maybe#(MemWr) mw) = (mw matches tagged Valid .w ? w.mem_addr == addr : False); 
+    function MaskedWord mw_from_memory_write(MemWr in) = MaskedWord {data: in.data, store_mask: in.store_mask};
+    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+        let store_result = internal_buf.forward(addr);
+        let in_result = Vector::find(find_addr(addr), Vector::reverse(input_bypass_w));
+        let in_result_fm = fromMaybe(tagged Invalid, in_result);
+        Maybe#(MaskedWord) in_result_conv = (in_result_fm matches tagged Valid .v ? tagged Valid mw_from_memory_write(v) : tagged Invalid);
+        let result = in_result matches tagged Valid .v ? in_result_conv : store_result;
+
+        return result;
+    endmethod
 
     interface Put memory_writes;
         method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) in);
