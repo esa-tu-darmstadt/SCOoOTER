@@ -180,7 +180,7 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         pred_pc : (inst.pc+4),
         epoch : inst.epoch,
         next_pc : ?,
-        mem_wr : ?
+        mem_wr : (inst.opc == STORE || inst.opc == AMO ? tagged Pending : tagged None)
     };
 endfunction
 

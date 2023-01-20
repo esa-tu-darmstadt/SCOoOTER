@@ -49,15 +49,17 @@ module mkMemoryArbiter(MemoryArbiterIFC);
     interface Server read;
         interface Put request;
             method Action put(Bit#(XLEN) req);
+                UInt#(XLEN) effective_addr = unpack(req) - fromInteger(valueOf(BRAMSIZE));
+                Bit#(XLEN) effective_addr_req = effective_addr > fromInteger(valueOf(BRAMSIZE)) ? 0 : pack(effective_addr);
                 axi_rd.request.put(AXI4_Read_Rq {
                     id: 0,
-                    addr: req,
+                    addr: effective_addr_req,
                     burst_length: 0,
-                    burst_size: B1,
-                    burst_type: defaultValue,
-                    lock: defaultValue,
-                    cache: defaultValue,
-                    prot: defaultValue,
+                    burst_size: B4,
+                    burst_type: INCR,
+                    lock: NORMAL,
+                    cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
+                    prot: UNPRIV_SECURE_DATA,
                     qos: 0,
                     region: 0,
                     user: 0

@@ -29,7 +29,7 @@ package TestbenchProgram;
         method String test_name();
     endinterface
 
-    module mkTestProgram#(String imem_file, String test_name, Integer max_ticks, Bit#(32) exp_return_value)(TestProgIFC) provisos(
+    module mkTestProgram#(String imem_file, String dmem_file, String test_name, Integer max_ticks, Bit#(32) exp_return_value)(TestProgIFC) provisos(
         Mul#(XLEN, IFUINST, ifuwidth),
         Div#(BRAMSIZE, 4, bram_word_num_t)
     );
@@ -54,6 +54,7 @@ package TestbenchProgram;
         BRAM_Configure cfg_d = defaultValue;
         cfg_d.allowWriteResponseBypass = False;
         cfg_d.memorySize = valueOf(bram_word_num_t);
+        cfg_d.loadFormat = tagged Hex dmem_file;
         cfg_d.latency = 1;
 
         BRAM_Configure cfg_i = defaultValue;
@@ -128,12 +129,14 @@ package TestbenchProgram;
             
     	endrule
 
+        FIFO#(Bit#(0)) error_resp <- mkPipelineFIFO();
+
         rule dataread;
     		let r <- dram_axi_r.request.get();
             if(r.addr < fromInteger(valueOf(BRAMSIZE)))
                 dbram.portB.request.put(BRAMRequestBE{
                     writeen: 0,
-                    responseOnWrite: False,
+                    responseOnWrite: True,
                     address: (r.addr>>2),
                     datain: ?
                 });

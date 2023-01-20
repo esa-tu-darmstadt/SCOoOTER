@@ -25,7 +25,7 @@ Wire#(Bit#(XLEN)) redirect_pc_w <- mkWire();
 
 FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_rq_out <- mkBypassFIFO();
 
-function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch ? re.mem_wr : tagged Invalid; 
+function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch &&& re.mem_wr matches tagged Valid .v ? tagged Valid v : tagged Invalid; 
 
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.mem_wr matches tagged Valid .v ? True : False);
 method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);

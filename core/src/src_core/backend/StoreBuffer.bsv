@@ -8,6 +8,8 @@ import Interfaces::*;
 import GetPut::*;
 import Vector::*;
 import TestFunctions::*;
+import ClientServer::*;
+import GetPut::*;
 
 interface InternalStoreIFC#(numeric type entries);
     method Action enq(UInt#(TLog#(TAdd#(ISSUEWIDTH, 1))) count, Vector#(ISSUEWIDTH, MemWr) data);
@@ -54,7 +56,9 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     Log#(issuewidth_pad_t, issuewidth_log_t),
     Add#(a__, size_logidx_t, size_log_t),
     Add#(b__, 3, size_logidx_t),
-    Add#(c__, 3, size_log_t)
+    Add#(c__, 3, size_log_t),
+    Add#(d__, issuewidth_log_t, size_log_t),
+    Add#(e__, issuewidth_log_t, size_logidx_t)
 );
 
     Reg#(UInt#(size_logidx_t)) head_r <- mkReg(0);
@@ -174,15 +178,28 @@ module mkStoreBuffer(StoreBufferIFC);
 
     function Bool find_addr(UInt#(XLEN) addr, Maybe#(MemWr) mw) = (mw matches tagged Valid .w ? w.mem_addr == addr : False); 
     function MaskedWord mw_from_memory_write(MemWr in) = MaskedWord {data: in.data, store_mask: in.store_mask};
-    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
-        let store_result = internal_buf.forward(addr);
-        let in_result = Vector::find(find_addr(addr), Vector::reverse(input_bypass_w));
-        let in_result_fm = fromMaybe(tagged Invalid, in_result);
-        Maybe#(MaskedWord) in_result_conv = (in_result_fm matches tagged Valid .v ? tagged Valid mw_from_memory_write(v) : tagged Invalid);
-        let result = in_result matches tagged Valid .v ? in_result_conv : store_result;
+    
+    Wire#(UInt#(XLEN)) forward_test_addr_w <- mkWire();
 
-        return result;
-    endmethod
+    interface Server forward;
+        interface Put request;
+            method Action put(UInt#(XLEN) addr) = forward_test_addr_w._write(addr);
+        endinterface
+        interface Get response;
+            method ActionValue#(Maybe#(MaskedWord)) get();
+                actionvalue
+                    let addr = forward_test_addr_w;
+                    //let store_result = internal_buf.forward(addr);
+                    let in_result = Vector::find(find_addr(addr), Vector::reverse(input_bypass_w));
+                    let in_result_fm = fromMaybe(tagged Invalid, in_result);
+                    Maybe#(MaskedWord) in_result_conv = (in_result_fm matches tagged Valid .v ? tagged Valid mw_from_memory_write(v) : tagged Invalid);
+                    //let result = in_result matches tagged Valid .v ? in_result_conv : store_result;
+
+                    return in_result_conv;
+                endactionvalue
+            endmethod
+        endinterface
+    endinterface
 
     interface Put memory_writes;
         method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) in);

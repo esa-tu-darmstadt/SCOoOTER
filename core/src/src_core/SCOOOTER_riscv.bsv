@@ -52,7 +52,7 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     mkConnection(store_buf.write, mem_arbiter.write);
 
-    let fu_vec = vec(arith, branch, mem, arith2, arith3, md);
+    let fu_vec = vec(arith, branch, mem.fu, arith2, arith3, md);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -133,8 +133,12 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     rule rs_to_mem;
         let i <- rs_mem.get();
-        mem.put(i);
+        mem.fu.put(i);
     endrule
+
+    mkConnection(rob.check_pending_memory, mem.check_rob);
+    mkConnection(store_buf.forward, mem.check_store_buffer);
+    mkConnection(mem_arbiter.read, mem.read);
 
     rule print_res;
         dbg_print(Top, $format(fshow(result_bus_vec)));

@@ -29,7 +29,7 @@ package TestsISA;
     );
 
         function inst_test_ISA(Test_unit in) = mkTestProgram("../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
-		    //"../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"-data.bsv.txt", 
+		    "../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"-data_"+ "32" + ".bsv", 
 		    in.name_unit,
 		    8000,
             1);

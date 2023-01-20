@@ -89,6 +89,13 @@ interface FunctionalUnitIFC;
     method Maybe#(Result) get();
 endinterface
 
+interface MemoryUnitIFC;
+    interface FunctionalUnitIFC fu;
+    interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
+    interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
+    interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
+endinterface
+
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
@@ -99,6 +106,9 @@ interface RobIFC;
     method Action complete_instructions(UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+
+    interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
+    //method Bool check_pending_memory(UInt#(TLog#(ROBDEPTH)) idx);
 endinterface
 
 interface CommitIFC;
@@ -136,7 +146,8 @@ endinterface
 interface StoreBufferIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
     interface Get#(MemWr) write;
-    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+    interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
+    //method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
 endinterface
 
 endpackage
