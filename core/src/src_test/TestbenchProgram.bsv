@@ -101,33 +101,38 @@ package TestbenchProgram;
             let addr = w_request.first().addr;
             let data = r.data;
             w_request.deq();
+            
 
             case (addr)
                 fromInteger(valueOf(RV_CONTROLLER_INTERRUPT_ADDRESS)):
                     begin
-                        done_r <= True;
-                        state_r <= Finished;
                         dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
+                        done_r <= True;
+                        state_r <= Finished;                        
                     end
                 fromInteger(valueOf(RV_CONTROLLER_RETURN_ADDRESS)):
                     begin
-                        return_r <= data;
                         dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
+                        return_r <= data;
                     end
                 default:
-                    if(addr < fromInteger(valueOf(BRAMSIZE)))
+                    if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))
                     begin
                         dbram.portA.request.put(BRAMRequestBE{
                             writeen: r.strb,
-                            responseOnWrite: False,
-                            address: (addr>>2),
+                            responseOnWrite: True,
+                            address: ((addr-fromInteger(valueOf(BRAMSIZE)))>>2),
                             datain: data
                         });
-                        dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
-                    end
+                    end else dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
             endcase
             
     	endrule
+
+        rule data_resp;
+            dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
+            let r <- dbram.portA.response.get();
+        endrule
 
         FIFO#(Bit#(0)) error_resp <- mkPipelineFIFO();
 

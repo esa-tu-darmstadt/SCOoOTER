@@ -65,6 +65,7 @@ rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD);
         result: tagged None,
         addr: final_addr
     };
+    //$display(fshow(inst), fshow(pack(final_addr)));
 endrule
 
 rule check_rob_response if (in.first().opc == LOAD);
@@ -117,7 +118,7 @@ rule collect_result_read_axi if(stage4.first().result matches tagged None);
     let resp = mem_read_response.first();
     let internal_struct = stage4.first();
 
-
+    dbg_print(Mem, $format("read:  ", fshow(pack(internal_struct.addr)), " ", fshow(pack(resp))));
     out.enq(Result {result : tagged Result pack(resp), new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 

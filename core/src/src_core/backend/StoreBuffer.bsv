@@ -10,6 +10,7 @@ import Vector::*;
 import TestFunctions::*;
 import ClientServer::*;
 import GetPut::*;
+import Debug::*;
 
 interface InternalStoreIFC#(numeric type entries);
     method Action enq(UInt#(TLog#(TAdd#(ISSUEWIDTH, 1))) count, Vector#(ISSUEWIDTH, MemWr) data);
@@ -165,7 +166,7 @@ module mkStoreBuffer(StoreBufferIFC);
         // display for debugging
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             if(fromInteger(i) < count) begin
-                //$display(fshow(flattened[i]));
+                dbg_print(Mem, $format("write: ", fshow(pack(flattened[i].mem_addr)), " ", fshow(pack(flattened[i].data))));
             end
         end
 

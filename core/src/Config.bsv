@@ -1,6 +1,6 @@
 package Config;
 
-typedef 6 IFUINST;
+typedef 4 IFUINST;
 typedef 6 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
