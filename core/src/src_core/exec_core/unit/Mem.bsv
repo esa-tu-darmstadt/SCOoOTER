@@ -30,7 +30,7 @@ RWire#(Result) out_valid <- mkRWire();
 // store pipe
 rule calculate_store if (in.first().opc == STORE);
     let inst = in.first(); in.deq();
-    //$display("got store: ", fshow(inst));
+    ////$display("got store: ", fshow(inst));
     UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
     Maybe#(MemWr) write_req = tagged Invalid;
     if(inst.opc == STORE && inst.funct == W) begin
@@ -74,6 +74,7 @@ rule check_rob_response if (in.first().opc == LOAD);
     if(!rob_resp) begin
         in.deq();
         stage1.enq(internal_state);
+        //$display("ROB succeeded");
     end
 endrule
 
@@ -92,6 +93,7 @@ endrule
 rule check_fwd_path_resp;
     let struct_internal = stage3_internal;
     let response = response_sb;
+    //$display("got fwd path: ", fshow(response));
     stage3.enq(tuple2(struct_internal, response));
 endrule
 
@@ -108,6 +110,7 @@ rule request_axi_if_needed;
         stage3.deq();
         stage4.enq(struct_internal);
         mem_read_request.enq(struct_internal.addr);
+        //$display("req AXI: ", fshow(pack(struct_internal.addr)));
     end
 endrule
 
@@ -126,6 +129,7 @@ endrule
 rule collect_result_read_bypass if(stage4.first().result matches tagged Result .r);
      stage4.deq();
     let internal_struct = stage4.first();
+    dbg_print(Mem, $format("read (fwd):", fshow(pack(internal_struct.addr)), " ", fshow(pack(internal_struct.result.Result)) ));
     out.enq(Result {result : tagged Result pack(internal_struct.result.Result), new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 
@@ -174,7 +178,10 @@ interface Client read;
         method ActionValue#(Bit#(XLEN)) get();
             actionvalue
                 mem_read_request.deq();
-                return pack(mem_read_request.first());
+                let addr = mem_read_request.first();
+                if (addr < fromInteger(valueOf(BRAMSIZE)) || addr >= fromInteger(2*valueOf(BRAMSIZE)))
+                    addr = fromInteger(valueOf(BRAMSIZE));
+                return pack(addr);
             endactionvalue
         endmethod
 

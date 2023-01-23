@@ -287,9 +287,17 @@ module mkReorderBuffer_in(RobIFC) provisos (
                     let idx = fwd_test_mem_f.first(); fwd_test_mem_f.deq();
                     //rob cannot be empty!
                     //this slice of ROB cannot be full
-                    Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(tail_r, idx), Vector::map(fromInteger, Vector::genVector()));
+                    Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(idx, tail_r), Vector::map(fromInteger, Vector::genVector()));
                     Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
                     Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
+
+                    /*$display("-- calc rob break --");
+                    $display(fshow(local_store));
+                    $display(head_r, " ", tail_r, " ", idx);
+                    $display(fshow(slice_part_vector));
+                    $display(fshow(pending_write_vector));
+                    $display(fshow(inhibitants_map));*/
+
 
                     return Vector::elem(True, inhibitants_map);
                 endactionvalue

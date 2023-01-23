@@ -25,7 +25,8 @@ interface MemoryArbiterIFC;
     interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 0, 0) axi_r;
     interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) axi_w;
     // normal reads/writes
-    interface Put#(MemWr) write;
+    //interface Put#(MemWr) write;
+    interface Server#(MemWr, void) write;
     interface Server#(Bit#(XLEN), Bit#(XLEN)) read;
     // TODO: add AMO
 endinterface
@@ -145,9 +146,11 @@ endinterface
 
 interface StoreBufferIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
-    interface Get#(MemWr) write;
+    //interface Get#(MemWr) write;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     //method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+    //method Action notify_complete();
+    interface Client#(MemWr, void) write;
 endinterface
 
 endpackage

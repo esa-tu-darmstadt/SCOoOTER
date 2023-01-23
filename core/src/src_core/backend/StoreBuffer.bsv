@@ -91,7 +91,7 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
         full_r[1] <= False;
     endrule
 
-    method Action enq(UInt#(issuewidth_log_t) count, Vector#(ISSUEWIDTH, MemWr) data);
+    method Action enq(UInt#(issuewidth_log_t) count, Vector#(ISSUEWIDTH, MemWr) data) if (!full_r[0]);
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             // calculate new idx
             let new_idx = truncate_index(head_r, fromInteger(i));
@@ -113,7 +113,7 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
         Maybe#(MaskedWord) result = tagged Invalid;
         for(Integer i = 0; i < valueOf(entries); i=i+1) begin
             let current_idx = truncate_index(tail_r, fromInteger(i));
-            if(current_idx != head_r || full_r[0] && addr == storage[current_idx].mem_addr) begin
+            if((current_idx != head_r || full_r[0]) && addr == storage[current_idx].mem_addr) begin
                 result = tagged Valid MaskedWord { data: storage[current_idx].data, store_mask: storage[current_idx].store_mask };
             end
         end
@@ -126,7 +126,8 @@ endmodule
 (* synthesize *)
 module mkStoreBuffer(StoreBufferIFC);
 
-    InternalStoreIFC#(16) internal_buf <- mkInternalStore;
+    InternalStoreIFC#(16) internal_buf <- mkInternalStore();
+    FIFO#(MemWr) pending_buf <- mkPipelineFIFO();
     Wire#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) input_bypass_w <- mkDWire(replicate(tagged Invalid));
     FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) in_f <- mkPipelineFIFO();
 
@@ -181,6 +182,10 @@ module mkStoreBuffer(StoreBufferIFC);
     function MaskedWord mw_from_memory_write(MemWr in) = MaskedWord {data: in.data, store_mask: in.store_mask};
     
     Wire#(UInt#(XLEN)) forward_test_addr_w <- mkWire();
+    Wire#(MemWr) forward_pending <- mkDWire(MemWr {mem_addr: 0});
+    rule fwd_pend;
+        forward_pending <= pending_buf.first();
+    endrule
 
     interface Server forward;
         interface Put request;
@@ -190,13 +195,24 @@ module mkStoreBuffer(StoreBufferIFC);
             method ActionValue#(Maybe#(MaskedWord)) get();
                 actionvalue
                     let addr = forward_test_addr_w;
-                    //let store_result = internal_buf.forward(addr);
-                    let in_result = Vector::find(find_addr(addr), Vector::reverse(input_bypass_w));
-                    let in_result_fm = fromMaybe(tagged Invalid, in_result);
-                    Maybe#(MaskedWord) in_result_conv = (in_result_fm matches tagged Valid .v ? tagged Valid mw_from_memory_write(v) : tagged Invalid);
-                    //let result = in_result matches tagged Valid .v ? in_result_conv : store_result;
 
-                    return in_result_conv;
+                    //let in_result = Vector::find(find_addr(addr), Vector::reverse(input_bypass_w));
+                    //let in_result_fm = fromMaybe(tagged Invalid, in_result);
+                    //Maybe#(MaskedWord) in_result_conv = (in_result_fm matches tagged Valid .v ? tagged Valid mw_from_memory_write(v) : tagged Invalid);
+
+                    let internal_store_res = internal_buf.forward(addr);
+
+                    //$display("calc fwd: ", fshow(pack(addr)));
+                    //$display("intl fwd: ", fshow(internal_store_res));
+
+                    Maybe#(MaskedWord) pending_store_res = 
+                        (forward_pending.mem_addr == addr ?
+                        tagged Valid MaskedWord {data: forward_pending.data, store_mask: forward_pending.store_mask} :
+                        tagged Invalid);
+
+                    let result = (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res);
+
+                    return result;
                 endactionvalue
             endmethod
         endinterface
@@ -208,13 +224,22 @@ module mkStoreBuffer(StoreBufferIFC);
         endmethod
     endinterface
 
-    interface Get write;
-        method ActionValue#(MemWr) get();
-            actionvalue
-                internal_buf.deq();
-                return internal_buf.first();
-            endactionvalue
-        endmethod
+    interface Client write;
+        interface Get request;
+            method ActionValue#(MemWr) get();
+                actionvalue
+                    internal_buf.deq();
+                    pending_buf.enq(internal_buf.first());
+                    return internal_buf.first();
+                endactionvalue
+            endmethod
+        endinterface
+        interface Put response;
+            method Action put(void v);
+                pending_buf.deq();
+            endmethod
+        endinterface
+
     endinterface
 endmodule
 

@@ -106,14 +106,24 @@ package TestbenchProgram;
             case (addr)
                 fromInteger(valueOf(RV_CONTROLLER_INTERRUPT_ADDRESS)):
                     begin
-                        dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
                         done_r <= True;
-                        state_r <= Finished;                        
+                        state_r <= Finished;
+                        dbram.portA.request.put(BRAMRequestBE{
+                            writeen: 0,
+                            responseOnWrite: True,
+                            address: 0,
+                            datain: 0
+                        });                     
                     end
                 fromInteger(valueOf(RV_CONTROLLER_RETURN_ADDRESS)):
                     begin
-                        dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
                         return_r <= data;
+                        dbram.portA.request.put(BRAMRequestBE{
+                            writeen: 0,
+                            responseOnWrite: True,
+                            address: 0,
+                            datain: 0
+                        });
                     end
                 default:
                     if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))
@@ -124,7 +134,12 @@ package TestbenchProgram;
                             address: ((addr-fromInteger(valueOf(BRAMSIZE)))>>2),
                             datain: data
                         });
-                    end else dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
+                    end else dbram.portA.request.put(BRAMRequestBE{
+                            writeen: 0,
+                            responseOnWrite: True,
+                            address: 0,
+                            datain: 0
+                        });
             endcase
             
     	endrule
@@ -138,13 +153,14 @@ package TestbenchProgram;
 
         rule dataread;
     		let r <- dram_axi_r.request.get();
-            if(r.addr < fromInteger(valueOf(BRAMSIZE)))
+            if(r.addr < fromInteger(2*valueOf(BRAMSIZE)) && r.addr >= fromInteger(valueOf(BRAMSIZE)))
                 dbram.portB.request.put(BRAMRequestBE{
                     writeen: 0,
                     responseOnWrite: True,
-                    address: (r.addr>>2),
+                    address: ((r.addr-fromInteger(valueOf(BRAMSIZE)))>>2),
                     datain: ?
                 });
+            else dbram.portB.request.put(BRAMRequestBE{ writeen: 0, responseOnWrite: True, address: 0, datain: ?});
   	    endrule
 
         rule dataresp;
