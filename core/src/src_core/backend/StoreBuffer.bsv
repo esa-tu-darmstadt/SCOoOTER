@@ -17,7 +17,7 @@ interface InternalStoreIFC#(numeric type entries);
     method Bool enqReadyN(UInt#(TLog#(TAdd#(ISSUEWIDTH, 1))) count);
     method Action deq();
     method MemWr first();
-    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+    method ActionValue#(Maybe#(MaskedWord)) forward(UInt#(XLEN) addr);
 endinterface
 
 
@@ -92,6 +92,11 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     endrule
 
     method Action enq(UInt#(issuewidth_log_t) count, Vector#(ISSUEWIDTH, MemWr) data) if (!full_r[0]);
+
+        if(extend(count) > empty_slots) begin
+            err_print(Mem, $format("Inserting more than allowed!"));
+        end
+
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             // calculate new idx
             let new_idx = truncate_index(head_r, fromInteger(i));
@@ -109,15 +114,20 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     method MemWr first() if (full_slots > 0);
         return storage[tail_r];
     endmethod
-    method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+    method ActionValue#(Maybe#(MaskedWord)) forward(UInt#(XLEN) addr);
+        actionvalue
         Maybe#(MaskedWord) result = tagged Invalid;
+        Bool done = False;
+        $display(tail_r, " ", head_r);
         for(Integer i = 0; i < valueOf(entries); i=i+1) begin
             let current_idx = truncate_index(tail_r, fromInteger(i));
-            if((current_idx != head_r || full_r[0]) && addr == storage[current_idx].mem_addr) begin
+            if((current_idx != head_r || full_r[0]) && addr == storage[current_idx].mem_addr && !done) begin
+                $display("found: ", fshow(storage[current_idx]));
                 result = tagged Valid MaskedWord { data: storage[current_idx].data, store_mask: storage[current_idx].store_mask };
-            end
+            end else if(current_idx == head_r && !full_r[0]) done = True;
         end
         return result;
+        endactionvalue
     endmethod
 endmodule
 
@@ -200,10 +210,12 @@ module mkStoreBuffer(StoreBufferIFC);
                     //let in_result_fm = fromMaybe(tagged Invalid, in_result);
                     //Maybe#(MaskedWord) in_result_conv = (in_result_fm matches tagged Valid .v ? tagged Valid mw_from_memory_write(v) : tagged Invalid);
 
-                    let internal_store_res = internal_buf.forward(addr);
+                    let internal_store_res <- internal_buf.forward(addr);
 
-                    //$display("calc fwd: ", fshow(pack(addr)));
-                    //$display("intl fwd: ", fshow(internal_store_res));
+                    $display("calc fwd: ", fshow(pack(addr)));
+                    $display("intl fwd: ", fshow(internal_store_res));
+                    $display("pend fwd: ", fshow(forward_pending));
+
 
                     Maybe#(MaskedWord) pending_store_res = 
                         (forward_pending.mem_addr == addr ?
