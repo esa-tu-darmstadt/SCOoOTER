@@ -115,7 +115,7 @@ package TestsISA;
             $display("Elapsed %0d tests", testAmount);
             $display("Passed: %0d Broken: %0d Stuck: %0d", pass, fail, hang);
             let err_msg = $format("Not all ISA tests were successful");
-            assertEquals(6, fail+hang, err_msg);
+            assertEquals(0, fail+hang, err_msg);
             $finish();
         endrule
 

@@ -30,6 +30,7 @@ function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoc
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.mem_wr matches tagged Valid .v ? True : False);
 method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     actionvalue
+        //$display("commit ", fshow(instructions), " ", fshow(count));
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
         Bool done = False;

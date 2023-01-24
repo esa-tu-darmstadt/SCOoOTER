@@ -26,7 +26,6 @@ module mkMemoryArbiter(MemoryArbiterIFC);
         interface Put request;
             method Action put(MemWr write);
                 serialize_r_w.send();
-                //$display("set");
 
                 axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
                     id: 0,
