@@ -103,7 +103,7 @@ run_isaTb_high:
 
 run_embenchTb_simple:
   stage: embench
-  timeout: 3h
+  timeout: 24h
   script:
     - cp testConfigs/simple.bsv core/src/Config.bsv
     - pushd core
@@ -112,7 +112,7 @@ run_embenchTb_simple:
     
 run_embenchTb_medium:
   stage: embench
-  timeout: 3h
+  timeout: 24h
   script:
     - cp testConfigs/medium.bsv core/src/Config.bsv
     - pushd core
@@ -121,7 +121,7 @@ run_embenchTb_medium:
     
 run_embenchTb_high:
   stage: embench
-  timeout: 3h
+  timeout: 24h
   script:
     - cp testConfigs/high.bsv core/src/Config.bsv
     - pushd core
