@@ -1,13 +1,13 @@
 package Testbench;
-    `ifdef ISA_TB
-        import TestsISA::*;
+    `ifndef CUSTOM_TB
+        import TestsMulti::*;
     `endif
     import TestbenchProgram::*;
 
     (* synthesize *)
     module [Module] mkTestbench();
 
-        `ifdef ISA_TB
+        `ifndef CUSTOM_TB
             let testsISA <- mkTestsISA();
         `endif
 
