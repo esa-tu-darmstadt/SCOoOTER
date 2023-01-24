@@ -59,7 +59,7 @@ out/%.bsv.txt:
 	@${CROSS_COMPILE}-objcopy -O verilog embench-iot/${ARCH}/src/${TNAME}/${TNAME} out/${TNAME}/${ARCH}/ver/${TNAME}.verilog.txt
 	@${CROSS_COMPILE}-objcopy -O binary embench-iot/${ARCH}/src/${TNAME}/${TNAME} out/${TNAME}/${ARCH}/bin/${TNAME}.bin
 	@${CROSS_COMPILE}-objdump -d embench-iot/${ARCH}/src/${TNAME}/${TNAME} >out/${TNAME}/${ARCH}/dump/${TNAME}.dump
-	@python3 ../hexConverter/hexConverter.py out/${TNAME}/${ARCH}/ver/${TNAME}.verilog.txt -o out/${TNAME}/${ARCH}/bsv_hex/${TNAME} -b 0x10000
+	@python3 ../hexConverter/hexConverter.py out/${TNAME}/${ARCH}/bin/${TNAME}.bin -o out/${TNAME}/${ARCH}/bsv_hex/${TNAME} -b 0x10000
 
 .PHONY: install
 install: collect collect_binaries
