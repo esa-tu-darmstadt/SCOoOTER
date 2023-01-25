@@ -8,6 +8,8 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import Debug::*;
 import TestFunctions::*;
+import GetPut::*;
+import ClientServer::*;
 
 //allow the index to wrap around
 //TODO: only needed if size is not pwr2, as the index can naturally overflow here
@@ -71,6 +73,22 @@ module mkReorderBuffer_in(RobIFC) provisos (
     //head and tail are regarded, we add a flag to
     //avoid sacrificing one storage space
     Reg#(Bool) full_r[2] <- mkCReg(2, False);
+
+    function Bool part_of_rob_slice(UInt#(TLog#(ROBDEPTH)) head, UInt#(TLog#(ROBDEPTH)) tail, UInt#(TLog#(ROBDEPTH)) test);
+        Bool out;
+
+        if(head > tail) begin
+            out = head > test && test >= tail;
+        end else if (head < tail) begin
+            out = test >= tail || test < head;
+        end else
+            out = False;
+
+        return out;
+    endfunction
+
+    function Bool pending_write(RobEntry re) = (re.mem_wr matches tagged Valid .v ? True : (re.mem_wr matches tagged Pending ? True : False)); 
+    function Bool andd(Bool a, Bool b) = (a && b);
 
     //find out how many slots are full
     function UInt#(size_log_t) full_slots;
@@ -166,14 +184,14 @@ module mkReorderBuffer_in(RobIFC) provisos (
         for(Integer i = 0; i < valueOf(ROBDEPTH); i=i+1) begin
             let current_entry = local_store[i];
 
-            if(current_entry. result matches tagged Tag .tag) begin
+            if(current_entry.result matches tagged Tag .tag) begin
                 let produced_result = Vector::find(test_result(tag), result_bus_vec);
 
                 if(produced_result matches tagged Valid .found_result &&&
                    found_result matches tagged Valid .unpacked_result) begin
 
                     //writes
-                    current_entry.mem_wr = unpacked_result.mem_wr;
+                    current_entry.mem_wr = (unpacked_result.mem_wr matches tagged Valid .v ? tagged Valid v : tagged None);
 
                     case (unpacked_result.result) matches
                         tagged Result .r : current_entry.result = tagged Result r;
@@ -233,6 +251,8 @@ module mkReorderBuffer_in(RobIFC) provisos (
         empty_precalc <= empty_slots();
     endrule
 
+    FIFO#(UInt#(TLog#(ROBDEPTH))) fwd_test_mem_f <- mkBypassFIFO();
+
     method UInt#(issuewidth_log_t) available = ready_precalc;
     method UInt#(size_log_t) free = empty_precalc;
     method UInt#(size_logidx_t) current_idx = head_r;
@@ -254,6 +274,39 @@ module mkReorderBuffer_in(RobIFC) provisos (
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
         result_bus_vec <= bus_in;
     endmethod
+
+    //TODO: can be more efficient if checking for epoch and address
+    interface Server check_pending_memory;
+        interface Put request;
+            method Action put(UInt#(TLog#(ROBDEPTH)) idx) = fwd_test_mem_f.enq(idx);
+        endinterface
+        interface Get response;
+            method ActionValue#(Bool) get();
+                actionvalue
+                    Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
+                    let idx = fwd_test_mem_f.first(); fwd_test_mem_f.deq();
+                    //rob cannot be empty!
+                    //this slice of ROB cannot be full
+                    Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(idx, tail_r), Vector::map(fromInteger, Vector::genVector()));
+                    Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
+                    Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
+
+                    /*$display("-- calc rob break --");
+                    $display(fshow(local_store));
+                    $display(head_r, " ", tail_r, " ", idx);
+                    $display(fshow(slice_part_vector));
+                    $display(fshow(pending_write_vector));
+                    $display(fshow(inhibitants_map));*/
+
+
+                    return Vector::elem(True, inhibitants_map);
+                endactionvalue
+            endmethod
+        endinterface
+    endinterface
+
+    
+
     
 endmodule
 

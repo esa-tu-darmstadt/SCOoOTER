@@ -27,7 +27,7 @@ define uniq =
   ${seen}
 endef
 
-OFLAGS+=-O binary -j .text.init -j .text
+OFLAGS+=-O binary
 
 install: sort
 	@mkdir -p ../../testPrograms/isa

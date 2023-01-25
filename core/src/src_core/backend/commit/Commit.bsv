@@ -9,6 +9,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import BlueAXI::*;
 import Connectable::*;
+import GetPut::*;
 
 (* synthesize *)
 module mkCommit(CommitIFC) provisos(
@@ -16,20 +17,20 @@ module mkCommit(CommitIFC) provisos(
     Log#(issuewidth_pad_t, issuewidth_log_t)
 );
 
-AXI4_Master_Wr#(XLEN, XLEN, 0, 0) axi <- mkAXI4_Master_Wr(1, 1, 1, False);
-rule discard_resp;
-    let r <- axi4_write_response(axi);
-endrule
-
 FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- mkPipelineFIFO();
 
 Reg#(UInt#(XLEN)) epoch <- mkReg(0);
 
 Wire#(Bit#(XLEN)) redirect_pc_w <- mkWire();
 
+FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_rq_out <- mkBypassFIFO();
+
+function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch &&& re.mem_wr matches tagged Valid .v ? tagged Valid v : tagged Invalid; 
+
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.mem_wr matches tagged Valid .v ? True : False);
 method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     actionvalue
+        //$display("commit ", fshow(instructions), " ", fshow(count));
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
         Bool done = False;
@@ -55,25 +56,30 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     done = True;
                     count_committed = fromInteger(i);
                 end
+
             end
 
             
         end
 
-        //Bodged Memory Write (may skip over writes but sufficient for TB)
-        let first_mem_req = Vector::findIndex(check_entry_for_mem_access, instructions);
-        if(first_mem_req matches tagged Valid .first_mem_idx &&&
-            first_mem_idx <= truncate(count_committed) &&&
-            instructions[first_mem_idx].epoch == epoch) begin
-                axi4_write_data_single(axi, pack(instructions[first_mem_idx].mem_wr.Valid.mem_addr), instructions[first_mem_idx].mem_wr.Valid.data, 'b1111);
-            end
-
-
         out_buffer.enq(temp_requests);
+
+        // memory write
+        let writes = Vector::map(rob_entry_to_memory_write, instructions);
+        memory_rq_out.enq(tuple2(writes, count_committed));
 
         return count;
     endactionvalue
 endmethod
+
+interface Get memory_writes;
+    method ActionValue#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) get();
+        actionvalue
+            memory_rq_out.deq();
+            return memory_rq_out.first();
+        endactionvalue
+    endmethod
+endinterface
 
 method Bit#(XLEN) redirect_pc();
     return redirect_pc_w;
@@ -85,8 +91,6 @@ method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
         return out_buffer.first();
     endactionvalue
 endmethod
-
-interface dmem_axi = axi.fab;
 
 endmodule
 

@@ -17,7 +17,8 @@ typedef enum {
     Regs,
     RegEvo,
     BRU,
-    MULDIV,
+    MulDiv,
+    Mem,
     None
 } DbgTag deriving(Eq, FShow);
 
@@ -37,9 +38,9 @@ endfunction
 //  Function for printing error text with a red label
 function Action err_print(DbgTag tag, Fmt text);
     action
-            `ifdef CUSTOM_TB
-                $display($format("%c[31m",27), "[", fshow(tag), "]: ", $format("%c[0m",27), text);
-            `endif
+        `ifdef CUSTOM_TB
+            $display($format("%c[31m",27), "[", fshow(tag), "]: ", $format("%c[0m",27), text);
+        `endif
     endaction
 endfunction
 

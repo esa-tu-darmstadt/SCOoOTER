@@ -29,7 +29,7 @@ package TestsISA;
     );
 
         function inst_test_ISA(Test_unit in) = mkTestProgram("../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
-		    //"../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"-data.bsv.txt", 
+		    "../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"-data_"+ "32" + ".bsv", 
 		    in.name_unit,
 		    8000,
             1);
@@ -115,7 +115,7 @@ package TestsISA;
             $display("Elapsed %0d tests", testAmount);
             $display("Passed: %0d Broken: %0d Stuck: %0d", pass, fail, hang);
             let err_msg = $format("Not all ISA tests were successful");
-            assertEquals(8, fail+hang, err_msg);
+            assertEquals(0, fail+hang, err_msg);
             $finish();
         endrule
 

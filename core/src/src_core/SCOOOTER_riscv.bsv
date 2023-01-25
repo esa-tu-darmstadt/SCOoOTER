@@ -22,7 +22,9 @@ import Branch::*;
 import Mem::*;
 import GetPut::*;
 import Connectable :: *;
-import Div::*;
+import MulDiv::*;
+import MemoryArbiter::*;
+import StoreBuffer::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(
@@ -38,19 +40,27 @@ module mkSCOOOTER_riscv(Top) provisos(
     let arith <- mkArith();
     let arith2 <- mkArith();
     let arith3 <- mkArith();
-    let md <- mkDiv();
+    let md <- mkMulDiv();
     let branch <- mkBranch();
     let mem <- mkMem();
 
+    let store_buf <- mkStoreBuffer();
+
     mkConnection(ifu.instructions, decode.instructions);
 
-    let fu_vec = vec(arith, branch, mem, arith2, arith3, md);
+    let mem_arbiter <- mkMemoryArbiter();
+
+    mkConnection(store_buf.write, mem_arbiter.write);
+
+    let fu_vec = vec(arith, branch, mem.fu, arith2, arith3, md);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
     RobIFC rob <- mkReorderBuffer();
 
     CommitIFC commit <- mkCommit();
+
+    mkConnection(commit.memory_writes, store_buf.memory_writes);
 
     RegFileIFC regfile_arch <- mkRegFile();
 
@@ -123,8 +133,12 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     rule rs_to_mem;
         let i <- rs_mem.get();
-        mem.put(i);
+        mem.fu.put(i);
     endrule
+
+    mkConnection(rob.check_pending_memory, mem.check_rob);
+    mkConnection(store_buf.forward, mem.check_store_buffer);
+    mkConnection(mem_arbiter.read, mem.read);
 
     rule print_res;
         dbg_print(Top, $format(fshow(result_bus_vec)));
@@ -184,7 +198,8 @@ module mkSCOOOTER_riscv(Top) provisos(
     mkConnection(issue.reserve_registers, regfile_evo.reserve_registers);
 
     interface imem_axi = ifu.imem_axi;
-    interface dmem_axi = commit.dmem_axi;
+    interface dmem_axi_w = mem_arbiter.axi_w;
+    interface dmem_axi_r = mem_arbiter.axi_r;
 
 endmodule
 
