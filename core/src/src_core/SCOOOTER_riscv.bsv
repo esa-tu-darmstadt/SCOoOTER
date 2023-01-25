@@ -183,6 +183,7 @@ module mkSCOOOTER_riscv(Top) provisos(
         regfile_evo.flush();
         ifu.redirect(new_pc);
         decode.flush();
+        mem.flush();
     endrule
 
     rule connect_rob_issue;

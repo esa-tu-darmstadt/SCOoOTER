@@ -35,6 +35,7 @@ module mkMem(MemoryUnitIFC);
 FIFO#(Instruction) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 RWire#(Result) out_valid <- mkRWire();
+Reg#(UInt#(XLEN)) epoch_r <- mkReg(0);
 
 // store pipe
 rule calculate_store if (in.first().opc == STORE);
@@ -76,8 +77,13 @@ Wire#(Maybe#(MaskedWord)) response_sb <- mkWire();
 FIFO#(UInt#(XLEN)) mem_read_request <- mkBypassFIFO();
 FIFO#(UInt#(XLEN)) mem_read_response <- mkBypassFIFO();
 
+rule flush_invalid_loads if (in.first().opc == LOAD && in.first().epoch != epoch_r);
+    let inst = in.first(); in.deq();
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, mem_wr : tagged Invalid});
+endrule
+
 //load pipe
-rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD);
+rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch == epoch_r);
     let inst = in.first();
     UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
     request_ROB <= inst.tag;
@@ -184,7 +190,7 @@ rule collect_result_read_axi if(stage4.first().result matches tagged None);
     out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 
-(* descending_urgency="collect_result_read_axi, collect_result_read_bypass, calculate_store" *)
+(* descending_urgency="flush_invalid_loads, collect_result_read_axi, collect_result_read_bypass, calculate_store" *)
 rule collect_result_read_bypass if(stage4.first().result matches tagged Result .r);
      stage4.deq();
     let internal_struct = stage4.first();
@@ -272,6 +278,10 @@ interface Client read;
         endmethod
     endinterface
 endinterface
+
+method Action flush();
+    epoch_r <= epoch_r + 1;
+endmethod
 
 endmodule
 

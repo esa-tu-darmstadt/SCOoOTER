@@ -97,6 +97,7 @@ interface MemoryUnitIFC;
     interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
+    method Action flush();
 endinterface
 
 interface RobIFC;
