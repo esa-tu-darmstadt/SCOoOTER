@@ -27,6 +27,7 @@ typedef struct {
     Bit#(TDiv#(XLEN, 8)) load_mask;
     Width width;
     Bool sign;
+    UInt#(XLEN) epoch;
 } LoadPipe deriving(Bits, FShow);
 
 (* synthesize *)
@@ -104,12 +105,13 @@ rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch
             H, HU: HALF;
             W: WORD;
             endcase,
-        sign: (inst.funct != BU && inst.funct != HU)
+        sign: (inst.funct != BU && inst.funct != HU),
+        epoch: inst.epoch
     };
     //$display(fshow(inst), fshow(pack(final_addr)));
 endrule
 
-rule check_rob_response if (in.first().opc == LOAD);
+rule check_rob_response if (in.first().opc == LOAD && in.first().epoch == epoch_r);
     let internal_state = stage1_internal;
     let rob_resp = response_ROB;
     if(!rob_resp) begin
@@ -124,14 +126,19 @@ rule wait_for_store_buffer;
     stage1.deq();
 endrule
 
-rule check_fwd_path;
+rule flush_invalid_fwds if (stage2.first().epoch != epoch_r);
+    let internal_struct = stage2.first(); stage2.deq();
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
+endrule
+
+rule check_fwd_path if (stage2.first().epoch == epoch_r);
     let internal_struct = stage2.first();
     request_sb <= internal_struct.addr & 'hfffffffc;
     stage3_internal <= internal_struct;
     //$display("request fwd path: ", fshow(internal_struct));
 endrule
 
-rule check_fwd_path_resp;
+rule check_fwd_path_resp  if (stage2.first().epoch == epoch_r);
     let struct_internal = stage3_internal;
     let response = response_sb;
     //$display("got fwd path: ", fshow(response));
@@ -142,7 +149,12 @@ rule check_fwd_path_resp;
     end
 endrule
 
-rule request_axi_if_needed;
+rule flush_invalid_axi_rq if (tpl_1(stage3.first()).epoch != epoch_r);
+    let internal_struct = tpl_1(stage3.first()); stage3.deq();
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
+endrule
+
+rule request_axi_if_needed if (tpl_1(stage3.first()).epoch == epoch_r);
     let struct_internal = tpl_1(stage3.first());
     let fwd = tpl_2(stage3.first());
 
@@ -190,7 +202,7 @@ rule collect_result_read_axi if(stage4.first().result matches tagged None);
     out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 
-(* descending_urgency="flush_invalid_loads, collect_result_read_axi, collect_result_read_bypass, calculate_store" *)
+(* descending_urgency="collect_result_read_axi, collect_result_read_bypass, flush_invalid_axi_rq, flush_invalid_fwds, flush_invalid_loads, calculate_store" *)
 rule collect_result_read_bypass if(stage4.first().result matches tagged Result .r);
      stage4.deq();
     let internal_struct = stage4.first();
