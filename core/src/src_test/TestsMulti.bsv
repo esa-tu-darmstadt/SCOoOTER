@@ -171,15 +171,15 @@ package TestsMulti;
                             left_l = left_l - 1;
                             if (tests[testCounter].state() == Finished) begin
                                 if(tests[testCounter].return_value == tests[testCounter].return_value_exp) begin
-                                    printColor(BLUE, $format("%3d [TB] +++ PASSED +++ "+tests[testCounter].test_name, left_l));
+                                    printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + tests[testCounter].test_name + " took: %8d ticks", left_l, tests[testCounter].count()));
                                     pass_l = pass_l + 1;
                                     end
                                 else begin
-                                    printColor(RED, $format("%3d [TB] +++ FAILED +++ "+tests[testCounter].test_name + " Exp: %0d Got: %0d", left_l, tests[testCounter].return_value_exp, tests[testCounter].return_value));
+                                    printColor(RED, $format("%3d [TB] +++ FAILED +++ " + tests[testCounter].test_name + " took: %8d ticks Exp: %0d Got: %0d", left_l, tests[testCounter].count(), tests[testCounter].return_value_exp, tests[testCounter].return_value));
                                     fail_l = fail_l + 1;
                                 end
                             end else begin
-                                printColor(RED, $format("%3d [TB] +++ HANGS  +++ "+tests[testCounter].test_name, left_l));
+                                printColor(RED, $format("%3d [TB] +++ HANGS  +++ " + tests[testCounter].test_name + " ", left_l));
                                 hang_l = hang_l + 1;
                                 end
                         end				
