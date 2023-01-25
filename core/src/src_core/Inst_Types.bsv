@@ -144,6 +144,11 @@ typedef struct {
 } MemWr deriving(Bits, FShow);
 
 typedef struct {
+    Bit#(XLEN) data;
+    Bit#(TDiv#(XLEN, 8)) store_mask;
+} MaskedWord deriving(Bits, FShow);
+
+typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag;
     Maybe#(Bit#(XLEN)) new_pc;
     union tagged {
@@ -164,7 +169,11 @@ typedef struct {
     Bit#(XLEN) next_pc;
     Bit#(XLEN) pred_pc;
     UInt#(XLEN) epoch;
-    Maybe#(MemWr) mem_wr;
+    union tagged {
+        MemWr Valid;
+        void Pending;
+        void None;
+    } mem_wr;
 } RobEntry deriving(Bits, FShow);
 
 typedef struct {

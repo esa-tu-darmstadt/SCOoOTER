@@ -14,7 +14,21 @@ import ClientServer::*;
 interface Top;
     (* prefix= "axi_master_fetch" *)
     interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) dmem_axi;
+    (* prefix= "axi_master_data" *)
+    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 0, 0) dmem_axi_r;
+    (* prefix= "axi_master_data" *)
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) dmem_axi_w;
+endinterface
+
+interface MemoryArbiterIFC;
+    // axi to data memory
+    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 0, 0) axi_r;
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) axi_w;
+    // normal reads/writes
+    //interface Put#(MemWr) write;
+    interface Server#(MemWr, void) write;
+    interface Server#(Bit#(XLEN), Bit#(XLEN)) read;
+    // TODO: add AMO
 endinterface
 
 // Instruction fetch unit iface
@@ -76,6 +90,13 @@ interface FunctionalUnitIFC;
     method Maybe#(Result) get();
 endinterface
 
+interface MemoryUnitIFC;
+    interface FunctionalUnitIFC fu;
+    interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
+    interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
+    interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
+endinterface
+
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
@@ -86,13 +107,16 @@ interface RobIFC;
     method Action complete_instructions(UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+
+    interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
+    //method Bool check_pending_memory(UInt#(TLog#(ROBDEPTH)) idx);
 endinterface
 
 interface CommitIFC;
     method ActionValue#(UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Bit#(XLEN) redirect_pc();
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) dmem_axi;
+    interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
 endinterface
 
 interface RegFileIFC;
@@ -118,6 +142,15 @@ interface RegFileEvoIFC;
     method Action flush();
     (* always_ready, always_enabled *)
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+endinterface
+
+interface StoreBufferIFC;
+    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
+    //interface Get#(MemWr) write;
+    interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
+    //method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
+    //method Action notify_complete();
+    interface Client#(MemWr, void) write;
 endinterface
 
 endpackage
