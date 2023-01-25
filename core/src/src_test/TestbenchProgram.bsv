@@ -113,7 +113,7 @@ package TestbenchProgram;
                             responseOnWrite: True,
                             address: 0,
                             datain: 0
-                        });                     
+                        });
                     end
                 fromInteger(valueOf(RV_CONTROLLER_RETURN_ADDRESS)):
                     begin

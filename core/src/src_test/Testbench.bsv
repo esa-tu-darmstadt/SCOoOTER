@@ -12,7 +12,7 @@ package Testbench;
         `endif
 
         `ifdef CUSTOM_TB
-            let testCustom <- mkTestProgram("../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-lbu_256.bsv", "../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-lbu-data_32.bsv", "custom", 'hffffffff, 'hffffffff);
+            let testCustom <- mkTestProgram("../../testPrograms/embench/statemate/32bit/bsv_hex/statemate_256.bsv", "../../testPrograms/embench/statemate/32bit/bsv_hex/statemate-data_32.bsv", "custom", 'hffffffff, 'hffffffff);
 
             rule start;
                 testCustom.go();
@@ -21,3 +21,4 @@ package Testbench;
     endmodule
 
 endpackage
+		    
