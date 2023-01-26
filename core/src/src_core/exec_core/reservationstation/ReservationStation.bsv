@@ -130,7 +130,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
 
     interface ReservationStationPutIFC in;
         interface Put instruction;
-            method Action put(Instruction inst) if (!full_r[0]);
+            method Action put(Instruction inst);// if (!full_r[0]);
                 inst_to_insert <= inst;
             endmethod
         endinterface
@@ -216,9 +216,10 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 
     interface ReservationStationPutIFC in;
         interface Put instruction;
-            method Action put(Instruction inst) if (Vector::elem(tagged Invalid, instruction_buffer_read_v));
+            method Action put(Instruction inst);// if (Vector::elem(tagged Invalid, instruction_buffer_read_v));
                 inst_to_insert <= inst;
                 inst_to_insert_idx <= Vector::findElem(tagged Invalid, instruction_buffer_read_v).Valid;
+                dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
         method Bool can_insert = Vector::elem(tagged Invalid, instruction_buffer_read_v);

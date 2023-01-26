@@ -182,6 +182,8 @@ module mkSCOOOTER_riscv(Top) provisos(
         let new_pc = commit.redirect_pc();
         regfile_evo.flush();
         ifu.redirect(new_pc);
+        decode.flush();
+        mem.flush();
     endrule
 
     rule connect_rob_issue;
