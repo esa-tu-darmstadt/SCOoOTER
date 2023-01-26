@@ -15,20 +15,21 @@ interface Top;
     (* prefix= "axi_master_fetch" *)
     interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
     (* prefix= "axi_master_data" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 0, 0) dmem_axi_r;
+    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 1, 0) dmem_axi_r;
     (* prefix= "axi_master_data" *)
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) dmem_axi_w;
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 1, 0) dmem_axi_w;
 endinterface
 
 interface MemoryArbiterIFC;
     // axi to data memory
-    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 0, 0) axi_r;
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 0, 0) axi_w;
+    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 1, 0) axi_r;
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 1, 0) axi_w;
     // normal reads/writes
     //interface Put#(MemWr) write;
     interface Server#(MemWr, void) write;
     interface Server#(Bit#(XLEN), Bit#(XLEN)) read;
     // TODO: add AMO
+    interface Server#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType), Bit#(XLEN)) amo;
 endinterface
 
 // Instruction fetch unit iface
@@ -97,12 +98,15 @@ interface MemoryUnitIFC;
     interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
+    interface Client#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType), Bit#(XLEN)) amo;
     method Action flush();
+    method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
 endinterface
 
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
+    (* always_enabled *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
 
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);

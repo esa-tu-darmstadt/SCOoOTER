@@ -85,8 +85,8 @@ package TestbenchProgram;
         endrule
 
         // DATA MEMORY
-        AXI4_Slave_Wr#(XLEN, XLEN, 0, 0) dram_axi_w <- mkAXI4_Slave_Wr(0, 0, 0);
-        AXI4_Slave_Rd#(XLEN, XLEN, 0, 0) dram_axi_r <- mkAXI4_Slave_Rd(0, 0);
+        AXI4_Slave_Wr#(XLEN, XLEN, 1, 0) dram_axi_w <- mkAXI4_Slave_Wr(0, 0, 0);
+        AXI4_Slave_Rd#(XLEN, XLEN, 1, 0) dram_axi_r <- mkAXI4_Slave_Rd(0, 0);
         mkConnection(dram_axi_w.fab ,dut.dmem_axi_w);
         mkConnection(dram_axi_r.fab ,dut.dmem_axi_r);
 
@@ -100,11 +100,14 @@ package TestbenchProgram;
         BRAM2PortBE#(Bit#(XLEN), Bit#(XLEN), 4) dbram <- mkBRAM2ServerBE(cfg_d);
 
         // Buffer for write address prior to data arrival
-        FIFO#(AXI4_Write_Rq_Addr#(XLEN, 0, 0)) w_request <- mkPipelineFIFO();
+        FIFO#(AXI4_Write_Rq_Addr#(XLEN, 1, 0)) w_request <- mkPipelineFIFO();
+
+        FIFO#(Bit#(XLEN)) w_id <- mkPipelineFIFO();
     
         // get address requests and store them
   	    rule handleWriteRequest;
         	let r <- dram_axi_w.request_addr.get();
+            w_id.enq(extend(r.id));
         	w_request.enq(r);
     	endrule
 
@@ -149,13 +152,17 @@ package TestbenchProgram;
 
         // get BRAM response and just notify AXI that request was successful
         rule data_resp;
-            dram_axi_w.response.put(AXI4_Write_Rs {id: 0, resp: OKAY, user:0});
+            w_id.deq();
+            dram_axi_w.response.put(AXI4_Write_Rs {id: truncate(w_id.first()), resp: OKAY, user:0});
             let r <- dbram.portA.response.get();
         endrule
+
+        FIFO#(Bit#(XLEN)) r_id <- mkPipelineFIFO();
 
         // read data
         rule dataread;
     		let r <- dram_axi_r.request.get();
+            r_id.enq(extend(r.id));
 
             // if in DRAM range, send sensible request
             if(r.addr < fromInteger(2*valueOf(BRAMSIZE)) && r.addr >= fromInteger(valueOf(BRAMSIZE)))
@@ -172,7 +179,8 @@ package TestbenchProgram;
         // forward reply via AXI
         rule dataresp;
             let r <- dbram.portB.response.get();
-            dram_axi_r.response.put(AXI4_Read_Rs {data: r, id: 0, resp: OKAY, last: True, user: 0});
+            r_id.deq();
+            dram_axi_r.response.put(AXI4_Read_Rs {data: r, id: truncate(r_id.first()), resp: OKAY, last: True, user: 0});
         endrule
 
         // HOUSEKEEPING

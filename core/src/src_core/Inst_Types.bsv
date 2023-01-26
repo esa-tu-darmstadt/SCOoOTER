@@ -28,6 +28,20 @@ typedef enum {
 } ExecUnitTag deriving(Bits, Eq, FShow);
 
 typedef enum {
+    ADD,
+    SWAP,
+    AND,
+    OR,
+    XOR,
+    MAX,
+    MIN,
+    MAXU,
+    MINU,
+    LR,
+    SC
+} AmoType deriving(Bits, Eq, FShow);
+
+typedef enum {
     NONE,
     INVALID_INST
 } ExceptionType deriving(Bits, Eq, FShow);

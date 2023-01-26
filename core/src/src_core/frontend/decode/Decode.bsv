@@ -117,7 +117,7 @@ endfunction
 
 function Operand select_rs1(InstructionPredecode inst);
     return case(inst.opc)
-        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR : tagged Raddr inst.rs1;
+        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO : tagged Raddr inst.rs1;
         default : tagged Operand 0;
     endcase;
 endfunction
@@ -249,7 +249,7 @@ function OpFunction getFunct(InstructionPredecode inst);
                 'b01100 : AND;
                 'b01000 : OR;
                 'b10000 : MIN;
-                'b11000 : MAX;
+                'b10100 : MAX;
                 'b11000 : MINU;
                 'b11100 : MAXU;
                 default : INVALID; 

@@ -28,10 +28,15 @@ typedef struct {
     Width width;
     Bool sign;
     UInt#(XLEN) epoch;
+    Bool amo;
+    AmoType amo_t;
+    Bit#(XLEN) amo_modifier;
 } LoadPipe deriving(Bits, FShow);
 
 (* synthesize *)
-module mkMem(MemoryUnitIFC);
+module mkMem(MemoryUnitIFC) provisos (
+    Log#(ROBDEPTH, rob_idx_t)
+);
 
 // incoming instruction
 FIFO#(Instruction) in <- mkPipelineFIFO();
@@ -44,6 +49,9 @@ RWire#(Result) out_valid <- mkRWire();
 // local epoch for tossing wrong-path instructions
 // this reduces bus pressure 
 Reg#(UInt#(XLEN)) epoch_r <- mkReg(0);
+
+// ROB head ID
+Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 
 
 
@@ -85,9 +93,26 @@ rule calculate_store if (in.first().opc == STORE);
 endrule
 
 
+// helper functions
+
+function AmoType op_function_to_amo_type(OpFunction ofc);
+    return case (ofc)
+        LR: LR;
+        SC: SC;
+        SWAP: SWAP;
+        MIN: MIN;
+        MAX: MAX;
+        MINU: MINU;
+        MAXU: MAXU;
+        ADD: ADD;
+        XOR: XOR;
+        OR: OR;
+        AND: AND;
+    endcase;
+endfunction
 
 
-// LOAD HANDLING
+// LOAD / AMO HANDLING
 
 // STAGE 1: calculate address and check if a memory access is pending in ROB
 
@@ -98,7 +123,7 @@ Wire#(Bool) response_ROB <- mkWire();
 //output to next stage
 FIFO#(LoadPipe) stage1 <- mkPipelineFIFO();
 
-rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch == epoch_r);
+rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r);
 
     // get instruction, do not deq here as we do this only on success for ROB request
     let inst = in.first();
@@ -118,7 +143,7 @@ rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch
     stage1_internal <= LoadPipe {
         tag: inst.tag,
         result: tagged None,
-        addr: final_addr,
+        addr: inst.opc == AMO ? unpack(inst.rs1.Operand) : final_addr,
         load_mask: mask,
         width: case (inst.funct)
             B, BU: BYTE;
@@ -126,23 +151,29 @@ rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch
             W: WORD;
             endcase,
         sign: (inst.funct != BU && inst.funct != HU),
-        epoch: inst.epoch
+        epoch: inst.epoch,
+        amo: (inst.opc == AMO),
+        amo_t: op_function_to_amo_type(inst.funct),
+        amo_modifier: inst.rs2.Operand
     };
+    dbg_print(Mem, $format("instruction:  ", fshow(inst)));
 endrule
 
 // check ROB response, if the instruction is clear, commence execution
 // otherwise do not dequeue it and try again next cycle
-rule check_rob_response if (in.first().opc == LOAD && in.first().epoch == epoch_r);
+rule check_rob_response if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r);
     let internal_state = stage1_internal;
     let rob_resp = response_ROB;
     if(!rob_resp) begin
         in.deq();
         stage1.enq(internal_state);
+        dbg_print(AMO, $format("rob passed:  ", fshow(internal_state)));
+        
     end
 endrule
 
 // toss instructions with wrong epoch
-rule flush_invalid_loads if (in.first().opc == LOAD && in.first().epoch != epoch_r);
+rule flush_invalid_loads if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch != epoch_r);
     let inst = in.first(); in.deq();
     out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, mem_wr : tagged Invalid});
 endrule
@@ -169,9 +200,15 @@ rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r);
     let response = response_sb;
     // if the response matches our load/store mask, move into next stage
     // otherwise wait
-    if (!isValid(response) || (response.Valid.store_mask & struct_internal.load_mask) == struct_internal.load_mask) begin
+    if (!struct_internal.amo && (!isValid(response) || (response.Valid.store_mask & struct_internal.load_mask) == struct_internal.load_mask)) begin
         stage2.enq(tuple2(struct_internal, response));
         stage1.deq();
+    end
+    // if AMO, no fwd is allowed
+    if (struct_internal.amo && !isValid(response)) begin
+        stage2.enq(tuple2(struct_internal, response));
+        stage1.deq();
+        dbg_print(AMO, $format("store buffer passed:  ", fshow(struct_internal)));
     end
 endrule
 
@@ -189,22 +226,33 @@ FIFO#(UInt#(XLEN)) mem_read_request <- mkBypassFIFO();
 FIFO#(UInt#(XLEN)) mem_read_response <- mkBypassFIFO();
 // output to next stage
 FIFO#(LoadPipe) stage3 <- mkPipelineFIFO();
+// output to mem arbiter
+FIFO#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType)) amo_request <- mkBypassFIFO();
+FIFO#(Bit#(XLEN)) amo_response <- mkBypassFIFO();
 
 rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r);
     let struct_internal = tpl_1(stage2.first());
     let fwd = tpl_2(stage2.first());
 
-    // use fwd path if matching
-    if(fwd matches tagged Valid .mw) begin
+    if(!struct_internal.amo) begin
+        // use fwd path if matching
+        if(fwd matches tagged Valid .mw) begin
+            stage2.deq();
+            struct_internal.result = tagged Result mw.data;
+            stage3.enq(struct_internal);
+        end else
+        // ask AXI if no fwd
+        if(fwd matches tagged Invalid) begin
+            stage2.deq();
+            stage3.enq(struct_internal);
+            mem_read_request.enq(struct_internal.addr & 'hfffffffc);
+        end
+    end
+    else if(rob_head == struct_internal.tag) begin
+        dbg_print(AMO, $format("request:  ", fshow(struct_internal)));
         stage2.deq();
-        struct_internal.result = tagged Result mw.data;
         stage3.enq(struct_internal);
-    end else
-    // ask AXI if no fwd
-    if(fwd matches tagged Invalid) begin
-        stage2.deq();
-        stage3.enq(struct_internal);
-        mem_read_request.enq(struct_internal.addr & 'hfffffffc);
+        amo_request.enq(tuple3(pack(struct_internal.addr), struct_internal.amo_modifier, struct_internal.amo_t));
     end
 endrule
 
@@ -243,7 +291,7 @@ function Result internal_struct_and_data_to_result(LoadPipe internal_struct, Bit
 endfunction
 
 // collect response from AXI if needed
-rule collect_result_read_axi if(stage3.first().result matches tagged None);
+rule collect_result_read_axi if(!stage3.first().amo &&& stage3.first().result matches tagged None);
     stage3.deq();
     mem_read_response.deq();
 
@@ -257,7 +305,7 @@ rule collect_result_read_axi if(stage3.first().result matches tagged None);
 endrule
 
 // collect result from bypass
-rule collect_result_read_bypass if(stage3.first().result matches tagged Result .r);
+rule collect_result_read_bypass if(!stage3.first().amo &&& stage3.first().result matches tagged Result .r);
     stage3.deq();
     let internal_struct = stage3.first();
     let resp = internal_struct.result.Result;
@@ -268,12 +316,23 @@ rule collect_result_read_bypass if(stage3.first().result matches tagged Result .
     out.enq(result);
 endrule
 
+rule collect_result_read_amo if(stage3.first().amo);
+    stage3.deq();
+    let internal_struct = stage3.first();
+    let result = amo_response.first();
+    amo_response.deq();
+
+    dbg_print(AMO, $format("got result:  ", fshow(result), " ", fshow(internal_struct)));
+    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
+endrule
+
+
 
 
 
 
 // generate output (and define in which urgency results shall be propagated)
-(* descending_urgency="collect_result_read_axi, collect_result_read_bypass, flush_invalid_axi_rq, flush_invalid_fwds, flush_invalid_loads, calculate_store" *)
+(* descending_urgency="collect_result_read_amo, collect_result_read_axi, collect_result_read_bypass, flush_invalid_axi_rq, flush_invalid_fwds, flush_invalid_loads, calculate_store" *)
 rule propagate_result;
     out.deq();
     let res = out.first();
@@ -335,10 +394,31 @@ interface Client read;
     endinterface
 endinterface
 
+interface Client amo;
+    interface Get request;
+        method ActionValue#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType)) get();
+            actionvalue
+                amo_request.deq();
+                return amo_request.first();
+            endactionvalue
+        endmethod
+
+    endinterface
+    interface Put response;
+        method Action put(Bit#(XLEN) b);
+            amo_response.enq(b);
+        endmethod
+    endinterface
+endinterface
+
 // epoch handling
 
 method Action flush();
     epoch_r <= epoch_r + 1;
+endmethod
+
+method Action current_rob_id(UInt#(rob_idx_t) idx);
+    rob_head <= idx;
 endmethod
 
 endmodule

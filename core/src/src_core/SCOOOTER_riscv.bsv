@@ -189,6 +189,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     rule connect_rob_issue;
         issue.rob_free(rob.free());
         issue.rob_current_idx(rob.current_idx());
+        mem.current_rob_id(rob.current_idx());
     endrule
 
     rule connect_rob_issue2;
@@ -198,6 +199,8 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     mkConnection(issue.read_registers, regfile_evo.read_registers);
     mkConnection(issue.reserve_registers, regfile_evo.reserve_registers);
+
+    mkConnection(mem_arbiter.amo, mem.amo);
 
     interface imem_axi = ifu.imem_axi;
     interface dmem_axi_w = mem_arbiter.axi_w;

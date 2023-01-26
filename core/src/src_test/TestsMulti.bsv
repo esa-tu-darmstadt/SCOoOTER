@@ -98,6 +98,16 @@ package TestsMulti;
             test_units = List::cons(Test_unit {isa: "32um", name_unit: "rv32um-p-mulhu"}, test_units);
 
             //AMO
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amoadd_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amoand_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amomaxu_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amomax_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amominu_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amomin_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amoor_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amoswap_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-amoxor_w"}, test_units);
+            test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-lrsc"}, test_units);
 
             List#(TestProgIFC) inst_test_modules <- List::mapM(inst_test_ISA, test_units);
 
