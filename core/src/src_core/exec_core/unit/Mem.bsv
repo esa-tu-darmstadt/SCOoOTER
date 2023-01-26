@@ -238,10 +238,9 @@ rule propagate_result;
     out_valid.wset(res);
 endrule
 
-interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst) = in.enq(inst);
-    method Maybe#(Result) get() = out_valid.wget();
-endinterface
+method Action put(Instruction inst);
+    in.enq(inst);
+endmethod
 
 interface Client check_rob;
     interface Get request;
@@ -290,10 +289,6 @@ interface Client read;
         endmethod
     endinterface
 endinterface
-
-method Action flush();
-    epoch_r <= epoch_r + 1;
-endmethod
 
 endmodule
 
