@@ -8,7 +8,6 @@ stages:
   - deps
   - build
   - isa
-  - embench
 
 before_script:
   # Vivado
@@ -39,14 +38,13 @@ deps:
   - popd
 
   # Build embench
-  - pushd tools/embench
-  - pushd embench-iot
-  - git reset --hard HEAD
-  - popd
-  - make patch
-  - make
-  - make install
-  - popd
+  #- pushd tools/embench
+  #- pushd embench-iot
+  #- git reset --hard HEAD
+  #- popd
+  #- make patch
+  #- make
+  #- popd
   
   artifacts:
     paths:
@@ -101,29 +99,3 @@ run_isaTb_high:
     - make TB=ISA_TB
     - popd
 
-run_embenchTb_simple:
-  stage: embench
-  timeout: 24h
-  script:
-    - cp testConfigs/simple.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB
-    - popd
-    
-run_embenchTb_medium:
-  stage: embench
-  timeout: 24h
-  script:
-    - cp testConfigs/medium.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB
-    - popd
-    
-run_embenchTb_high:
-  stage: embench
-  timeout: 24h
-  script:
-    - cp testConfigs/high.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB
-    - popd

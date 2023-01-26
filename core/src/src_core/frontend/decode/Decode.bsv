@@ -138,7 +138,7 @@ endfunction
 
 function ExecUnitTag get_exec_unit(InstructionPredecode inst);
     return case(inst.opc)
-        LOAD, STORE, AMO: LS;
+        LOAD, STORE: LS;
         LUI, AUIPC, OPIMM: ALU;
         OP: case(inst.funct7)
             7'b0000001: MULDIV;
@@ -325,11 +325,7 @@ module mkDecode(DecodeIFC) provisos (
             return DecodeResponse {count: amount_loc, instructions: inst_vec};
         endmethod
         method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst_m.deq(amount);
-    endinterface
-
-    method Action flush();
-        decoded_inst_m.clear();
-    endmethod  
+    endinterface    
     
 endmodule
 

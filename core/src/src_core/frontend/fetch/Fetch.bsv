@@ -7,7 +7,6 @@ import GetPut :: *;
 import Inst_Types :: *;
 import Decode :: *;
 import FIFO :: *;
-import FIFOF :: *;
 import SpecialFIFOs :: *;
 import MIMO :: *;
 import Vector :: *;
@@ -30,8 +29,8 @@ module mkFetch(FetchIFC) provisos(
     FIFO#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFO();
     FIFO#(UInt#(XLEN)) inflight_epoch <- mkPipelineFIFO();
     //holds outbound Instruction and PC
-    FIFOF#(Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(32)))) fetched_inst <- mkPipelineFIFOF();
-    FIFOF#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFOF();
+    FIFO#(Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(32)))) fetched_inst <- mkPipelineFIFO();
+    FIFO#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFO();
 
 
     //Requests data from memory
@@ -91,7 +90,6 @@ module mkFetch(FetchIFC) provisos(
         pc[1] <= newpc;
         dbg_print(Fetch, $format("Redirected: ", newpc));
         epoch[0] <= epoch[0]+1;
-
     endmethod
     
     interface GetS instructions;

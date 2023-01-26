@@ -27,7 +27,6 @@ typedef struct {
     Bit#(TDiv#(XLEN, 8)) load_mask;
     Width width;
     Bool sign;
-    UInt#(XLEN) epoch;
 } LoadPipe deriving(Bits, FShow);
 
 (* synthesize *)
@@ -36,7 +35,6 @@ module mkMem(MemoryUnitIFC);
 FIFO#(Instruction) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 RWire#(Result) out_valid <- mkRWire();
-Reg#(UInt#(XLEN)) epoch_r <- mkReg(0);
 
 // store pipe
 rule calculate_store if (in.first().opc == STORE);
@@ -78,13 +76,8 @@ Wire#(Maybe#(MaskedWord)) response_sb <- mkWire();
 FIFO#(UInt#(XLEN)) mem_read_request <- mkBypassFIFO();
 FIFO#(UInt#(XLEN)) mem_read_response <- mkBypassFIFO();
 
-rule flush_invalid_loads if (in.first().opc == LOAD && in.first().epoch != epoch_r);
-    let inst = in.first(); in.deq();
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, mem_wr : tagged Invalid});
-endrule
-
 //load pipe
-rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch == epoch_r);
+rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD);
     let inst = in.first();
     UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
     request_ROB <= inst.tag;
@@ -105,13 +98,12 @@ rule calc_addr_and_check_ROB_load if (in.first().opc == LOAD && in.first().epoch
             H, HU: HALF;
             W: WORD;
             endcase,
-        sign: (inst.funct != BU && inst.funct != HU),
-        epoch: inst.epoch
+        sign: (inst.funct != BU && inst.funct != HU)
     };
     //$display(fshow(inst), fshow(pack(final_addr)));
 endrule
 
-rule check_rob_response if (in.first().opc == LOAD && in.first().epoch == epoch_r);
+rule check_rob_response if (in.first().opc == LOAD);
     let internal_state = stage1_internal;
     let rob_resp = response_ROB;
     if(!rob_resp) begin
@@ -126,19 +118,14 @@ rule wait_for_store_buffer;
     stage1.deq();
 endrule
 
-rule flush_invalid_fwds if (stage2.first().epoch != epoch_r);
-    let internal_struct = stage2.first(); stage2.deq();
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
-endrule
-
-rule check_fwd_path if (stage2.first().epoch == epoch_r);
+rule check_fwd_path;
     let internal_struct = stage2.first();
     request_sb <= internal_struct.addr & 'hfffffffc;
     stage3_internal <= internal_struct;
     //$display("request fwd path: ", fshow(internal_struct));
 endrule
 
-rule check_fwd_path_resp  if (stage2.first().epoch == epoch_r);
+rule check_fwd_path_resp;
     let struct_internal = stage3_internal;
     let response = response_sb;
     //$display("got fwd path: ", fshow(response));
@@ -149,12 +136,7 @@ rule check_fwd_path_resp  if (stage2.first().epoch == epoch_r);
     end
 endrule
 
-rule flush_invalid_axi_rq if (tpl_1(stage3.first()).epoch != epoch_r);
-    let internal_struct = tpl_1(stage3.first()); stage3.deq();
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
-endrule
-
-rule request_axi_if_needed if (tpl_1(stage3.first()).epoch == epoch_r);
+rule request_axi_if_needed;
     let struct_internal = tpl_1(stage3.first());
     let fwd = tpl_2(stage3.first());
 
@@ -202,7 +184,7 @@ rule collect_result_read_axi if(stage4.first().result matches tagged None);
     out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 
-(* descending_urgency="collect_result_read_axi, collect_result_read_bypass, flush_invalid_axi_rq, flush_invalid_fwds, flush_invalid_loads, calculate_store" *)
+(* descending_urgency="collect_result_read_axi, collect_result_read_bypass, calculate_store" *)
 rule collect_result_read_bypass if(stage4.first().result matches tagged Result .r);
      stage4.deq();
     let internal_struct = stage4.first();
@@ -238,9 +220,10 @@ rule propagate_result;
     out_valid.wset(res);
 endrule
 
-method Action put(Instruction inst);
-    in.enq(inst);
-endmethod
+interface FunctionalUnitIFC fu;
+    method Action put(Instruction inst) = in.enq(inst);
+    method Maybe#(Result) get() = out_valid.wget();
+endinterface
 
 interface Client check_rob;
     interface Get request;

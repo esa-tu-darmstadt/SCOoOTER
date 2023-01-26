@@ -46,8 +46,6 @@ interface DecodeIFC;
     method Put#(FetchResponse) instructions;
     //output
     interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
-    //flush
-    method Action flush();
 endinterface
 
 interface IssueIFC;
@@ -97,7 +95,6 @@ interface MemoryUnitIFC;
     interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
-    method Action flush();
 endinterface
 
 interface RobIFC;
@@ -134,6 +131,11 @@ interface RegFileEvoIFC;
     interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
     interface Put#(RegReservations) reserve_registers;
 
+    //set the correct tag corresponding to a register
+    //method Action set_tags(Vector#(ISSUEWIDTH, RegReservation) reservations, Vector#(ISSUEWIDTH, UInt#(XLEN)) epochs, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    //read 2 regs per instruction
+    //method Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) read_regs(Vector#(TMul#(2, ISSUEWIDTH), RADDR) registers);
+    //input the architectural registers post-commit
     (* always_ready, always_enabled *)
     method Action committed_state(Vector#(31, Bit#(XLEN)) regs);
     //inform about misprediction
