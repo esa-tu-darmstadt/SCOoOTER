@@ -31,6 +31,7 @@ typedef struct {
     Bool amo;
     AmoType amo_t;
     Bit#(XLEN) amo_modifier;
+    Bool aq;
 } LoadPipe deriving(Bits, FShow);
 
 (* synthesize *)
@@ -54,13 +55,15 @@ Reg#(UInt#(XLEN)) epoch_r <- mkReg(0);
 Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 
 
+// Aq / Rl handling
+Reg#(Bool) aq_r <- mkReg(False);
 
 
 // STORE HANDLING
 
 // single-cycle calculation
 // real write occurs in storebuffer after successful commit
-rule calculate_store if (in.first().opc == STORE);
+rule calculate_store if (in.first().opc == STORE && !aq_r);
     let inst = in.first(); in.deq();
 
     // calculate final access address
@@ -123,7 +126,7 @@ Wire#(Bool) response_ROB <- mkWire();
 //output to next stage
 FIFO#(LoadPipe) stage1 <- mkPipelineFIFO();
 
-rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r);
+rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r && !aq_r);
 
     // get instruction, do not deq here as we do this only on success for ROB request
     let inst = in.first();
@@ -138,6 +141,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
         H, HU: ('b0011 << (pack(final_addr)[1] == 0 ? 0 : 2));
         B, BU: (1 << pack(final_addr)[1:0]);
     endcase;
+
+    if (inst.opc == AMO) aq_r <= inst.aq;
 
     // fill internal data structure for load pipeline
     stage1_internal <= LoadPipe {
@@ -154,7 +159,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
         epoch: inst.epoch,
         amo: (inst.opc == AMO),
         amo_t: op_function_to_amo_type(inst.funct),
-        amo_modifier: inst.rs2.Operand
+        amo_modifier: inst.rs2.Operand,
+        aq: inst.aq
     };
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
 endrule
@@ -215,6 +221,7 @@ endrule
 // remove wrong-epoch instructions from pipeline
 rule flush_invalid_fwds if (stage1.first().epoch != epoch_r);
     let internal_struct = stage1.first(); stage1.deq();
+    if(internal_struct.aq) aq_r <= False;
     out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 
@@ -248,7 +255,7 @@ rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r);
             mem_read_request.enq(struct_internal.addr & 'hfffffffc);
         end
     end
-    else if(rob_head == struct_internal.tag) begin
+    else if(rob_head == struct_internal.tag || valueOf(ROBDEPTH) == 1) begin
         dbg_print(AMO, $format("request:  ", fshow(struct_internal)));
         stage2.deq();
         stage3.enq(struct_internal);
@@ -259,6 +266,7 @@ endrule
 // remove wrong-epoch instructions
 rule flush_invalid_axi_rq if (tpl_1(stage2.first()).epoch != epoch_r);
     let internal_struct = tpl_1(stage2.first()); stage2.deq();
+    if(internal_struct.aq) aq_r <= False;
     out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
 endrule
 
@@ -301,6 +309,7 @@ rule collect_result_read_axi if(!stage3.first().amo &&& stage3.first().result ma
     let result = internal_struct_and_data_to_result(internal_struct, resp);
 
     dbg_print(Mem, $format("read:  ", fshow(result)));
+
     out.enq(result);
 endrule
 
@@ -316,11 +325,14 @@ rule collect_result_read_bypass if(!stage3.first().amo &&& stage3.first().result
     out.enq(result);
 endrule
 
+// collect AMO result
 rule collect_result_read_amo if(stage3.first().amo);
     stage3.deq();
     let internal_struct = stage3.first();
     let result = amo_response.first();
     amo_response.deq();
+
+    if(internal_struct.aq) aq_r <= False;
 
     dbg_print(AMO, $format("got result:  ", fshow(result), " ", fshow(internal_struct)));
     out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
