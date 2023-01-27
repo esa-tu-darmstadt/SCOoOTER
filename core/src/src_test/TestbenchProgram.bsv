@@ -132,6 +132,9 @@ package TestbenchProgram;
                         // update status
                         done_r <= True;
                         state_r <= Finished;
+                        `ifdef CUSTOM_TB
+                            $display("Took: ", fshow(count_r));
+                        `endif
                     end
                 fromInteger(valueOf(RV_CONTROLLER_RETURN_ADDRESS)):
                     begin

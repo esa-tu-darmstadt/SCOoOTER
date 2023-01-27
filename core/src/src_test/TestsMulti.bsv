@@ -32,7 +32,7 @@ package TestsMulti;
         function inst_test_ISA(Test_unit in) = mkTestProgram("../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
 		    "../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"-data_32.bsv", 
 		    in.name_unit,
-		    8000,
+		    100000,
             1);
 
         function inst_test_embench(String name_unit) = mkTestProgram("../../testPrograms/embench/"+name_unit+"/32bit/bsv_hex/"+name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
