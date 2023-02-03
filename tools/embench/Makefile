@@ -34,6 +34,7 @@ patch: embench-iot
 
 .PHONY: build
 build: embench-iot
+	cp rv_0x10000.ld embench-iot/config/riscv32/chips/tapasco-riscv/
 	cd embench-iot && python3 build_all.py -v --clean --arch riscv32 --board tapasco-riscv --chip tapasco-riscv-libtool --builddir 32bit
 
 .PHONY: collect
