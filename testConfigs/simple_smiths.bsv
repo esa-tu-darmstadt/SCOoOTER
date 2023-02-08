@@ -26,12 +26,12 @@ typedef 6 NUM_RS;
 // 1: smiths
 typedef 1 BRANCHPRED;
 
-typedef 8 BITS_BTB;
-typedef 8 BITS_PHT;
+typedef 6 BITS_BTB;
+typedef 6 BITS_PHT;
 
-typedef 8 BITS_BHR;
+typedef 0 BITS_BHR;
 
-typedef 1 USE_RAS;
+typedef 1  USE_RAS;
 typedef 1 RAS_SAVE_HEAD;
 typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;

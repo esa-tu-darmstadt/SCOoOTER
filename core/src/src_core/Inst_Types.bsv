@@ -43,7 +43,8 @@ typedef enum {
 
 typedef enum {
     NONE,
-    INVALID_INST
+    INVALID_INST,
+    MISALIGNED_ADDR
 } ExceptionType deriving(Bits, Eq, FShow);
 
 // known Opcode values
@@ -108,6 +109,12 @@ typedef struct {
 
     UInt#(XLEN) epoch;
 
+    Bit#(XLEN) predicted_pc;
+
+    Bit#(BITS_BHR) history;
+
+    Bit#(RAS_EXTRA) ras;
+
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
 typedef union tagged {
@@ -149,6 +156,12 @@ typedef struct {
     Maybe#(ExceptionType) exception;
 
     UInt#(XLEN) epoch;
+
+    Bit#(XLEN) predicted_pc;
+
+    Bit#(BITS_BHR) history;
+
+    Bit#(RAS_EXTRA) ras;
 } Instruction deriving(Bits, Eq, FShow);
 
 typedef struct {
@@ -188,6 +201,10 @@ typedef struct {
         void Pending;
         void None;
     } mem_wr;
+    Bool branch;
+    Bool br;
+    Bit#(BITS_BHR) history;
+    Bit#(RAS_EXTRA) ras;
 } RobEntry deriving(Bits, FShow);
 
 typedef struct {
@@ -215,6 +232,9 @@ typedef struct {
     Bit#(32) instruction;
     Bit#(32) pc;
     UInt#(XLEN) epoch;
+    Bit#(32) next_pc;
+    Bit#(BITS_BHR) history;
+    Bit#(RAS_EXTRA) ras;
 } FetchedInstruction deriving(Bits, FShow);
 
 typedef struct {
@@ -226,5 +246,19 @@ typedef struct {
     UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
     Vector#(ISSUEWIDTH, Instruction) instructions;
 } DecodeResponse deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(XLEN) pc;
+    Bool taken;
+    Bit#(XLEN) target;
+    Bit#(BITS_BHR) history;
+    Bool miss;
+    Bool branch;
+} TrainPrediction deriving(Bits, FShow);
+
+typedef struct{
+    Bool pred;
+    Bit#(BITS_BHR) history;
+} Prediction deriving(Bits, FShow);
 
 endpackage

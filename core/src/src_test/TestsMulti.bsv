@@ -181,7 +181,11 @@ package TestsMulti;
                             left_l = left_l - 1;
                             if (tests[testCounter].state() == Finished) begin
                                 if(tests[testCounter].return_value == tests[testCounter].return_value_exp) begin
-                                    printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + tests[testCounter].test_name + " took: %8d ticks", left_l, tests[testCounter].count()));
+                                    `ifdef EVA_BR
+                                        printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + " took: %8d ticks correct BP (br): %d wrong BP (br): %d correct BP (j): %d wrong BP (j): %d " + tests[testCounter].test_name, left_l, tests[testCounter].count(), tests[testCounter].correct_pred_br(), tests[testCounter].wrong_pred_br(), tests[testCounter].correct_pred_j(), tests[testCounter].wrong_pred_j()));
+                                    `else
+                                        printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + tests[testCounter].test_name + " took: %8d ticks", left_l, tests[testCounter].count()));
+                                    `endif
                                     pass_l = pass_l + 1;
                                     end
                                 else begin

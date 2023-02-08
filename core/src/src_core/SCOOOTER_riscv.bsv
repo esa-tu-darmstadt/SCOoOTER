@@ -25,6 +25,12 @@ import Connectable :: *;
 import MulDiv::*;
 import MemoryArbiter::*;
 import StoreBuffer::*;
+import BTB::*;
+import Smiths::*;
+import AlwaysUntaken::*;
+import Gshare::*;
+import Gskewed::*;
+import RAS::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(
@@ -32,6 +38,8 @@ module mkSCOOOTER_riscv(Top) provisos(
         Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
         Log#(issuewidth_pad_t, issuewidth_log_t)
     );
+
+    let btb <- mkBTB();
 
     let ifu <- mkFetch();
 
@@ -59,6 +67,26 @@ module mkSCOOOTER_riscv(Top) provisos(
     RobIFC rob <- mkReorderBuffer();
 
     CommitIFC commit <- mkCommit();
+
+    let dir_pred <- case (valueOf(BRANCHPRED))
+        0: mkAlwaysUntaken();
+        1: mkSmiths();
+        2: mkGshare();
+        3: mkGskewed();
+    endcase;
+
+    rule train;
+        let train <- commit.train.get();
+        btb.train.put(train);
+        dir_pred.train.put(train);
+    endrule
+
+    for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
+        mkConnection(ifu.predict_direction[i], dir_pred.predict_direction[i]);
+    end
+    //mkConnection(ifu.predict_direction, dir_pred.predict);
+
+    mkConnection(ifu.predict_target, btb.predict);
 
     mkConnection(commit.memory_writes, store_buf.memory_writes);
 
@@ -179,10 +207,10 @@ module mkSCOOOTER_riscv(Top) provisos(
     endrule
 
     rule commit_to_fetch;
-        let new_pc = commit.redirect_pc();
+        let redir = commit.redirect_pc();
+        let new_pc = tpl_1(redir);
         regfile_evo.flush();
-        ifu.redirect(new_pc);
-        decode.flush();
+        ifu.redirect(redir);
         mem.flush();
     endrule
 
@@ -205,6 +233,13 @@ module mkSCOOOTER_riscv(Top) provisos(
     interface imem_axi = ifu.imem_axi;
     interface dmem_axi_w = mem_arbiter.axi_w;
     interface dmem_axi_r = mem_arbiter.axi_r;
+
+    `ifdef EVA_BR
+        method UInt#(XLEN) correct_pred_br = commit.correct_pred_br;
+        method UInt#(XLEN) wrong_pred_br = commit.wrong_pred_br;
+        method UInt#(XLEN) correct_pred_j = commit.correct_pred_j;
+        method UInt#(XLEN) wrong_pred_j = commit.wrong_pred_j;
+    `endif
 
 endmodule
 

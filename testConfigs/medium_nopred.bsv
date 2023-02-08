@@ -21,4 +21,18 @@ typedef 1 MUL_DIV_STRATEGY;
 typedef 6 NUM_FU;
 typedef 6 NUM_RS;
 
+// prediction strategy
+// 0: always untaken
+// 1: smiths
+typedef 0 BRANCHPRED;
+
+typedef 7 BITS_BTB;
+typedef 7 BITS_PHT;
+
+typedef 0 BITS_BHR;
+
+typedef 1  USE_RAS;
+typedef 1 RAS_SAVE_HEAD;
+typedef 1 RAS_SAVE_FIRST;
+typedef 16 RASDEPTH;
 endpackage

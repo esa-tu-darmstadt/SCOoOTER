@@ -18,6 +18,13 @@ interface Top;
     interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 1, 0) dmem_axi_r;
     (* prefix= "axi_master_data" *)
     interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 1, 0) dmem_axi_w;
+
+    `ifdef EVA_BR
+        method UInt#(XLEN) correct_pred_br;
+        method UInt#(XLEN) wrong_pred_br;
+        method UInt#(XLEN) correct_pred_j;
+        method UInt#(XLEN) wrong_pred_j;
+    `endif
 endinterface
 
 interface MemoryArbiterIFC;
@@ -37,9 +44,12 @@ interface FetchIFC;
     // AXI to IMEM
     interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
     // mispredict signal
-    method Action redirect(Bit#(XLEN) newPC);
+    method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
     // output
     interface GetS#(FetchResponse) instructions;
+
+    interface Vector#(IFUINST, Client#(Bit#(XLEN), Prediction)) predict_direction;
+    interface Client#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict_target;
 endinterface
 
 interface DecodeIFC;
@@ -122,8 +132,16 @@ endinterface
 interface CommitIFC;
     method ActionValue#(UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
-    method Bit#(XLEN) redirect_pc();
+    method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
     interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
+    interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+
+    `ifdef EVA_BR
+        method UInt#(XLEN) correct_pred_br;
+        method UInt#(XLEN) wrong_pred_br;
+        method UInt#(XLEN) correct_pred_j;
+        method UInt#(XLEN) wrong_pred_j;
+    `endif
 endinterface
 
 interface RegFileIFC;
@@ -148,11 +166,18 @@ endinterface
 
 interface StoreBufferIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
-    //interface Get#(MemWr) write;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
-    //method Maybe#(MaskedWord) forward(UInt#(XLEN) addr);
-    //method Action notify_complete();
     interface Client#(MemWr, void) write;
+endinterface
+
+interface BTBIfc;
+    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface Server#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict;
+endinterface
+
+interface PredIfc;
+    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface Vector#(IFUINST, Server#(Bit#(XLEN), Prediction)) predict_direction;
 endinterface
 
 endpackage

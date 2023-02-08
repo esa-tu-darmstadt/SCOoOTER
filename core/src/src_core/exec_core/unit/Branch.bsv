@@ -65,10 +65,13 @@ endrule
 
 rule build_response_packet;
     let inst = in_f.first(); in_f.deq();
+    Maybe#(Bit#(XLEN)) target = condition_w ? tagged Valid target_w : tagged Invalid;
     let resp = Result {
         tag:    inst.tag,
-        result: (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result (inst.pc+4)),
-        new_pc: condition_w ? tagged Valid target_w : tagged Invalid,
+        result: (inst.exception matches tagged Valid .e ? tagged Except e :
+                  target matches tagged Valid .a &&& a[1:0] != 0 ? tagged Except MISALIGNED_ADDR
+                  : tagged Result (inst.pc+4)),
+        new_pc: target,
         mem_wr : tagged Invalid
     };
     dbg_print(BRU, $format("produced result: ", fshow(resp)));
