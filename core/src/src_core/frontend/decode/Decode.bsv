@@ -69,7 +69,7 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(XLEN) epoch);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(XLEN) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),
@@ -87,7 +87,12 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(XL
         immU : getImmU(inst),
         immJ : getImmJ(inst),
 
-        epoch : epoch
+        epoch : epoch,
+
+        predicted_pc : predicted_pc,
+        history : history,
+
+        ras: ras
     };
 
 endfunction
@@ -290,19 +295,25 @@ function Instruction decode(InstructionPredecode inst);
         imm : select_imm(inst),
 
         tag : ?, //will be set in issue logic
-        epoch : inst.epoch
+        epoch : inst.epoch,
+
+        predicted_pc : inst.predicted_pc,
+        history : inst.history,
+
+        ras: inst.ras
     };
 endfunction
 
 function InstructionPredecode predecode_instruction_struct(FetchedInstruction in);
-    return predecode(in.instruction, in.pc, in.epoch);
+    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras);
 endfunction
 
 (* synthesize *)
 module mkDecode(DecodeIFC) provisos (
         Bits#(Instruction, instruction_width_t),
         Mul#(INST_WINDOW, instruction_width_t, mimosize_t), //the output MIMO holds the amount of bits equal to the bit width of a predecoded inst and the mimo depth
-        Add#(__a, instruction_width_t, mimosize_t) // the MIMO should hold at least one predecoded instruction
+        Add#(__a, instruction_width_t, mimosize_t), // the MIMO should hold at least one predecoded instruction
+        Log#(RASDEPTH, ras_log_t)
 );
 
     MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkMIMO(defaultValue);

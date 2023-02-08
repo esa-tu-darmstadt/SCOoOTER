@@ -8,7 +8,10 @@ stages:
   - deps
   - build
   - isa
-  - embench
+  - embench (gshare)
+  - embench (gskewed)
+  - embench (smiths)
+  - embench (no predictor)
 
 before_script:
   # Vivado
@@ -57,7 +60,7 @@ buildSimple:
   stage: build
   script:
   - |
-    cp testConfigs/simple.bsv core/src/Config.bsv
+    cp testConfigs/simple_gshare.bsv core/src/Config.bsv
     cd core
     make SIM_TYPE=VERILOG ip
     
@@ -65,7 +68,7 @@ buildMedium:
   stage: build
   script:
   - |
-    cp testConfigs/medium.bsv core/src/Config.bsv
+    cp testConfigs/medium_gshare.bsv core/src/Config.bsv
     cd core
     make SIM_TYPE=VERILOG ip
     
@@ -73,14 +76,14 @@ buildHigh:
   stage: build
   script:
   - |
-    cp testConfigs/high.bsv core/src/Config.bsv
+    cp testConfigs/high_gshare.bsv core/src/Config.bsv
     cd core
     make SIM_TYPE=VERILOG ip
 
 run_isaTb_simple:
   stage: isa
   script:
-    - cp testConfigs/simple.bsv core/src/Config.bsv
+    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
     - pushd core
     - make TB=ISA_TB
     - popd
@@ -88,7 +91,7 @@ run_isaTb_simple:
 run_isaTb_medium:
   stage: isa
   script:
-    - cp testConfigs/medium.bsv core/src/Config.bsv
+    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
     - pushd core
     - make TB=ISA_TB
     - popd
@@ -96,34 +99,115 @@ run_isaTb_medium:
 run_isaTb_high:
   stage: isa
   script:
-    - cp testConfigs/high.bsv core/src/Config.bsv
+    - cp testConfigs/high_nopred.bsv core/src/Config.bsv
     - pushd core
     - make TB=ISA_TB
     - popd
 
-run_embenchTb_simple:
-  stage: embench
+run_embenchTb_smiths_simple:
+  stage: embench (smiths)
   timeout: 24h
   script:
-    - cp testConfigs/simple.bsv core/src/Config.bsv
+    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
     - pushd core
-    - make TB=EMBENCH_TB
+    - make TB=EMBENCH_TB BRANCH=1
     - popd
     
-run_embenchTb_medium:
-  stage: embench
+run_embenchTb_smiths_medium:
+  stage: embench (smiths)
   timeout: 24h
   script:
-    - cp testConfigs/medium.bsv core/src/Config.bsv
+    - cp testConfigs/medium_smiths.bsv core/src/Config.bsv
     - pushd core
-    - make TB=EMBENCH_TB
+    - make TB=EMBENCH_TB BRANCH=1
     - popd
     
-run_embenchTb_high:
-  stage: embench
+run_embenchTb_smiths_high:
+  stage: embench (smiths)
   timeout: 24h
   script:
-    - cp testConfigs/high.bsv core/src/Config.bsv
+    - cp testConfigs/high_smiths.bsv core/src/Config.bsv
     - pushd core
-    - make TB=EMBENCH_TB
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+
+run_embenchTb_gshare_simple:
+  stage: embench (gshare)
+  timeout: 24h
+  script:
+    - cp testConfigs/simple_gshare.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+    
+run_embenchTb_gshare_medium:
+  stage: embench (gshare)
+  timeout: 24h
+  script:
+    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+    
+run_embenchTb_gshare_high:
+  stage: embench (gshare)
+  timeout: 24h
+  script:
+    - cp testConfigs/high_gshare.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+
+run_embenchTb_none_simple:
+  stage: embench (no predictor)
+  timeout: 24h
+  script:
+    - cp testConfigs/simple_nopred.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+    
+run_embenchTb_none_medium:
+  stage: embench (no predictor)
+  timeout: 24h
+  script:
+    - cp testConfigs/medium_nopred.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+    
+run_embenchTb_none_high:
+  stage: embench (no predictor)
+  timeout: 24h
+  script:
+    - cp testConfigs/high_nopred.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+
+run_embenchTb_gskewed_simple:
+  stage: embench (gskewed)
+  timeout: 24h
+  script:
+    - cp testConfigs/simple_gskewed.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+    
+run_embenchTb_gskewed_medium:
+  stage: embench (gskewed)
+  timeout: 24h
+  script:
+    - cp testConfigs/medium_gskewed.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
+    - popd
+    
+run_embenchTb_gskewed_high:
+  stage: embench (gskewed)
+  timeout: 24h
+  script:
+    - cp testConfigs/high_gskewed.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=EMBENCH_TB BRANCH=1
     - popd

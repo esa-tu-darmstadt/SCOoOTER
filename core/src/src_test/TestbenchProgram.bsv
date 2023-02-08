@@ -18,7 +18,8 @@ package TestbenchProgram;
     // Exit codes of the simulation
     typedef enum {
         Finished,
-        Hangs
+        Hangs,
+        None
     } State deriving(Bits, Eq);
 
     // Test interface
@@ -32,6 +33,13 @@ package TestbenchProgram;
         method Bit#(32) return_value_exp(); // wrapps excpected return value for assertions
         method String test_name(); // wrapps test name for display
         method UInt#(XLEN) count(); // returns elapsed clock cycles
+
+        `ifdef EVA_BR
+            method UInt#(XLEN) correct_pred_j;
+            method UInt#(XLEN) wrong_pred_j;
+            method UInt#(XLEN) correct_pred_br;
+            method UInt#(XLEN) wrong_pred_br;
+        `endif
     endinterface
 
 
@@ -46,7 +54,7 @@ package TestbenchProgram;
         // status flags
         Reg#(Bool) done_r <- mkReg(False);
         Reg#(Bool) start_r <- mkReg(False);
-        Reg#(State) state_r <- mkRegU();
+        Reg#(State) state_r <- mkReg(None);
         // holds RVController return value
         Reg#(Bit#(XLEN)) return_r <- mkRegU();
         // counts erxecution ticks for cutoff and banchmarking
@@ -111,6 +119,20 @@ package TestbenchProgram;
         	w_request.enq(r);
     	endrule
 
+        `ifdef CUSTOM_TB
+            rule end_exec if (state_r != None);
+                $display("Took: ", fshow(count_r));
+                $display("result: ", fshow(return_r));
+                `ifdef EVA_BR
+                    $display("correct pred (br): ", dut.correct_pred_br);
+                    $display("wrong pred (br): ", dut.wrong_pred_br);
+                    $display("correct pred (j): ", dut.correct_pred_j);
+                    $display("wrong pred (j): ", dut.wrong_pred_j);
+                `endif
+                $finish();
+            endrule
+        `endif
+
         // handle data requests
     	rule returnWriteValue;
         	let r <- dram_axi_w.request_data.get();
@@ -131,10 +153,7 @@ package TestbenchProgram;
                     begin
                         // update status
                         done_r <= True;
-                        state_r <= Finished;
-                        `ifdef CUSTOM_TB
-                            $display("Took: ", fshow(count_r));
-                        `endif
+                        state_r <= Finished; 
                     end
                 fromInteger(valueOf(RV_CONTROLLER_RETURN_ADDRESS)):
                     begin
@@ -210,6 +229,14 @@ package TestbenchProgram;
         method Bit#(32) return_value_exp() = exp_return_value;
         method String test_name() = test_name;
         method UInt#(XLEN) count() = count_r._read();
+
+
+        `ifdef EVA_BR
+            method UInt#(XLEN) correct_pred_j = dut.correct_pred_j;
+            method UInt#(XLEN) wrong_pred_j = dut.wrong_pred_j;
+            method UInt#(XLEN) correct_pred_br = dut.correct_pred_br;
+            method UInt#(XLEN) wrong_pred_br = dut.wrong_pred_br;
+        `endif
     endmodule
 
 endpackage

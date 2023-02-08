@@ -12,6 +12,8 @@ import SpecialFIFOs :: *;
 import MIMO :: *;
 import Vector :: *;
 import Debug::*;
+import ClientServer::*;
+import RAS::*;
 
 (* synthesize *)
 module mkFetch(FetchIFC) provisos(
@@ -21,26 +23,35 @@ module mkFetch(FetchIFC) provisos(
     //AXI for mem access
     AXI4_Master_Rd#(XLEN, ifuwidth, 0, 0) axi <- mkAXI4_Master_Rd(0, 0, False);
 
+    RASIfc ras <- mkRAS();
     //pc points to next instruction to load
     //pc is a CREG, port 2 is used for fetching the next instruction
     // port 1 is used to redirect the program counter
     //port 0 is used to advance the PC
     Reg#(Bit#(XLEN)) pc[3] <- mkCReg(3, fromInteger(valueof(RESETVEC)));
     Reg#(UInt#(XLEN)) epoch[2] <- mkCReg(2, 0);
-    FIFO#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFO();
-    FIFO#(UInt#(XLEN)) inflight_epoch <- mkPipelineFIFO();
+    FIFOF#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFOF();
+    FIFOF#(UInt#(XLEN)) inflight_epoch <- mkPipelineFIFOF();
     //holds outbound Instruction and PC
-    FIFOF#(Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(32)))) fetched_inst <- mkPipelineFIFOF();
+    FIFOF#(Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(32), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)))) fetched_inst <- mkPipelineFIFOF();
     FIFOF#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFOF();
+
+    Vector#(IFUINST, Wire#(Bit#(XLEN))) dir_request_w_v <- replicateM(mkWire());
+    Vector#(IFUINST, Wire#(Prediction)) dir_resp_w_v <- replicateM(mkDWire(Prediction {history: ?, pred: False}));
+
+    FIFO#(Bit#(XLEN)) target_request_f <- mkBypassFIFO();
+    FIFOF#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) target_resp_f <- mkBypassFIFOF();
 
 
     //Requests data from memory
     //Explicit condition: Fires if the previous read has been evaluated
     // Due to the PC FIFO
     rule requestRead;
+        // addrs to AXI may be weird here
         axi4_read_data(axi, pc[2], 0);
         inflight_pcs.enq(pc[2]);
         inflight_epoch.enq(epoch[1]);
+        target_request_f.enq(pc[2]);
     endrule
 
     rule dropReadResp (inflight_epoch.first() != epoch[1]);
@@ -48,50 +59,145 @@ module mkFetch(FetchIFC) provisos(
         inflight_pcs.deq();
         inflight_epoch.deq();
         dbg_print(Fetch, $format("drop read"));
+        target_resp_f.deq();
     endrule
+
+    Wire#(MIMO::LUInt#(IFUINST)) count_read_w <- mkWire();
+    Wire#(Maybe#(MIMO::LUInt#(IFUINST))) count_pred_w <- mkWire();
+    Wire#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) clean_targets_w <- mkWire();
+
+
+    function Maybe#(Bit#(XLEN)) guard_unnknown_targets(Wire#(Prediction) p, Maybe#(Bit#(XLEN)) target);
+        if (target matches tagged Valid .t &&& p.pred)
+            return tagged Valid t;
+        else return tagged Invalid;
+    endfunction
+
+    Wire#(Bit#(ifuwidth)) pass_incoming_w <- mkWire();
+
+    rule get_dir_pred if (inflight_epoch.first() == epoch[1] &&
+                        inflight_epoch.notEmpty() &&
+                        target_resp_f.notEmpty() &&
+                        inflight_pcs.notEmpty() &&
+                        fetched_inst.notFull() &&
+                        fetched_amount.notFull()
+                        );
+        let r <- axi.response.get();
+        pass_incoming_w <= r.data;
+
+        let acqpc = inflight_pcs.first();
+        Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32;
+        MIMO::LUInt#(IFUINST) count_read = unpack(truncate( fromInteger(valueOf(IFUINST)) - (acqpc>>2)%fromInteger(valueOf(IFUINST))));
+
+        // request predictions
+        for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
+            if(fromInteger(i) < count_read) begin
+                Bit#(XLEN) iword = r.data[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
+                if(iword[6:0] == 7'b1100011) begin
+                    dir_request_w_v[i] <= acqpc + fromInteger(i)*4;
+                end
+            end
+        end
+    endrule
+
+    function Bool check_pop(Bit#(XLEN) inst_word);
+        Bool rs1_lr = inst_word[6:0] != 7'b1101111 && (inst_word[19:15] == 1 || inst_word[19:15] == 5);
+        Bool rd_lr = inst_word[11:7] == 1 || inst_word[11:7] == 5;
+        Bool rs1_is_rd = inst_word[19:15] == inst_word[11:7];
+
+        return (!rd_lr && rs1_lr) || (!rs1_is_rd && rd_lr && rs1_lr);
+    endfunction
+
+    function Bool check_push(Bit#(XLEN) inst_word);
+        Bool rs1_lr = inst_word[6:0] != 7'b1101111 && (inst_word[19:15] == 1 || inst_word[19:15] == 5);
+        Bool rd_lr = inst_word[11:7] == 1 || inst_word[11:7] == 5;
+
+        return (rd_lr && !rs1_lr) || (rd_lr && rs1_lr);
+    endfunction
 
     // Evaluates fetched instructions if there is enough space in the instruction window
     // TODO: make enqueued value dynamic
-    rule getReadResp (inflight_epoch.first() == epoch[1]);
-        let r <- axi.response.get;
-        Bit#(ifuwidth) dat = r.data;
-        let acqpc = inflight_pcs.first(); inflight_pcs.deq();
+    rule getReadResp;        
+        target_resp_f.deq();
         inflight_epoch.deq();
 
-        Vector#(IFUINST, Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN))) instructions_v = newVector; // temporary inst storage
+        let dir_predictions = target_resp_f.first();
+
+        let acqpc = inflight_pcs.first(); inflight_pcs.deq();
+
+        Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(XLEN), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA))) instructions_v = newVector; // temporary inst storage
         
         Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32; // pos of first useful instruction
 
-        MIMO::LUInt#(IFUINST) amount = unpack(truncate( fromInteger(valueOf(IFUINST)) - (acqpc>>2)%fromInteger(valueOf(IFUINST)))); // how many inst were usefully extracted // TODO: make type smaller
+        MIMO::LUInt#(IFUINST) count_read = unpack(truncate( fromInteger(valueOf(IFUINST)) - (acqpc>>2)%fromInteger(valueOf(IFUINST)))); // how many inst were usefully extracted // TODO: make type smaller
 
+        Vector#(IFUINST, Maybe#(Bit#(XLEN))) cleaned_predictions = Vector::map(uncurry(guard_unnknown_targets), Vector::zip(dir_resp_w_v, target_resp_f.first()));
         // Extract instructions
-        // two conditions needed to keep static elaboration working
         for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
-            if(fromInteger(i) < amount) begin
-                Bit#(XLEN) iword = dat[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
-                instructions_v[i] = tuple3(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first());
+            if(fromInteger(i) < count_read) begin
+                Bit#(XLEN) iword = pass_incoming_w[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
+                // RAS prediction
+                if(valueOf(USE_RAS) == 1) begin
+                    if(iword[6:0] == 7'b1100111 || iword[6:0] == 7'b1101111) begin
+                        let res <- ras.ports[i].push_pop(check_push(iword) ? tagged Valid (acqpc + (fromInteger(i+1)*4)) : tagged Invalid, check_pop(iword));
+                        if (isValid(res)) cleaned_predictions[i] = res;
+                        else cleaned_predictions[i] = target_resp_f.first()[i];
+                    end
+                end
+                instructions_v[i] = tuple6(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first(), cleaned_predictions[i], dir_resp_w_v[i].history, ras.ports[i].extra());
+                
+                
             end
         end
 
         // enq gathered instructions
         fetched_inst.enq(instructions_v);
-        fetched_amount.enq(amount);
 
-        // advance program counter
-        // TODO: branch predictor
-        pc[0] <= acqpc + (pack(extend(amount)) << 2);
+        let count_pred = Vector::findIndex(isValid, cleaned_predictions);
+
+        if(count_pred matches tagged Valid .c &&& extend(c) < count_read) begin
+            pc[0] <= cleaned_predictions[c].Valid;
+            fetched_amount.enq(extend(c)+1);
+        end else begin
+            pc[0] <= acqpc + (pack(extend(count_read)) << 2);
+            fetched_amount.enq(count_read);
+        end
     endrule
 
-    function FetchedInstruction build_fetch_resp(Tuple3#(Bit#(32), Bit#(32), UInt#(XLEN)) in)
-        = FetchedInstruction {instruction: tpl_1(in), pc: tpl_2(in), epoch: tpl_3(in)};
+    Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirected <- mkWire();
+
+    rule redirect_write_pc;
+        pc[1] <= tpl_1(redirected);
+        ras.redirect(tpl_2(redirected));
+    endrule
+
+    function FetchedInstruction build_fetch_resp(Tuple6#(Bit#(32), Bit#(32), UInt#(XLEN), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)) in)
+        = FetchedInstruction {instruction: tpl_1(in), pc: tpl_2(in), epoch: tpl_3(in), next_pc: fromMaybe(tpl_2(in)+4, tpl_4(in)), history: tpl_5(in), ras: tpl_6(in)};
+
+    Vector#(IFUINST, Client#(Bit#(XLEN), Prediction)) pred_ifc = ?;
+    for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
+        pred_ifc[i] = (interface Client;
+            interface Get request;
+                method ActionValue#(Bit#(XLEN)) get();
+                    actionvalue
+                            return dir_request_w_v[i];
+                    endactionvalue
+                endmethod
+            endinterface 
+            interface Put response;
+                method Action put(Prediction p) = dir_resp_w_v[i]._write(p);
+            endinterface
+        endinterface);
+    end
+
+    interface predict_direction = pred_ifc;
 
     interface imem_axi = axi.fab;
 
-    method Action redirect(Bit#(XLEN) newpc);
-        pc[1] <= newpc;
-        dbg_print(Fetch, $format("Redirected: ", newpc));
+    method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
+        redirected <= in;
+        dbg_print(Fetch, $format("Redirected: ", tpl_1(in)));
         epoch[0] <= epoch[0]+1;
-
     endmethod
     
     interface GetS instructions;
@@ -106,7 +212,23 @@ module mkFetch(FetchIFC) provisos(
         endmethod
     endinterface
 
+    /*interface Client predict_direction;
+        interface Get request;
+            method ActionValue#(Bit#(XLEN)) get();
+                actionvalue
+                        return dir_request_f;
+                endactionvalue
+            endmethod
+        endinterface 
+        interface Put response;
+            interface put = dir_resp_f._write();
+        endinterface
+    endinterface*/
 
+    interface Client predict_target;
+        interface Get request = toGet(target_request_f);
+        interface Put response = toPut(target_resp_f);
+    endinterface
 endmodule
 
 endpackage

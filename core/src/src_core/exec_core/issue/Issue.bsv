@@ -177,10 +177,14 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         pc : inst.pc,
         destination : inst.rd,
         result : (tagged Tag idx),
-        pred_pc : (inst.pc+4),
+        pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
         next_pc : ?,
-        mem_wr : (inst.opc == STORE || inst.opc == AMO ? tagged Pending : tagged None)
+        mem_wr : (inst.opc == STORE || inst.opc == AMO ? tagged Pending : tagged None),
+        branch : (inst.eut == BR),
+        br : (inst.opc == BRANCH),
+        history : inst.history,
+        ras: inst.ras
     };
 endfunction
 

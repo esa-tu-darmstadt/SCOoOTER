@@ -19,6 +19,7 @@ EXTRA_LIBRARIES:=
 RUN_FLAGS:=
 
 TB?=ISA_TB
+BRANCH?=0
 
 # Add subdirectories
 EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
@@ -33,6 +34,10 @@ endif
 EXTRA_FLAGS= +RTS -K65535000 -RTS -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)"
 EXTRA_FLAGS+=-show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
 EXTRA_FLAGS+=-D $(TB)
+
+ifeq ($(BRANCH),1)
+EXTRA_FLAGS+=-D EVA_BR
+endif
 
 ###
 # User configuration
