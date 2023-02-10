@@ -8,6 +8,12 @@ import Debug::*;
 import TestFunctions::*;
 import GetPut::*;
 
+// Synthesizable wrappers
+(* synthesize *)
+module mkReservationStationCSR6(ReservationStationIFC#(6));
+    ReservationStationIFC#(6) m <- mkLinearReservationStation(CSR);
+    return m;
+endmodule
 
 // Synthesizable wrappers
 (* synthesize *)
@@ -198,7 +204,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         instruction_buffer_port1_v[clear_idx_w] <= tagged Invalid;
     endrule
 
-    let instruction_buffer_read_v = Vector::readVReg(instruction_buffer_port0_v);
+    Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_port0_v);
 
     method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
         let idx = fromMaybe(?, Vector::findIndex(is_ready, instruction_buffer_read_v));

@@ -51,10 +51,10 @@ rule calculate;
     endcase;
 
     let res = Result {
-        result : (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result result), 
+        result : (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result result),
         new_pc : tagged Invalid,
         tag : inst.tag, 
-        mem_wr : tagged Invalid
+        write : tagged None
     };
 
     dbg_print(ALU, $format("generated result: ", fshow(res)));

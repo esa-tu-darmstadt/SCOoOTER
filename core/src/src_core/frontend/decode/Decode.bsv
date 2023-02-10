@@ -110,9 +110,10 @@ endfunction
 
 function Bit#(XLEN) select_imm(InstructionPredecode inst);
     return case(inst.opc)
-        LUI, AUIPC                         : inst.immU;
+        //SYSTEM uses U type as we must know which register is src
+        LUI, AUIPC, SYSTEM                 : inst.immU;
         JAL                                : inst.immJ;
-        JALR, LOAD, OPIMM, MISCMEM, SYSTEM : inst.immI;
+        JALR, LOAD, OPIMM, MISCMEM         : inst.immI;
         STORE                              : inst.immS;
         BRANCH                             : inst.immB;
 
@@ -122,7 +123,7 @@ endfunction
 
 function Operand select_rs1(InstructionPredecode inst);
     return case(inst.opc)
-        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO : tagged Raddr inst.rs1;
+        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO, SYSTEM : tagged Raddr inst.rs1;
         default : tagged Operand 0;
     endcase;
 endfunction
@@ -136,7 +137,7 @@ endfunction
 
 function RADDR select_rd(InstructionPredecode inst);
     return case(inst.opc)
-        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO : inst.rd;
+        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO, SYSTEM : inst.rd;
         default : 0;
     endcase;
 endfunction
@@ -150,6 +151,7 @@ function ExecUnitTag get_exec_unit(InstructionPredecode inst);
             default: ALU;
             endcase
         JAL, JALR, BRANCH: BR;
+        SYSTEM: CSR;
         default: ALU;
     endcase;
 endfunction
@@ -241,8 +243,16 @@ function OpFunction getFunct(InstructionPredecode inst);
             'b000: case(inst.immI)
                 0: ECALL;
                 1: EBREAK;
+                'b001100000010: RET;
                 default: INVALID;
                 endcase
+            'b001: RW;
+            'b010: RS;
+            'b011: RC;
+            'b101: RWI;
+            'b110: RSI;
+            'b111: RCI;
+            default: INVALID;
             endcase
         AMO : case(inst.funct3)
             'b010 : case(inst.funct7[6:2])

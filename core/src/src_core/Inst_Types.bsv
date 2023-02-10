@@ -16,7 +16,8 @@ typedef enum {
     ECALL, EBREAK, // SYSTEM
     MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU, //MULDIV
     LR, SC, SWAP, MIN, MAX, MINU, MAXU, //ATOMIC
-    INVALID, NONE // Internally used if decode error resp. no function needed
+    INVALID, NONE, // Internally used if decode error resp. no function needed
+    RW, RS, RC, RWI, RSI, RCI, RET
 } OpFunction deriving(Bits, Eq, FShow);
 
 // Exception enum (maybe move to maybe here?)
@@ -24,7 +25,8 @@ typedef enum {
     ALU,
     LS,
     MULDIV,
-    BR
+    BR,
+    CSR
 } ExecUnitTag deriving(Bits, Eq, FShow);
 
 typedef enum {
@@ -42,9 +44,21 @@ typedef enum {
 } AmoType deriving(Bits, Eq, FShow);
 
 typedef enum {
-    NONE,
-    INVALID_INST,
-    MISALIGNED_ADDR
+    MISALIGNED_ADDR = 0,
+    INST_ACCESS_FAULT = 1,
+    INVALID_INST = 2,
+    BREAKPOINT = 3,
+    MISALIGNED_LOAD = 4,
+    LOAD_ACCESS_FAULT = 5,
+    AMO_ST_MISALIGNED = 6,
+    AMO_ST_ACCESS_FAULT = 7,
+    ECALL_U = 8,
+    ECALL_S = 9,
+    ECALL_M = 11,
+    INST_PAGE_FAULT = 12,
+    LOAD_PAGE_FAULT = 13,
+    AMO_ST_PAGE_FAULT = 15,
+    NONE
 } ExceptionType deriving(Bits, Eq, FShow);
 
 // known Opcode values
@@ -182,7 +196,11 @@ typedef struct {
         Bit#(XLEN) Result;
         ExceptionType Except;
     } result;
-    Maybe#(MemWr) mem_wr;
+    union tagged {
+        MemWr Mem;
+        void None;
+        CsrWrite Csr;
+    } write;
 } Result deriving(Bits, FShow);
 
 typedef struct {
@@ -197,20 +215,27 @@ typedef struct {
     Bit#(XLEN) pred_pc;
     UInt#(XLEN) epoch;
     union tagged {
-        MemWr Valid;
-        void Pending;
+        MemWr Mem;
+        void Pending_mem;
         void None;
-    } mem_wr;
+        CsrWrite Csr;
+    } write;
     Bool branch;
     Bool br;
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
+    Bool ret;
 } RobEntry deriving(Bits, FShow);
 
 typedef struct {
     RADDR addr;
     Bit#(XLEN) data;
 } RegWrite deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(12) addr;
+    Bit#(XLEN) data;
+} CsrWrite deriving(Bits, FShow);
 
 typedef struct {
     RADDR addr;

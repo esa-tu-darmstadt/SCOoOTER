@@ -87,12 +87,9 @@ rule calculate_store if (in.first().opc == STORE && !aq_r);
         H: ('b0011 << (pack(final_addr)[1] == 0 ? 0 : 2));
         B: (1 << pack(final_addr)[1:0]);
     endcase;
-
-    // produce write struct
-    Maybe#(MemWr) write_req = tagged Valid MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask};
-
+    
     // produce result
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, mem_wr : write_req});
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, write : tagged Mem MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask}});
 endrule
 
 
@@ -181,7 +178,7 @@ endrule
 // toss instructions with wrong epoch
 rule flush_invalid_loads if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch != epoch_r);
     let inst = in.first(); in.deq();
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, mem_wr : tagged Invalid});
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, write : tagged None});
 endrule
 
 // STAGE 2: forward data from store buffer
@@ -222,7 +219,7 @@ endrule
 rule flush_invalid_fwds if (stage1.first().epoch != epoch_r);
     let internal_struct = stage1.first(); stage1.deq();
     if(internal_struct.aq) aq_r <= False;
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None});
 endrule
 
 
@@ -267,7 +264,7 @@ endrule
 rule flush_invalid_axi_rq if (tpl_1(stage2.first()).epoch != epoch_r);
     let internal_struct = tpl_1(stage2.first()); stage2.deq();
     if(internal_struct.aq) aq_r <= False;
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None});
 endrule
 
 // STAGE 4: collect result
@@ -295,7 +292,7 @@ function Result internal_struct_and_data_to_result(LoadPipe internal_struct, Bit
     endcase;
 
     // produce result
-    return Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid};
+    return Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None};
 endfunction
 
 // collect response from AXI if needed
@@ -335,7 +332,7 @@ rule collect_result_read_amo if(stage3.first().amo);
     if(internal_struct.aq) aq_r <= False;
 
     dbg_print(AMO, $format("got result:  ", fshow(result), " ", fshow(internal_struct)));
-    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, mem_wr : tagged Invalid});
+    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None});
 endrule
 
 

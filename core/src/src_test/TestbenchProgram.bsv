@@ -14,6 +14,7 @@ package TestbenchProgram;
     // RVController emulation defines
     typedef 'h11000010 RV_CONTROLLER_RETURN_ADDRESS;
     typedef 'h11004000 RV_CONTROLLER_INTERRUPT_ADDRESS;
+    typedef 'h11008000 RV_CONTROLLER_PRINT_ADDRESS;
 
     // Exit codes of the simulation
     typedef enum {
@@ -62,6 +63,12 @@ package TestbenchProgram;
 
 
         let dut <- mkSCOOOTER_riscv();
+
+        rule interrupt;
+            dut.ext_int(count_r%'h3000 == 0 && count_r%'h6000 != 0 && count_r%'h8000 != 0);
+            dut.timer_int(count_r%'h6000 == 0 && count_r%'h8000 != 0);
+            dut.sw_int(count_r%'h8000 == 0);
+        endrule
 
         // INSTRUCTION MEMORY
         AXI4_Slave_Rd#(XLEN, ifuwidth, 0, 0) iram_axi <- mkAXI4_Slave_Rd(0, 0);
@@ -159,6 +166,10 @@ package TestbenchProgram;
                     begin
                         // store return value
                         return_r <= data;
+                    end
+                fromInteger(valueOf(RV_CONTROLLER_PRINT_ADDRESS)):
+                    begin
+                        $write("%c", data[7:0]);
                     end
                 default:
                     if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))

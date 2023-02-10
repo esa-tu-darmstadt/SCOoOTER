@@ -31,6 +31,8 @@ import AlwaysUntaken::*;
 import Gshare::*;
 import Gskewed::*;
 import RAS::*;
+import CSR::*;
+import CSRFile::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(
@@ -51,6 +53,9 @@ module mkSCOOOTER_riscv(Top) provisos(
     let md <- mkMulDiv();
     let branch <- mkBranch();
     let mem <- mkMem();
+    let csr <- mkCSR();
+
+    let csrf <- mkCSRFile();
 
     let store_buf <- mkStoreBuffer();
 
@@ -60,7 +65,7 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     mkConnection(store_buf.write, mem_arbiter.write);
 
-    let fu_vec = vec(arith, branch, mem.fu, arith2, arith3, md);
+    let fu_vec = vec(arith, branch, mem.fu, arith2, arith3, md, csr.fu);
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -68,12 +73,29 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     CommitIFC commit <- mkCommit();
 
+    mkConnection(commit.csr_writes, csrf.writes);
+
     let dir_pred <- case (valueOf(BRANCHPRED))
         0: mkAlwaysUntaken();
         1: mkSmiths();
         2: mkGshare();
         3: mkGskewed();
     endcase;
+
+    rule rob_csr;
+        let b = rob.csr_busy();
+        csr.block(b);
+    endrule
+
+    rule trap_vec;
+        let v = csrf.trap_vectors();
+        uncurry(commit.trap_vectors)(v);
+    endrule
+
+    rule trap_cause;
+        let v <- commit.write_int_data();
+        uncurry(csrf.write_int_data)(v);
+    endrule
 
     rule train;
         let train <- commit.train.get();
@@ -123,12 +145,15 @@ module mkSCOOOTER_riscv(Top) provisos(
     //branch unit
     ReservationStationIFC#(6) rs_br <- mkReservationStationBR6();
 
+    ReservationStationIFC#(6) rs_csr <- mkReservationStationCSR6();
+
     rule propagate_result_bus;
         rs_alu.result_bus(result_bus_vec);
         rs_alu2.result_bus(result_bus_vec);
         rs_alu3.result_bus(result_bus_vec);
         rs_md.result_bus(result_bus_vec);
         rs_mem.result_bus(result_bus_vec);
+        rs_csr.result_bus(result_bus_vec);
         rs_br.result_bus(result_bus_vec);
         regfile_evo.result_bus(result_bus_vec);
         rob.result_bus(result_bus_vec);
@@ -164,6 +189,11 @@ module mkSCOOOTER_riscv(Top) provisos(
         mem.fu.put(i);
     endrule
 
+    rule rs_to_csr;
+        let i <- rs_csr.get();
+        csr.fu.put(i);
+    endrule
+
     mkConnection(rob.check_pending_memory, mem.check_rob);
     mkConnection(store_buf.forward, mem.check_store_buffer);
     mkConnection(mem_arbiter.read, mem.read);
@@ -172,9 +202,11 @@ module mkSCOOOTER_riscv(Top) provisos(
         dbg_print(Top, $format(fshow(result_bus_vec)));
     endrule
 
-    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2, rs_alu3, rs_md);
+    Vector#(NUM_RS, ReservationStationIFC#(6)) rs_vec = vec(rs_alu, rs_mem, rs_br, rs_alu2, rs_alu3, rs_md, rs_csr);
 
     let issue <- mkIssue();
+
+    mkConnection(csr.csr_read, csrf.read);
 
 
     function Bool get_rdy(ReservationStationIFC#(e) rs) = rs.in.can_insert();
@@ -230,9 +262,22 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     mkConnection(mem_arbiter.amo, mem.amo);
 
+    Vector#(3, Wire#(Bool)) int_mask <- replicateM(mkBypassWire());
+
+    rule push_int_flags;
+        Bit#(3) in_mask = {pack(int_mask[2]), pack(int_mask[1]), pack(int_mask[0])};
+        let in_mask_set = csrf.ext_interrupt_mask() & in_mask();
+        commit.ext_interrupt_mask(in_mask_set);
+    endrule
+
     interface imem_axi = ifu.imem_axi;
     interface dmem_axi_w = mem_arbiter.axi_w;
     interface dmem_axi_r = mem_arbiter.axi_r;
+
+    // interrupts
+    method Action sw_int(Bool b) = int_mask[2]._write(b);
+    method Action timer_int(Bool b) = int_mask[1]._write(b);
+    method Action ext_int(Bool b) = int_mask[0]._write(b);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br = commit.correct_pred_br;
