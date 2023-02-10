@@ -1,0 +1,2 @@
+rm -rf out
+building out/test_invalid_inst
