@@ -124,6 +124,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                    instructions[i].ret &&&
                    !done) begin
                     instructions[i].next_pc = trap_return_w;
+                    instructions[i].pred_pc = ~trap_return_w;
                     int_in_process_r[0] <= False;
                 end
 

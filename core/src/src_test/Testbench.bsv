@@ -12,7 +12,7 @@ package Testbench;
         `endif
 
         `ifdef CUSTOM_TB
-            let testCustom <- mkTestProgram("../../testPrograms/custom/test_ext_int/bsv/test_ext_int_32.bsv",
+            let testCustom <- mkTestProgram("../../testPrograms/custom/test_ext_int/bsv/test_ext_int_96.bsv",
                 "../../testPrograms/custom/test_ext_int/bsv/test_ext_int-data_32.bsv", 
                 "custom", 
                 'hffffffff, 

@@ -18,8 +18,8 @@ typedef 2 INST_WINDOW;
 // 2: pipelined
 typedef 0 MUL_DIV_STRATEGY;
 
-typedef 6 NUM_FU;
-typedef 6 NUM_RS;
+typedef 7 NUM_FU;
+typedef 7 NUM_RS;
 
 // prediction strategy
 // 0: always untaken
