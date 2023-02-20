@@ -19,12 +19,16 @@ module mkCSRFile(CsrFileIFC) provisos (
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mtvec <- mkEhr(0);
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mepc <- mkEhr(0);
 
+    Ehr#(issuewidth_pad_t, Bit#(XLEN)) mstatus <- mkEhr(0);
+
+
     function Maybe#(Ehr#(issuewidth_pad_t, Bit#(XLEN))) get_csr_rd(Bit#(12) addr);
         return case (addr)
             'h342: tagged Valid mcause;
             'h304: tagged Valid mie;
             'h305: tagged Valid mtvec;
             'h341: tagged Valid mepc;
+            'h300: tagged Valid mstatus;
             default: tagged Invalid;
         endcase;
     endfunction
@@ -34,6 +38,7 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h304: tagged Valid mie;
             'h305: tagged Valid mtvec;
             'h341: tagged Valid mepc;
+            'h300: tagged Valid mstatus;
             default: tagged Invalid;
         endcase;
     endfunction
