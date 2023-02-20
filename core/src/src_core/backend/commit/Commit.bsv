@@ -19,7 +19,7 @@ module mkCommit(CommitIFC) provisos(
 
 FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- mkPipelineFIFO();
 
-//debug stuff
+// if the prediction performance shall be tracked, create counters
 `ifdef EVA_BR
     Reg#(UInt#(XLEN)) correct_pred_br_r <- mkReg(0);
     Reg#(UInt#(XLEN)) wrong_pred_br_r <- mkReg(0);
@@ -90,7 +90,6 @@ endrule
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
 method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     actionvalue
-        //$display("commit ", fshow(instructions), " ", fshow(count));
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
         Bool done = False;
