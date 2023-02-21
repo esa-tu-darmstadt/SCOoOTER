@@ -140,7 +140,6 @@ interface RobIFC;
 
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     method Bool csr_busy();
-    //method Bool check_pending_memory(UInt#(TLog#(ROBDEPTH)) idx);
 endinterface
 
 interface CommitIFC;

@@ -294,13 +294,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
                     Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
                     Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
 
-                    /*$display("-- calc rob break --");
-                    $display(fshow(local_store));
-                    $display(head_r, " ", tail_r, " ", idx);
-                    $display(fshow(slice_part_vector));
-                    $display(fshow(pending_write_vector));
-                    $display(fshow(inhibitants_map));*/
-
 
                     return Vector::elem(True, inhibitants_map);
                 endactionvalue
