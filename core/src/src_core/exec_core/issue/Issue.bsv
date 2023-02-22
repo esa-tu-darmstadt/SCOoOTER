@@ -180,11 +180,12 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
         next_pc : ?,
-        mem_wr : (inst.opc == STORE || inst.opc == AMO ? tagged Pending : tagged None),
+        write : (inst.opc == STORE || inst.opc == AMO ? tagged Pending_mem : tagged None),
         branch : (inst.eut == BR),
         br : (inst.opc == BRANCH),
         history : inst.history,
-        ras: inst.ras
+        ras: inst.ras,
+        ret: (inst.funct == RET)
     };
 endfunction
 

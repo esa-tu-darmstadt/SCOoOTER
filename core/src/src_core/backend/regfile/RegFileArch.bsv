@@ -1,40 +1,48 @@
 package RegFileArch;
 
+// this register file tracks the ARCHITECTURAL registers
+// speculative updates are tracked by RegFileEvo
+
 import Types::*;
 import Vector::*;
 import Inst_Types::*;
 import Interfaces::*;
 import Debug::*;
-import ConfigReg::*;
+import Ehr::*;
 
 (* synthesize *)
-module mkRegFile(RegFileIFC);
+module mkRegFile(RegFileIFC) provisos (
+    Add#(ISSUEWIDTH, 1, issuewidth_pad_t)
+);
 
-    //stateful registers
-    Vector#(31, Reg#(Bit#(XLEN))) regs <- replicateM(mkRegU());
+    // stateful registers
+    Vector#(31, Ehr#(issuewidth_pad_t, Bit#(XLEN))) regs <- replicateM(mkEhr(?));
 
+    // helper function for reading ehr registers (returns value from port 0)
+    function Bit#(XLEN) get_ehr_read(Ehr#(issuewidth_pad_t, Bit#(XLEN)) e) = e[valueOf(ISSUEWIDTH)];
+
+    // print the whole register file for debugging
     rule print_debug;
         for(Integer i = 0; i < 31; i=i+1)
-            dbg_print(Regs, $format(i+1, ": ", regs[i]));
+            dbg_print(Regs, $format(i+1, ": ", regs[i][0]));
     endrule
 
-    //writing to register
+    //writing to registers
     method Action write(Vector#(ISSUEWIDTH, Maybe#(RegWrite)) requests);
-        Vector#(31, Bit#(XLEN)) regs_local = Vector::readVReg(regs);
-
         action
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
+                // if the request is valid, write to the file
                 if(requests[i] matches tagged Valid .req &&& req.addr != 0) begin
-                    regs_local[req.addr - 1] = req.data;
+                    regs[req.addr - 1][i] <= req.data;
                 end
             end
         endaction
 
-        Vector::writeVReg(regs, regs_local);
     endmethod
 
+    // return the entire reg file
     method Vector#(31, Bit#(XLEN)) values();
-        return Vector::readVReg(regs);
+        return Vector::map(get_ehr_read, regs);
     endmethod
 
 endmodule

@@ -22,7 +22,8 @@ typedef enum {
     None,
     AMO,
     BTB,
-    PRED
+    PRED,
+    CSR
 } DbgTag deriving(Eq, FShow);
 
 // List of currently allowed prints

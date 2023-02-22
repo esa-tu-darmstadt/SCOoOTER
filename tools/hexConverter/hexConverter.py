@@ -68,6 +68,18 @@ for arch in [32, 64, 96, 128, 160, 192, 224, 256]:
 	write_to_file(chunks_data, out_d);
 	
 	
+	# create bytewise SRAM description
+	if arch == 32:
+		for i in range(arch_byte):
+			out_b = open(args.output_prefix + "-data_" + str(arch) + "_" + str(i) + ".bsv", "w");
+			out_b.write("@0\n") # output new addr header
+			for chunk in chunks_data:
+				chunk_hex = [chunk.hex()[i:i+2] for i in range(0, len(chunk.hex()), 2)]
+				chunks_inst = chunk_list(chunk_hex, int(arch/8)) # split byte array into words
+				for inst in chunks_inst:
+					out_b.write(inst[i])
+				out_b.write("\n")
+		out_b.close();
 
 	in_file.close()
 	out_i.close()

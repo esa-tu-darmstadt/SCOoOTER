@@ -87,7 +87,9 @@ module mkReorderBuffer_in(RobIFC) provisos (
         return out;
     endfunction
 
-    function Bool pending_write(RobEntry re) = (re.mem_wr matches tagged Valid .v ? True : (re.mem_wr matches tagged Pending ? True : False)); 
+    function Bool pending_write(RobEntry re) = (re.write matches tagged Mem .v ? True : (re.write matches tagged Pending_mem ? True : False)); 
+    function Bool pending_csr(RobEntry re) = (re.write matches tagged Csr .v ? True : False); 
+
     function Bool andd(Bool a, Bool b) = (a && b);
 
     //find out how many slots are full
@@ -191,7 +193,8 @@ module mkReorderBuffer_in(RobIFC) provisos (
                    found_result matches tagged Valid .unpacked_result) begin
 
                     //writes
-                    current_entry.mem_wr = (unpacked_result.mem_wr matches tagged Valid .v ? tagged Valid v : tagged None);
+                    current_entry.write = (unpacked_result.write matches tagged Mem .v ? tagged Mem v : 
+                                           unpacked_result.write matches tagged Csr .v ? tagged Csr v : tagged None);
 
                     case (unpacked_result.result) matches
                         tagged Result .r : current_entry.result = tagged Result r;
@@ -218,7 +221,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
     endrule
 
     rule debug_print_full_contents;
-        //dbg_print(ROB, $format("Head: ", head_r, " Tail: ", tail_r));
         Bool done = False;
         for(Integer i = 0; i<valueOf(ROBDEPTH); i=i+1) begin
             let current_ptr = truncate_index(tail_r, fromInteger(i));
@@ -232,7 +234,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
     FIFO#(Vector#(ISSUEWIDTH, RobEntry)) reserve_buffer_data <- mkBypassFIFO();
     FIFO#(UInt#(issuewidth_log_t)) reserve_buffer_count <- mkBypassFIFO();
 
-    //(* conflict_free = "read_cdb, process_reservation" *)
     rule process_reservation;
         reserve_buffer_data.deq();
         reserve_buffer_count.deq();
@@ -291,13 +292,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
                     Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
                     Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
 
-                    /*$display("-- calc rob break --");
-                    $display(fshow(local_store));
-                    $display(head_r, " ", tail_r, " ", idx);
-                    $display(fshow(slice_part_vector));
-                    $display(fshow(pending_write_vector));
-                    $display(fshow(inhibitants_map));*/
-
 
                     return Vector::elem(True, inhibitants_map);
                 endactionvalue
@@ -305,7 +299,13 @@ module mkReorderBuffer_in(RobIFC) provisos (
         endinterface
     endinterface
 
-    
+    method Bool csr_busy();
+        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
+        Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(head_r, tail_r), Vector::map(fromInteger, Vector::genVector()));
+        Vector#(ROBDEPTH, Bool) pending_csr_vector = Vector::map(pending_csr, local_store);
+        Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_csr_vector));
+        return Vector::countElem(True, inhibitants_map) > 1;
+    endmethod
 
     
 endmodule

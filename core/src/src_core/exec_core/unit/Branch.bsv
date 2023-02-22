@@ -72,7 +72,7 @@ rule build_response_packet;
                   target matches tagged Valid .a &&& a[1:0] != 0 ? tagged Except MISALIGNED_ADDR
                   : tagged Result (inst.pc+4)),
         new_pc: target,
-        mem_wr : tagged Invalid
+        write : tagged None
     };
     dbg_print(BRU, $format("produced result: ", fshow(resp)));
     out_f.enq(resp);

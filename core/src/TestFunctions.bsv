@@ -22,5 +22,27 @@ function Maybe#(a) find_nth_valid(Integer num, Vector#(vsize, Maybe#(a)) data);
     return res;
 endfunction
 
+function String select_fitting_prog_binary(Integer width);
+    return case (width)
+        1: "32";
+        2: "64";
+        3: "96";
+        4: "128";
+        5: "160";
+        6: "192";
+        7: "224";
+        8: "256";
+    endcase;
+endfunction
+
+function String select_fitting_sram_byte(Integer bnum);
+    return case (bnum)
+        0: "0";
+        1: "1";
+        2: "2";
+        3: "3";
+    endcase;
+endfunction
+
 endpackage
 
