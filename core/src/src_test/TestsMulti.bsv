@@ -5,25 +5,12 @@ package TestsMulti;
     import Assertions :: *;
     import Types::*;
     import BuildList::*;
+    import TestFunctions::*;
 
     typedef struct {
 	    String name_unit;
 	    String isa;
     } Test_unit;
-
-    function String select_fitting_prog_binary(Integer width);
-        return case (width)
-            1: "32";
-            2: "64";
-            3: "96";
-            4: "128";
-            5: "160";
-            6: "192";
-            7: "224";
-            8: "256";
-        endcase;
-    endfunction
-
 
     (* synthesize *)
     module mkTestsISA(Empty) provisos(

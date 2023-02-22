@@ -22,8 +22,10 @@ typedef union tagged {
 (* synthesize *)
 module mkRegFileEvo(RegFileEvoIFC);
 
+    // wire for distributing the result bus
     Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
+    //register storage
     Vector#(31, Array#(Reg#(EvoEntry))) registers <- replicateM(mkCReg(3, tagged Invalid));
     //derived Reg ifaces from CReg
     Vector#(31, Reg#(EvoEntry)) registers_port0 = Vector::map(disassemble_creg(0), registers);

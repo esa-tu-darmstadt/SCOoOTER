@@ -221,7 +221,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
     endrule
 
     rule debug_print_full_contents;
-        //dbg_print(ROB, $format("Head: ", head_r, " Tail: ", tail_r));
         Bool done = False;
         for(Integer i = 0; i<valueOf(ROBDEPTH); i=i+1) begin
             let current_ptr = truncate_index(tail_r, fromInteger(i));
@@ -235,7 +234,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
     FIFO#(Vector#(ISSUEWIDTH, RobEntry)) reserve_buffer_data <- mkBypassFIFO();
     FIFO#(UInt#(issuewidth_log_t)) reserve_buffer_count <- mkBypassFIFO();
 
-    //(* conflict_free = "read_cdb, process_reservation" *)
     rule process_reservation;
         reserve_buffer_data.deq();
         reserve_buffer_count.deq();

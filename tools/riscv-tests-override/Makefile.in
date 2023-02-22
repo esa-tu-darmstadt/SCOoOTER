@@ -36,7 +36,7 @@ install: sort
 sort: all
 	#copy all binaries over
 	@mkdir -p out/all/elf
-	@$(eval ELFS:=$(filter-out %.dump, $(wildcard isa/rv*-*)) )
+	@$(eval ELFS:=$(filter-out %.dump, $(wildcard isa/rv*-p-*)) )
 	@$(eval ELFS_SHORT := $(notdir ${ELFS}))
 	@$(foreach bin, ${ELFS_SHORT}, cp isa/$(bin) out/all/elf/$(bin).elf ; )
 
