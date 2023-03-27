@@ -1,5 +1,9 @@
 package Branch;
 
+/*
+  FU for branching instructions
+*/
+
 import Interfaces::*;
 import Types::*;
 import Inst_Types::*;
@@ -8,22 +12,28 @@ import SpecialFIFOs::*;
 import RWire::*;
 import Debug::*;
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkBranch(FunctionalUnitIFC);
 
+// FIFOs for input and output
 FIFO#(Instruction) in_f <- mkPipelineFIFO();
 FIFO#(Result) out_f <- mkPipelineFIFO();
+// RWire to always produce an output
 RWire#(Result) out_valid_w <- mkRWire();
 
+// propagate result to out wire
 rule set_valid;
     out_valid_w.wset(out_f.first());
     out_f.deq();
 endrule
 
+// wire to pass on condition and target
 Wire#(Bool) condition_w <- mkWire();
 Wire#(Bit#(XLEN)) target_w <- mkWire();
 
-
+// calculate condition
 rule test_condition;
     let inst = in_f.first();
 
@@ -47,6 +57,7 @@ rule test_condition;
     condition_w <= condition;
 endrule
 
+// calculate target address
 rule calculate_target;
     let inst = in_f.first();
     dbg_print(BRU, $format("got instruction: ", fshow(inst)));
@@ -63,6 +74,7 @@ rule calculate_target;
     dbg_print(BRU, $format("calculated target: ", target));
 endrule
 
+// combine target and condition into a result
 rule build_response_packet;
     let inst = in_f.first(); in_f.deq();
     Maybe#(Bit#(XLEN)) target = condition_w ? tagged Valid target_w : tagged Invalid;
@@ -78,13 +90,9 @@ rule build_response_packet;
     out_f.enq(resp);
 endrule
 
-method Action put(Instruction inst);
-    in_f.enq(inst);
-endmethod
-
-method Maybe#(Result) get() =
-    out_valid_w.wget();
-
+// input and output
+method Action put(Instruction inst) = in_f.enq(inst);
+method Maybe#(Result) get() = out_valid_w.wget();
 endmodule
 
 endpackage

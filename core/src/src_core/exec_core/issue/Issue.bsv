@@ -1,5 +1,12 @@
 package Issue;
 
+/*
+  ISSUE distributes incoming instructions amidst the RS
+  and requests space in the ROB. ISSUE also reads and
+  writes speculative register tags and provides those tags
+  or already generated operands to the instructions.
+*/
+
 import Types::*;
 import Inst_Types::*;
 import Interfaces::*;
@@ -9,21 +16,32 @@ import GetPutCustom::*;
 import GetPut::*;
 import ClientServer::*;
 import ReorderBuffer::*;
+import TestFunctions::*;
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkIssue(IssueIFC) provisos(
+    // create types for ROB index and depth
     Log#(ROBDEPTH, size_logidx_t),
     Add#(ROBDEPTH, 1, robsize_pad_t),
     Log#(robsize_pad_t, robsize_log_t),
+
+    // depending on the config, one type is bigger
+    // to not loose precision, we need to know which in the impl
     Max#(issue_amount_t, robsize_log_t, issue_robamount_t),
+    // tell the compiler that this largest type is larger than
+    // the ones it is derived from
     Add#(__d, issue_amount_t, issue_robamount_t),
     Add#(__e, robsize_log_t, issue_robamount_t),
     Add#(__f, issuewidth_log_t, issue_robamount_t),
-
+    // create instruction amount counters
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
     Log#(issuewidth_pad_t, issuewidth_log_t),
+    // create issue bus count types
     Add#(1, NUM_RS, rs_count_pad_t),
     Log#(rs_count_pad_t, rs_count_log_t),
+    // create a type that holds the maximum issueable amount
     Max#(issuewidth_log_t, rs_count_log_t, issue_amount_t),
     Add#(__a, 1, issue_amount_t),
 
@@ -35,9 +53,11 @@ module mkIssue(IssueIFC) provisos(
 Wire#(Vector#(ISSUEWIDTH, Instruction)) inst_in <- mkWire();
 Wire#(MIMO::LUInt#(ISSUEWIDTH)) inst_in_cnt <- mkWire();
 
+//wires to transport data from ROB
 Wire#(UInt#(TLog#(TAdd#(ROBDEPTH,1)))) rob_free_w <- mkBypassWire();
 Wire#(UInt#(TLog#(ROBDEPTH))) rob_idx_w <- mkBypassWire();
 
+//wires to transport signals from RS
 Wire#(Vector#(NUM_RS, Bool)) rdy_inst_vec <- mkWire();
 Wire#(Vector#(NUM_RS, ExecUnitTag)) op_type_vec <- mkWire();
 
@@ -55,8 +75,14 @@ Wire#(UInt#(issuewidth_log_t)) possible_issue_amount <- mkWire();
 Wire#(Vector#(ISSUEWIDTH, UInt#(rs_count_log_t))) needed_rs_idx_w <- mkWire();
 Wire#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) req_addrs <- mkWire();
 
+// helper function to extract destination RADDR from an instruction
 function RADDR inst_to_raddr(Instruction inst) = (inst.rd);
 
+
+// REAL IMPLEMENTATION
+// we use a lot of wires here to separate the distinct steps of issuing
+
+// provide a read request to the register file
 rule gather_operands;
     let instructions = inst_in;
 
@@ -67,11 +93,11 @@ rule gather_operands;
         request_addrs[2*i+1] = inst_in[i].rs2.Raddr;
     end
 
-    //dbg_print(Issue, $format("Requesting operands: ", fshow(request_addrs)));
-
     req_addrs <= request_addrs;
 endrule
 
+// test if an earlier instruction produces inputs to a later instruction
+// in the incoming bundle
 rule resolve_cross_dependencies;
     let instructions = inst_in;
 
@@ -81,8 +107,10 @@ rule resolve_cross_dependencies;
         Bool found_rs1 = False;
         Bool found_rs2 = False;
         
+        // look at all earlier instructions
         for(Integer j = i; j > 0; j = j-1) begin
 
+            // extract rd and epoch of inst to compare
             let rd_addr = inst_in[j-1].rd;
             let epoch = inst_in[j-1].epoch;
             //check rs1
@@ -108,23 +136,11 @@ rule resolve_cross_dependencies;
     end
 endrule
 
+// helper function to test if an RS of certain type is ready
 function Bool is_rdy_rs(ExecUnitTag eut, Tuple2#(ExecUnitTag, Bool) entry) = (eut == tpl_1(entry) && tpl_2(entry));
 
-//TODO: use less sequential algorithm
-function UInt#(a) find_nth(UInt#(a) num, b cmp, Vector#(c, b) vec) provisos(
-    Eq#(b)
-);
-    UInt#(a) found = 0;
-    UInt#(a) out = ?;
-    for(Integer i = 0; i < valueOf(c); i = i + 1) begin
-        if(vec[i] == cmp) begin
-            found = found + 1;
-            if(found == num) out = fromInteger(i);
-        end
-    end
-    return out;
-endfunction
-
+// find out how many instructions can be issued
+// based on free RS, place in ROB, provided from window buffer
 rule count_possible_issue;
     let instructions = inst_in;
 
@@ -165,13 +181,14 @@ rule count_possible_issue;
     UInt#(issue_robamount_t) rob_av_ext = extend(rob_free_w);
     UInt#(issue_robamount_t) rs_avail = extend(max_issue_rs);
 
+    // combine gathered insights
     UInt#(issuewidth_log_t) max_issue = (extend(max_issue_rs) > rob_av_ext ? truncate(rob_av_ext) : truncate(rs_avail));
-
     possible_issue_amount <= max_issue > inst_in_cnt ? inst_in_cnt : max_issue;
 
     needed_rs_idx_w <= needed_rs_idx;
 endrule
 
+// create rob entry from instruction
 function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logidx_t) idx);
     return RobEntry {
         pc : inst.pc,
@@ -189,30 +206,30 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
     };
 endfunction
 
+
 Wire#(Vector#(ISSUEWIDTH, RobEntry)) rob_entry_wire <- mkWire();
 
+// reserve space in the ROB
 rule reserve_rob;
     let rob_entries = Vector::map(uncurry(map_to_rob_entry), Vector::zip(inst_in, rob_entry_idx_v));
-    //rob.reserve(rob_entries, possible_issue_amount);
     rob_entry_wire <= rob_entries;
 endrule
 
 Wire#(RegReservations) tag_res <- mkWire();
 
+// set tags in the speculative register file
 function RegReservation inst_to_register_reservation(Instruction ins, UInt#(size_logidx_t) idx) 
     = RegReservation { addr : ins.rd, tag: idx, epoch: ins.epoch };
 rule set_regfile_tags;
     Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_register_reservation), Vector::zip(inst_in, rob_entry_idx_v));
-
     tag_res <= RegReservations {reservations: reservations, count: possible_issue_amount};
 endrule
 
 Wire#(Vector#(NUM_RS, Maybe#(Instruction))) instructions_rs_v <- mkWire();
 
+// finally, assemble the instructions and issue them via the issue bus
 rule assemble_instructions;
     Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
-
-    //dbg_print(Issue, $format("Got operands: ", fshow(gathered_operands)));
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
 
@@ -255,45 +272,23 @@ rule assemble_instructions;
     end
 
     instructions_rs_v <= instructions_rs;
-
     dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
 endrule
 
 function UInt#(32) inst_to_epoch(Instruction inst) = inst.epoch;
 
-method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
-    return instructions_rs_v;
-endmethod
-
-method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
-    rob_free_w <= free;
-endmethod
-method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
-    rob_idx_w <= idx;
-endmethod
-
-method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t)) get_reservation();
-    return tuple2(rob_entry_wire, possible_issue_amount);
-endmethod
-
-method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
-    rdy_inst_vec <= rdy;
-endmethod
-
-method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
-    op_type_vec <= in;
-endmethod
-
-method Tuple2#(Vector#(ISSUEWIDTH, Tuple3#(RADDR, UInt#(TLog#(ROBDEPTH)), UInt#(XLEN))), MIMO::LUInt#(ISSUEWIDTH)) set_tags();
-    Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
-
-    let raddrs = Vector::map(inst_to_raddr, instructions);
-    let epochs = Vector::map(inst_to_epoch, instructions);
-    let raddr_and_tag = Vector::zip3(raddrs, rob_entry_idx_v, epochs);
-
-    return tuple2(raddr_and_tag, possible_issue_amount);
-endmethod
-
+// return issue bus
+method Vector#(NUM_RS, Maybe#(Instruction)) get_issue() = instructions_rs_v;
+// inputs from ROB
+method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = rob_free_w._write(free);
+method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = rob_idx_w._write(idx);
+// reserve space in ROB
+method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t)) get_reservation() 
+    = tuple2(rob_entry_wire, possible_issue_amount);
+// input from the RS
+method Action rs_ready(Vector#(NUM_RS, Bool) rdy) = rdy_inst_vec._write(rdy);
+method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in) = op_type_vec._write(in);
+// get decoded instructions as input
 interface PutSC decoded_inst;
     method Action put(DecodeResponse dec);
         inst_in <= dec.instructions;
@@ -301,9 +296,8 @@ interface PutSC decoded_inst;
     endmethod
     method MIMO::LUInt#(ISSUEWIDTH) deq() = possible_issue_amount;
 endinterface
-
+// read registers
 interface Client read_registers;
-
     interface Get request;
         method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) get();
             actionvalue
@@ -311,13 +305,11 @@ interface Client read_registers;
             endactionvalue
         endmethod
     endinterface
-
     interface Put response;
         method Action put(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) resp) = gathered_operands._write(resp);
     endinterface
-
 endinterface
-
+// provide tag requests to regfile_evo
 interface Get reserve_registers;
     method ActionValue#(RegReservations) get();
         actionvalue

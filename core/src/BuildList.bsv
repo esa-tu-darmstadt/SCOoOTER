@@ -4,6 +4,8 @@ package BuildList;
 
 import List::*;
 import ListN::*;
+import BuildVector::*;
+import Vector::*;
 
 typeclass BuildList#(type a, type r)
    dependencies (r determines (a));

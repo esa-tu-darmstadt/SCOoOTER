@@ -1,5 +1,10 @@
 package Inst_Types;
 
+/*
+  This package holds all combined types (e.g. structs and enums)
+  which are used in multiple modules.
+*/
+
 import Types::*;
 import Vector::*;
 
@@ -29,6 +34,7 @@ typedef enum {
     CSR
 } ExecUnitTag deriving(Bits, Eq, FShow);
 
+// Type of an atomic memory operation
 typedef enum {
     ADD,
     SWAP,
@@ -40,9 +46,11 @@ typedef enum {
     MAXU,
     MINU,
     LR,
-    SC
+    SC,
+    FENCE
 } AmoType deriving(Bits, Eq, FShow);
 
+// enum to convert a name to an exception number
 typedef enum {
     MISALIGNED_ADDR = 0,
     INST_ACCESS_FAULT = 1,
@@ -100,7 +108,7 @@ typedef enum {
 
 } OpCode deriving(Bits, Eq, FShow);
 
-// Struct containing all possible fields
+// Struct containing all possible fields of an instruction
 typedef struct {
     Bit#(XLEN) pc;
     OpCode opc;
@@ -131,12 +139,18 @@ typedef struct {
 
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
+// operand of an instruction
+// can be a tag that has to still be produced
+// or a value
+// or a register address prior to gathering operands
 typedef union tagged {
     RADDR Raddr;
     UInt#(TLog#(ROBDEPTH)) Tag;
     Bit#(XLEN) Operand;
 } Operand deriving(Bits, Eq, FShow);
 
+// destination of a result
+// can be a register, memory or nothing
 typedef union tagged {
     RADDR Raddr;
     Bit#(XLEN) MemAddr;
@@ -167,120 +181,140 @@ typedef struct {
     //immediate fields
     Bit#(XLEN) imm;
 
+    // track an occurred exception
     Maybe#(ExceptionType) exception;
 
+    // epoch is used to synchronize all units in case of misprediction
     UInt#(XLEN) epoch;
 
+    // log predicted successor instruction
     Bit#(XLEN) predicted_pc;
 
+    // save history for predictors
     Bit#(BITS_BHR) history;
-
     Bit#(RAS_EXTRA) ras;
 } Instruction deriving(Bits, Eq, FShow);
 
+// write accesses to memory
 typedef struct {
     UInt#(XLEN) mem_addr;
     Bit#(XLEN) data;
     Bit#(TDiv#(XLEN, 8)) store_mask;
 } MemWr deriving(Bits, FShow);
 
+// word with a bytewise mask
 typedef struct {
     Bit#(XLEN) data;
     Bit#(TDiv#(XLEN, 8)) store_mask;
 } MaskedWord deriving(Bits, FShow);
 
+// type tramsported via result bus
 typedef struct {
-    UInt#(TLog#(ROBDEPTH)) tag;
-    Maybe#(Bit#(XLEN)) new_pc;
-    union tagged {
+    UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
+    Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
+    union tagged { // resulting value or exception
         Bit#(XLEN) Result;
         ExceptionType Except;
     } result;
-    union tagged {
+    union tagged { // writes to mem or csr
         MemWr Mem;
         void None;
         CsrWrite Csr;
     } write;
 } Result deriving(Bits, FShow);
 
+// entries to reorder buffer
 typedef struct {
-    Bit#(XLEN) pc;
-    RADDR destination;
-    union tagged {
+    Bit#(XLEN) pc; // addr of the instruction
+    RADDR destination; // destination register
+    union tagged { // result (or tag identifying producing instruction)
         UInt#(TLog#(ROBDEPTH)) Tag;
         Bit#(XLEN) Result;
         ExceptionType Except;
     } result;
+    // next real pc and predicted one
     Bit#(XLEN) next_pc;
     Bit#(XLEN) pred_pc;
-    UInt#(XLEN) epoch;
-    union tagged {
+    UInt#(XLEN) epoch; // epoch to synchronize on misprediction
+    union tagged { // writes to memory or CSRs
         MemWr Mem;
         void Pending_mem;
         void None;
         CsrWrite Csr;
     } write;
+    // identify if the instruction is branching and if it is br or jal
     Bool branch;
     Bool br;
+    // history for predictors
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
-    Bool ret;
+    Bool ret; // instruction is branch return
 } RobEntry deriving(Bits, FShow);
 
+// write to a register
 typedef struct {
     RADDR addr;
     Bit#(XLEN) data;
 } RegWrite deriving(Bits, FShow);
 
+// write to a csr
 typedef struct {
     Bit#(12) addr;
     Bit#(XLEN) data;
 } CsrWrite deriving(Bits, FShow);
 
+// reserve tags for a register
 typedef struct {
     RADDR addr;
     UInt#(TLog#(ROBDEPTH)) tag;
     UInt#(XLEN) epoch;
 } RegReservation deriving(Bits, FShow);
-
 typedef struct {
     Vector#(ISSUEWIDTH, RegReservation) reservations;
     UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
 } RegReservations deriving(Bits, FShow);
 
+// read response from evo regfile
 typedef union tagged {
-    UInt#(TLog#(ROBDEPTH)) Tag;
-    Bit#(XLEN) Value;
+    UInt#(TLog#(ROBDEPTH)) Tag; // value still in flight
+    Bit#(XLEN) Value; // value already produced
+    void None; // no speculative result available, ask arch regs
 } EvoResponse deriving(Bits, FShow);
 
+// instruction right after fetch with metadata
 typedef struct {
     Bit#(32) instruction;
     Bit#(32) pc;
     UInt#(XLEN) epoch;
+    // predictor metadata
     Bit#(32) next_pc;
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
 } FetchedInstruction deriving(Bits, FShow);
 
+// output from fetch stage
 typedef struct {
     UInt#(TLog#(TAdd#(IFUINST,1))) count;
     Vector#(IFUINST, FetchedInstruction) instructions;
 } FetchResponse deriving(Bits, FShow);
 
+// output from decode stage
 typedef struct {
     UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
     Vector#(ISSUEWIDTH, Instruction) instructions;
 } DecodeResponse deriving(Bits, FShow);
 
+// training info for predictors
 typedef struct {
-    Bit#(XLEN) pc;
-    Bool taken;
-    Bit#(XLEN) target;
-    Bit#(BITS_BHR) history;
-    Bool miss;
-    Bool branch;
+    Bit#(XLEN) pc; // pc of branching inst
+    Bool taken; // was inst taken or untaken?
+    Bit#(XLEN) target; // what is the branch target
+    Bit#(BITS_BHR) history; // history from BHR
+    Bool miss; // was the predictor wrong?
+    Bool branch; // was this a br or jal?
 } TrainPrediction deriving(Bits, FShow);
 
+// direction predictor response
 typedef struct{
     Bool pred;
     Bit#(BITS_BHR) history;

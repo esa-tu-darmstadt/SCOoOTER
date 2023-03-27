@@ -8,9 +8,10 @@ stages:
   - deps
   - build
   - isa
+  - priv
+  - embench (smiths)
   - embench (gshare)
   - embench (gskewed)
-  - embench (smiths)
   - embench (no predictor)
 
 before_script:
@@ -48,6 +49,11 @@ deps:
   - popd
   - make patch
   - make
+  - make install
+  - popd
+
+  # build priv tests
+  - pushd tools/riscv-arch-tests
   - make install
   - popd
   
@@ -102,6 +108,30 @@ run_isaTb_high:
     - cp testConfigs/high_nopred.bsv core/src/Config.bsv
     - pushd core
     - make TB=ISA_TB
+    - popd
+
+run_privTb_simple:
+  stage: priv
+  script:
+    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=PRIV_TB
+    - popd
+    
+run_privTb_medium:
+  stage: priv
+  script:
+    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=PRIV_TB
+    - popd
+    
+run_privTb_high:
+  stage: priv
+  script:
+    - cp testConfigs/high_nopred.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=PRIV_TB
     - popd
 
 run_embenchTb_smiths_simple:

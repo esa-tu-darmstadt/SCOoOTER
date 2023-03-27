@@ -55,7 +55,7 @@ interface FetchIFC;
     // output
     interface GetS#(FetchResponse) instructions;
 
-    interface Vector#(IFUINST, Client#(Bit#(XLEN), Prediction)) predict_direction;
+    interface Vector#(IFUINST, Client#(Tuple2#(Bit#(XLEN), Bool), Prediction)) predict_direction;
     interface Client#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict_target;
 endinterface
 
@@ -87,7 +87,8 @@ interface IssueIFC;
 
     method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
 
-    method Tuple2#(Vector#(ISSUEWIDTH, Tuple3#(RADDR, UInt#(TLog#(ROBDEPTH)), UInt#(XLEN))), MIMO::LUInt#(ISSUEWIDTH)) set_tags();
+
+    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_committed;
 endinterface
 
 interface ReservationStationPutIFC;
@@ -124,12 +125,13 @@ interface MemoryUnitIFC;
     interface Client#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType), Bit#(XLEN)) amo;
     method Action flush();
     method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
+    method Action store_queue_empty(Bool b);
 endinterface
 
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
-    (* always_enabled *)
+    (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
 
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
@@ -166,16 +168,13 @@ interface RegFileIFC;
     //write of architectural registers from commit stage
     method Action write(Vector#(ISSUEWIDTH, Maybe#(RegWrite)) requests);
     //output of current arch registers, used in mispredict
-    method Vector#(31, Bit#(XLEN)) values();
+    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
 endinterface
 
 interface RegFileEvoIFC;
-
     interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
     interface Put#(RegReservations) reserve_registers;
 
-    (* always_ready, always_enabled *)
-    method Action committed_state(Vector#(31, Bit#(XLEN)) regs);
     //inform about misprediction
     method Action flush();
     (* always_ready, always_enabled *)
@@ -186,6 +185,7 @@ interface StoreBufferIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     interface Client#(MemWr, void) write;
+    method Bool empty();
 endinterface
 
 interface BTBIfc;
@@ -195,7 +195,7 @@ endinterface
 
 interface PredIfc;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
-    interface Vector#(IFUINST, Server#(Bit#(XLEN), Prediction)) predict_direction;
+    interface Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN),Bool), Prediction)) predict_direction;
 endinterface
 
 interface CsrFileIFC;

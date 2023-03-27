@@ -18,16 +18,24 @@ typedef 2 INST_WINDOW;
 // 2: pipelined
 typedef 0 MUL_DIV_STRATEGY;
 
-typedef 7 NUM_FU;
-typedef 7 NUM_RS;
+// CSR, Br and Mem units are always one
+typedef 1 NUM_ALU;
+typedef 1 NUM_MULDIV;
+
+// rs depths
+typedef 2 RS_DEPTH_ALU;
+typedef 2 RS_DEPTH_MEM;
+typedef 2 RS_DEPTH_CSR;
+typedef 2 RS_DEPTH_MULDIV;
+typedef 2 RS_DEPTH_BR;
 
 // prediction strategy
 // 0: always untaken
 // 1: smiths
 typedef 0 BRANCHPRED;
 
-typedef 6 BITS_BTB;
-typedef 6 BITS_PHT;
+typedef 8 BITS_BTB;
+typedef 8 BITS_PHT;
 
 typedef 0 BITS_BHR;
 
@@ -35,4 +43,6 @@ typedef 1  USE_RAS;
 typedef 1 RAS_SAVE_HEAD;
 typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;
+
+typedef 8 STORE_BUF_DEPTH;
 endpackage

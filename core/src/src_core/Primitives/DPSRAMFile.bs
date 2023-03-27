@@ -4,6 +4,9 @@ import GetPut
 import ClientServer
 import SyncSRAM
 
+--@ We modified the BSC provided DPSRAM to be initializable,
+--@ as we would like to initialize the data section.
+
 --@ \subsubsection{\te{DPSRAM}}
 --@ \index{DPSRAM@\te{DPSRAM} (package)|textbf}
 --@

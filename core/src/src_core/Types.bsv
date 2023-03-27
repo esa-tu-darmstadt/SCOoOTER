@@ -15,4 +15,11 @@ typedef TAdd#(
             )
             RAS_EXTRA;
 
+typedef TAdd#(
+            TAdd#(NUM_ALU, NUM_MULDIV),
+            3
+            )
+            NUM_FU;
+
+typedef NUM_FU NUM_RS;
 endpackage

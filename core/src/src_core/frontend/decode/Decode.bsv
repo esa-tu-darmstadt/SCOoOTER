@@ -222,7 +222,7 @@ function OpFunction getFunct(InstructionPredecode inst);
                     'b101 : SRA;
                     default: INVALID;
                     endcase
-                'b0000001 : case(inst.funct3)
+                'b0000001 : (valueOf(NUM_MULDIV) > 0 ? case(inst.funct3)
                     'b000 : MUL;
                     'b001 : MULH;
                     'b010 : MULHSU;
@@ -232,7 +232,7 @@ function OpFunction getFunct(InstructionPredecode inst);
                     'b110 : REM;
                     'b111 : REMU;
                     default: INVALID;
-                    endcase
+                    endcase : INVALID);
                 default: INVALID;
             endcase
         MISCMEM : case(inst.funct3)
@@ -318,7 +318,9 @@ function InstructionPredecode predecode_instruction_struct(FetchedInstruction in
     return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras);
 endfunction
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkDecode(DecodeIFC) provisos (
         Bits#(Instruction, instruction_width_t),
         Mul#(INST_WINDOW, instruction_width_t, mimosize_t), //the output MIMO holds the amount of bits equal to the bit width of a predecoded inst and the mimo depth

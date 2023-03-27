@@ -10,3 +10,6 @@
 [submodule "tools/embench/embench-iot"]
 	path = tools/embench/embench-iot
 	url = ../benchmarks/embench-iot
+[submodule "tools/riscv-arch-tests/riscv-arch-test"]
+	path = tools/riscv-arch-tests/riscv-arch-test
+	url = https://github.com/riscv-non-isa/riscv-arch-test.git

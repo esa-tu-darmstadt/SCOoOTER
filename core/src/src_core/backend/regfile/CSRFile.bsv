@@ -1,5 +1,9 @@
 package CSRFile;
 
+/*
+  This is the CSR register file.
+*/
+
 import Ehr::*;
 import Vector::*;
 import Interfaces::*;
@@ -9,6 +13,7 @@ import GetPut::*;
 import ClientServer::*;
 import FIFO::*;
 import SpecialFIFOs::*;
+import Debug::*;
 
 module mkCSRFile(CsrFileIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t)
@@ -21,6 +26,8 @@ module mkCSRFile(CsrFileIFC) provisos (
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mtvec <- mkEhr(0);
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mepc <- mkEhr(0);
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mstatus <- mkEhr(0);
+    Ehr#(issuewidth_pad_t, Bit#(XLEN)) mscratch <- mkEhr(0);
+    Ehr#(issuewidth_pad_t, Bit#(XLEN)) mtval <- mkEhr(0);
 
     // buffer for read responses
     FIFO#(Maybe#(Bit#(XLEN))) read_resp <- mkPipelineFIFO();
@@ -33,17 +40,20 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h304: tagged Valid mie;
             'h305: tagged Valid mtvec;
             'h341: tagged Valid mepc;
+            'h340: tagged Valid mscratch;
             'h300: tagged Valid mstatus;
+            'h343: tagged Valid mtval;
             default: tagged Invalid;
         endcase;
     endfunction
-
     function Maybe#(Ehr#(issuewidth_pad_t, Bit#(XLEN))) get_csr_wr(Bit#(12) addr);
         return case (addr)
             'h304: tagged Valid mie;
             'h305: tagged Valid mtvec;
             'h341: tagged Valid mepc;
             'h300: tagged Valid mstatus;
+            'h340: tagged Valid mscratch;
+            'h343: tagged Valid mtval;
             default: tagged Invalid;
         endcase;
     endfunction
@@ -56,7 +66,8 @@ module mkCSRFile(CsrFileIFC) provisos (
                 // trap if it does not
                 let ehr_maybe = get_csr_rd(addr);
                 if (ehr_maybe matches tagged Valid .r) begin
-                    read_resp.enq(tagged Valid r[0]);
+                    read_resp.enq(tagged Valid r[valueOf(ISSUEWIDTH)]);
+                    dbg_print(CSRFile, $format("reading %x from %x", r[valueOf(ISSUEWIDTH)], addr));
                 end else
                     read_resp.enq(tagged Invalid);
             endmethod
@@ -73,6 +84,7 @@ module mkCSRFile(CsrFileIFC) provisos (
                         let ehr_maybe = get_csr_wr(req.addr);
                         if (ehr_maybe matches tagged Valid .r) begin
                             r[i] <= req.data;
+                            dbg_print(CSRFile, $format("writing %x to %x", req.data, req.addr));
                         end
                     end
                 end
@@ -90,6 +102,9 @@ module mkCSRFile(CsrFileIFC) provisos (
     method Action write_int_data(Bit#(XLEN) cause, Bit#(XLEN) pc);
         mcause[valueOf(ISSUEWIDTH)] <= cause;
         mepc[valueOf(ISSUEWIDTH)] <= pc;
+        // we do not provide MTVAL feature, therefore it is set to 0
+        // we still need this reg to avoid fault loops
+        mtval[valueOf(ISSUEWIDTH)] <= 0;
     endmethod
 
 

@@ -1,5 +1,15 @@
 package Commit;
 
+/*
+  The COMMIT stage updates the architectural state.
+  It dequeues instructions from the ROB and creates
+  write requests for registers, CSRs and memory.
+
+  If a branch misprediction occurs. the Commit stage
+  redirects the FETCH stage and provides training data
+  to the predictors.
+*/
+
 import Debug::*;
 import Types::*;
 import Vector::*;
@@ -11,15 +21,17 @@ import BlueAXI::*;
 import Connectable::*;
 import GetPut::*;
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkCommit(CommitIFC) provisos(
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
-    Log#(issuewidth_pad_t, issuewidth_log_t)
+    Log#(issuewidth_pad_t, issuewidth_log_t) //type to count inst from 0-ISSUEWIDTH
 );
 
 FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- mkPipelineFIFO();
 
-// if the prediction performance shall be tracked, create counters
+// those counters are used to track prediction performance
 `ifdef EVA_BR
     Reg#(UInt#(XLEN)) correct_pred_br_r <- mkReg(0);
     Reg#(UInt#(XLEN)) wrong_pred_br_r <- mkReg(0);
@@ -137,6 +149,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     if(instructions[i].branch == True 
                         && fromInteger(i) < count && 
                         instructions[i].next_pc == instructions[i].pred_pc) begin
+                            if(instructions[i].br) dbg_print(History, $format("%b %b", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
                             `ifdef EVA_BR
                                 if(instructions[i].br)
                                     correct_pred_br_local = correct_pred_br_local + 1;
@@ -152,6 +165,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     redirect_pc_w_exc.wset(tuple2(instructions[i].next_pc, instructions[i].ras));
                     done = True;
                     count_committed = fromInteger(i+1);
+                    if(instructions[i].br) dbg_print(History, $format("%b %b", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
                     `ifdef EVA_BR
                         if(instructions[i].br)
                             wrong_pred_br_local = wrong_pred_br_local + 1;

@@ -1,5 +1,9 @@
 package MulDiv;
 
+/*
+  FU for multipla-divide operations
+*/
+
 import Interfaces::*;
 import Types::*;
 import Inst_Types::*;
@@ -38,17 +42,15 @@ function Tuple3#(Bit#(64), Bit#(64), Bool) operands_to_unsigned_tuple(Tuple4#(Bi
 endfunction
 
 // simple mul using the bluespec operator
+// slow implementation, only as a counter-example
 module mkNaiveMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(64)));
     
     FIFO#(Bit#(64)) out_f <- mkPipelineFIFO();
 
     interface Put request;
         method Action put(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool) req);
-            
             let operands = operands_to_unsigned_tuple(req);
-
             Bit#(64) result = tpl_1(operands) * tpl_2(operands);
-
             out_f.enq(tpl_3(operands) ? two_complement_forward(result) : result);
         endmethod
     endinterface
@@ -61,7 +63,6 @@ module mkNaiveMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(64))
             endactionvalue
         endmethod
     endinterface
-    
 endmodule
 
 // mul requiring multiple CPU cycles but allowing for higher clock speed
@@ -88,7 +89,6 @@ module mkMultiCycleMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#
 
     interface Put request;
         method Action put(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool) req) if (busy_r == False && out_f.notFull());
-            
             let operands = operands_to_unsigned_tuple(req);
             busy_r <= True;
             op1_r <= tpl_1(operands);
@@ -115,10 +115,10 @@ module mkPipelineMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(6
     FIFO#(Bit#(64)) out_f <- mkPipelineFIFO();
     Vector#(32, FIFO#(Bit#(64))) stage1_buf <- replicateM(mkPipelineFIFO());
     Vector#(16, FIFO#(Bit#(64))) stage2_buf <- replicateM(mkPipelineFIFO());
-    Vector#(8, FIFO#(Bit#(64))) stage3_buf <- replicateM(mkPipelineFIFO());
-    Vector#(4, FIFO#(Bit#(64))) stage4_buf <- replicateM(mkPipelineFIFO());
-    Vector#(2, FIFO#(Bit#(64))) stage5_buf <- replicateM(mkPipelineFIFO());
-    FIFO#(Bit#(64)) stage6_buf <- mkPipelineFIFO();
+    Vector#(8, FIFO#(Bit#(64))) stage3_buf <-  replicateM(mkPipelineFIFO());
+    Vector#(4, FIFO#(Bit#(64))) stage4_buf <-  replicateM(mkPipelineFIFO());
+    Vector#(2, FIFO#(Bit#(64))) stage5_buf <-  replicateM(mkPipelineFIFO());
+    FIFO#(Bit#(64)) stage6_buf <-                         mkPipelineFIFO();
     FIFO#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool)) incoming_request <- mkPipelineFIFO();
     FIFO#(Tuple3#(Bit#(64), Bit#(64), Bool)) stage0_buf <- mkPipelineFIFO();
 
@@ -150,7 +150,6 @@ module mkPipelineMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(6
     endrule
 
     // build a sum tree
-
     rule stage_2;
         for(Integer i = 0; i < 32; i = i+1) stage1_buf[i].deq();
         for(Integer i = 0; i < 16; i = i+1) begin
@@ -277,7 +276,9 @@ endmodule
 // Real FU module
 ///////////////////////////////////////////////////////////////////
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkMulDiv(FunctionalUnitIFC);
 
 // in and out buffers for this FU
@@ -287,14 +288,14 @@ RWire#(Result) out_valid <- mkRWire();
 
 //Select correct multipliers and dividers based on configured strategy
 Server#(Tuple2#(UInt#(64),UInt#(XLEN)),Tuple2#(UInt#(XLEN),UInt#(XLEN))) unsigned_div <- case (valueOf(MUL_DIV_STRATEGY)) 
-    2: mkDivider(1);
-    1: mkNonPipelinedDivider(1);
+    2: mkDivider(4);
+    1: mkNonPipelinedDivider(4);
     0: mkNaiveDivUnsigned();
     endcase;
 
 Server#(Tuple2#(Int#(64),Int#(XLEN)),Tuple2#(Int#(XLEN),Int#(XLEN))) signed_div <- case (valueOf(MUL_DIV_STRATEGY)) 
-    2: mkSignedDivider(1);
-    1: mkNonPipelinedSignedDivider(1);
+    2: mkSignedDivider(4);
+    1: mkNonPipelinedSignedDivider(4);
     0: mkNaiveDivSigned();
     endcase;
     
@@ -397,15 +398,10 @@ rule propagate_result;
     out.deq();
     let res = out.first();
     out_valid.wset(res);
-
 endrule
 
-method Action put(Instruction inst);
-    in.enq(inst);
-endmethod
-
-method Maybe#(Result) get() =
-    out_valid.wget();
+method Action put(Instruction inst) = in.enq(inst);
+method Maybe#(Result) get() = out_valid.wget();
 endmodule
 
 endpackage

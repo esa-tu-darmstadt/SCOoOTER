@@ -7,32 +7,42 @@ typedef 0 RESETVEC;
 typedef 'h10000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
-typedef 1 ROBDEPTH;
+typedef 2 ROBDEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)
-typedef 2 INST_WINDOW;
+typedef 4 INST_WINDOW;
 
 // 0: single cycle
 // 1: multi cycle
 // 2: pipelined
-typedef 2 MUL_DIV_STRATEGY;
+typedef 1 MUL_DIV_STRATEGY;
 
-typedef 7 NUM_FU;
-typedef 7 NUM_RS;
+// CSR, Br and Mem units are always one
+typedef 2 NUM_ALU;
+typedef 1 NUM_MULDIV;
+
+// rs depths
+typedef 2 RS_DEPTH_ALU;
+typedef 2 RS_DEPTH_MEM;
+typedef 2 RS_DEPTH_CSR;
+typedef 2 RS_DEPTH_MULDIV;
+typedef 2 RS_DEPTH_BR;
 
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 0 BRANCHPRED;
+typedef 2 BRANCHPRED;
 
 typedef 4 BITS_BTB;
 typedef 4 BITS_PHT;
 
 typedef 4 BITS_BHR;
 
-typedef 0 USE_RAS;
-typedef 0 RAS_SAVE_HEAD;
-typedef 0 RAS_SAVE_FIRST;
-typedef 16 RASDEPTH;
+typedef 1 USE_RAS;
+typedef 1 RAS_SAVE_HEAD;
+typedef 1 RAS_SAVE_FIRST;
+typedef 4 RASDEPTH;
+
+typedef 4 STORE_BUF_DEPTH;
 endpackage

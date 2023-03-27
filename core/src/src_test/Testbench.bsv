@@ -12,8 +12,8 @@ package Testbench;
         `endif
 
         `ifdef CUSTOM_TB
-            let testCustom <- mkTestProgram("../../testPrograms/custom/test_ext_int/bsv/test_ext_int_32.bsv",
-                "../../testPrograms/custom/test_ext_int/bsv/test_ext_int-data_32.bsv", 
+            let testCustom <- mkTestProgram("../../tools/riscv-arch-test/work/rv32i_m/privilege/ecall_32.bsv",
+                "../../tools/riscv-arch-test/work/rv32i_m/privilege/ecall-data_32.bsv", 
                 "custom", 
                 'hffffffff, 
                 'hffffffff);
