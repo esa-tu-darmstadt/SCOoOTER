@@ -7,6 +7,14 @@ IGNORE_MODULES=mkTestbench mkTestsMainTest
 MAIN_MODULE=src_core/SCOOOTER_riscv
 TESTBENCH_FILE=src/src_test/Testbench.bsv
 
+ifeq ($(SOC), 1)
+	TOP_MODULE=mkExecCore
+	MAIN_MODULE=src_core/exec_core/ExecCore
+else
+	TOP_MODULE=mkSCOOOTER_riscv
+	MAIN_MODULE=src_core/SCOOOTER_riscv
+endif
+
 # Initialize
 -include .bsv_tools
 ifndef BSV_TOOLS
@@ -20,6 +28,15 @@ RUN_FLAGS:=
 
 TB?=ISA_TB
 BRANCH?=0
+# 1: build frontend, exec and backend separately
+# 2: build all modules separately
+SYNTH?=0
+ifeq ($(SYNTH), 1)
+	EXTRA_FLAGS+= -D SYNTH_SEPARATE_BLOCKS
+endif
+ifeq ($(SYNTH), 2)
+	EXTRA_FLAGS+= -D SYNTH_SEPARATE_BLOCKS -D SYNTH_SEPARATE
+endif
 
 # Add subdirectories
 EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
@@ -31,9 +48,9 @@ RUN_TEST=TestsMainTest
 endif
 
 # Default flags
-EXTRA_FLAGS= +RTS -K65535000 -RTS -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)"
+EXTRA_FLAGS= +RTS -K65535000 -RTS -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
 EXTRA_FLAGS+=-show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
-EXTRA_FLAGS+=-D $(TB)
+EXTRA_FLAGS+=-D $(TB) -D BSV_NO_INITIAL_BLOCKS
 
 ifeq ($(BRANCH),1)
 EXTRA_FLAGS+=-D EVA_BR

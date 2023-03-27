@@ -9,17 +9,22 @@ import Inst_Types::*;
 import Interfaces::*;
 import Debug::*;
 import Ehr::*;
+import ClientServer::*;
+import GetPut::*;
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkRegFile(RegFileIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t)
 );
 
     // stateful registers
+    // we do not need reg0, as this is hardwired to 0
     Vector#(31, Ehr#(issuewidth_pad_t, Bit#(XLEN))) regs <- replicateM(mkEhr(?));
 
-    // helper function for reading ehr registers (returns value from port 0)
-    function Bit#(XLEN) get_ehr_read(Ehr#(issuewidth_pad_t, Bit#(XLEN)) e) = e[valueOf(ISSUEWIDTH)];
+    // buffer for read requests
+    Wire#(Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) register_responses_w <- mkWire();
 
     // print the whole register file for debugging
     rule print_debug;
@@ -40,10 +45,29 @@ module mkRegFile(RegFileIFC) provisos (
 
     endmethod
 
-    // return the entire reg file
-    method Vector#(31, Bit#(XLEN)) values();
-        return Vector::map(get_ehr_read, regs);
-    endmethod
+    // server for register reading
+    interface Server read_registers;
+        interface Put request;
+            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RADDR) req);
+                Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN)) response;
+
+                for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
+                    let reg_addr = req[i];
+                    response[i] = regs[reg_addr-1][0];
+                end
+
+                register_responses_w <= response;
+            endmethod
+        endinterface
+
+        interface Get response;
+            method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) get();
+                actionvalue
+                    return register_responses_w;
+                endactionvalue
+            endmethod
+        endinterface
+    endinterface
 
 endmodule
 

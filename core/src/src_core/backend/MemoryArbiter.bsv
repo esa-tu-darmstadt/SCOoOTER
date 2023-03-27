@@ -10,6 +10,9 @@ import FIFOF::*;
 import FIFO::*;
 import SpecialFIFOs::*;
 
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkMemoryArbiter(MemoryArbiterIFC);
 
     //AXI modules

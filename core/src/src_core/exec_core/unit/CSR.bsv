@@ -1,5 +1,20 @@
 package CSR;
 
+/*
+  This is the CSR FU
+
+  unlike the arch regs, we do not use a
+  speculative shadow regfile for CSRs as
+  the regfile is quite large and CSR inst quite
+  infrequent.
+
+  We therefore have a signal from ROB that tells
+  us if a CSR instruction may perform.
+
+  Interrupt returns also pass through here as
+  they share the system opcode.
+*/
+
 import Interfaces::*;
 import Types::*;
 import Inst_Types::*;
@@ -10,6 +25,7 @@ import Debug::*;
 import GetPut::*;
 import ClientServer::*;
 
+// CSR operation enum
 typedef enum {
         RW,
         RS,
@@ -17,9 +33,12 @@ typedef enum {
         RWI,
         RSI,
         RCI,
-        RET
+        RET,
+        ECALL,
+        EBREAK
 } OpType deriving(Bits, Eq, FShow);
 
+// internal struct used between stages
 typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag;
     OpType op;
@@ -28,28 +47,42 @@ typedef struct {
     Bit#(12) addr;
 } Internal_struct deriving(Bits, FShow);
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkCSR(CsrIFC);
 
+// in, out FIFOS and output wire
 FIFO#(Instruction) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 RWire#(Result) out_valid <- mkRWire();
+Reg#(Bool) inflight_r <- mkReg(False);
 
-FIFO#(Bit#(12))   csr_req <- mkBypassFIFO();
+// req and resp wires for CSR reading
+FIFO#(Bit#(12)) csr_req <- mkBypassFIFO();
 FIFO#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassFIFO();
-
+// Buffer between stages
 FIFO#(Internal_struct) stage1 <- mkPipelineFIFO();
 
+// wire to propagate if CSR is currently blocked
 Wire#(Bool) blocked <- mkBypassWire();
 
-rule get_request if (!blocked);
+// request CSR read and enqueue into buffer between stages
+rule get_request if (!blocked && !inflight_r);
     let inst = in.first(); in.deq();
+
+    inflight_r <= True;
 
     Bit#(12) csr_addr = inst.imm[31:20];
     Bit#(5) csr_imm = inst.imm[19:15];
 
+    dbg_print(CSR, $format("%x", inst.pc));
+
     // request
-    if(inst.funct != RET) csr_req.enq(csr_addr);
+    if(inst.funct != RET &&
+       inst.funct != ECALL &&
+       inst.funct != EBREAK
+       ) csr_req.enq(csr_addr);
 
     //operand
     let op = case (inst.funct)
@@ -61,25 +94,31 @@ rule get_request if (!blocked);
         tag: inst.tag,
         except: isValid(inst.exception),
         op: case (inst.funct)
-                RW: RW;
-                RS: RS;
-                RC: RC;
-                RWI: RWI;
-                RSI: RSI;
-                RCI: RCI;
-                RET: RET;
+                RW:     RW;
+                RS:     RS;
+                RC:     RC;
+                RWI:    RWI;
+                RSI:    RSI;
+                RCI:    RCI;
+                RET:    RET;
+                ECALL:  ECALL;
+                EBREAK: EBREAK;
             endcase,
         operand: op,
         addr: csr_addr
     });
 endrule
 
-rule read_modify (stage1.first().op != RET);
+// read the CSR and write it if needed
+rule read_modify (stage1.first().op != RET && stage1.first().op != RET && stage1.first().op != EBREAK);
     let csr_data = csr_res.first(); csr_res.deq();
     let internal = stage1.first(); stage1.deq();
 
+    dbg_print(CSR, $format("read: %x %x", internal.addr, csr_data, fshow(blocked)));
+
     Result res = ?;
 
+    // return read data and csr writing request
     if(csr_data matches tagged Valid .data) begin
         let out = case (internal.op)
             RW, RWI: internal.operand;
@@ -93,7 +132,7 @@ rule read_modify (stage1.first().op != RET);
             tag : internal.tag, 
             write : tagged Csr CsrWrite {addr: internal.addr, data: out}
         };
-    end else
+    end else // if no read was returned, the CSR does not exist
         res = Result {
             result : tagged Except INVALID_INST,
             new_pc : tagged Invalid,
@@ -105,45 +144,44 @@ rule read_modify (stage1.first().op != RET);
 
 endrule
 
-rule dummy_result_ret (stage1.first().op == RET);
+// for an interrupt return, return dummy values
+rule dummy_result_ret (stage1.first().op == RET || stage1.first().op == ECALL || stage1.first().op == EBREAK);
     let internal = stage1.first(); stage1.deq();
     let res = Result {
-        result : tagged Result 0,
+        result : case (stage1.first().op)
+                    RET:    tagged Result 0;
+                    ECALL:  tagged Except ECALL_M;
+                    EBREAK: tagged Except BREAKPOINT;
+                 endcase,
         new_pc : tagged Invalid,
         tag : internal.tag, 
         write : tagged None
     };
-
     out.enq(res);
 endrule
 
+// propagate result to out wires
 rule propagate_result;
     out.deq();
     let res = out.first();
     out_valid.wset(res);
+    inflight_r <= False;
 endrule
 
+// FU interface
 interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst);
-        in.enq(inst);
-    endmethod
-
-    method Maybe#(Result) get() =
-        out_valid.wget();
+    method Action put(Instruction inst) = in.enq(inst);
+    method Maybe#(Result) get() = out_valid.wget();
 endinterface
 
+// CSR read interface
 interface Client csr_read;
-
     interface Get request = toGet(csr_req);
     interface Put response = toPut(csr_res);
-
 endinterface
 
-method Action block(Bool b);
-    blocked <= b;
-endmethod
-
-
+// input from ROB that blocks CSR operations if one is pending
+method Action block(Bool b) = blocked._write(b);
 
 endmodule
 

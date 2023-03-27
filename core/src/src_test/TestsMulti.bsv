@@ -16,6 +16,12 @@ package TestsMulti;
     module mkTestsISA(Empty) provisos(
     );
 
+        function inst_test_priv(String name_unit) = mkTestProgram("../../testPrograms/priv/bsv_hex/"+name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
+		    "../../testPrograms/priv/bsv_hex/"+name_unit+"-data_32.bsv", 
+		    name_unit,
+		    100000,
+            'haaaaaaaa);
+
         function inst_test_ISA(Test_unit in) = mkTestProgram("../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
 		    "../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"-data_32.bsv", 
 		    in.name_unit,
@@ -97,7 +103,29 @@ package TestsMulti;
             test_units = List::cons(Test_unit {isa: "32ua", name_unit: "rv32ua-p-lrsc"}, test_units);
 
             List#(TestProgIFC) inst_test_modules <- List::mapM(inst_test_ISA, test_units);
+        `endif
 
+        `ifdef PRIV_TB
+            List#(String) test_names = list(
+                "ebreak",
+                "ecall",
+                "misalign1-jalr-01",
+                "misalign2-jalr-01",
+                "misalign-beq-01",
+                "misalign-bge-01",
+                "misalign-bgeu-01",
+                "misalign-blt-01",
+                "misalign-bltu-01",
+                "misalign-bne-01",
+                "misalign-jal-01",
+                "misalign-lh-01",
+                "misalign-lhu-01",
+                "misalign-lw-01",
+                "misalign-sh-01",
+                "misalign-sw-01"
+            );
+
+            List#(TestProgIFC) inst_test_modules <- List::mapM(inst_test_priv, test_names);
         `endif
 
         `ifdef EMBENCH_TB
