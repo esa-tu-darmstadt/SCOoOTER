@@ -18,9 +18,10 @@ typedef 16 INST_WINDOW;
 // 2: pipelined
 typedef 2 MUL_DIV_STRATEGY;
 
-// CSR, Br and Mem units are always one
+// CSR and Mem units are always one
 typedef 3 NUM_ALU;
 typedef 1 NUM_MULDIV;
+typedef 1 NUM_BR;
 
 // rs depths
 typedef 6 RS_DEPTH_ALU;
