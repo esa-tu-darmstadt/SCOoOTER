@@ -251,7 +251,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 
     // dequeue an instruction if it was retrieved
     Wire#(UInt#(entries_idx_t)) clear_idx_w <- mkWire();
-    (* conflict_free = "listen_to_cdb, insert_instruction, clear_instruction" *)
+    (* conflict_free = "insert_instruction, clear_instruction" *)
     rule clear_instruction;
         dbg_print(RS, $format("clearing inst: idx ", fshow(clear_idx_w)));
         instruction_buffer_port1_v[clear_idx_w] <= tagged Invalid;

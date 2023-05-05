@@ -70,12 +70,12 @@ module mkExecCore(ExecCoreIFC);
     // instantiate all functional units
     Vector#(NUM_ALU, FunctionalUnitIFC) alus <- replicateM(mkArith());
     Vector#(NUM_MULDIV, FunctionalUnitIFC) mds <- replicateM(mkMulDiv());
-    let branch <- mkBranch();
+    Vector#(NUM_BR, FunctionalUnitIFC) brs <- replicateM(mkBranch());
     let mem <- mkMem();
     let csr <- mkCSR();
 
     // generate the result bus
-    let fu_vec = append(alus, append(mds, vec(mem.fu, csr.fu, branch)));
+    let fu_vec = append(alus, append(append(mds, vec(mem.fu, csr.fu)), brs));
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -86,11 +86,11 @@ module mkExecCore(ExecCoreIFC);
     //MEM unit
     ReservationStationWrIFC rs_mem <- mkReservationStationMEM();
     //branch unit
-    ReservationStationWrIFC rs_br <- mkReservationStationBR();
+    Vector#(NUM_BR, ReservationStationWrIFC) rs_brs <- replicateM(mkReservationStationBR());
     //csr unit
     ReservationStationWrIFC rs_csr <- mkReservationStationCSR();
     Vector#(NUM_RS, ReservationStationWrIFC) rs_vec = 
-        append(rs_alus, append(rs_mds, vec(rs_mem, rs_csr, rs_br)));
+        append(rs_alus, append(append(rs_mds, vec(rs_mem, rs_csr)), rs_brs));
 
     // connect RS and FUs
     for(Integer i = 0; i < valueOf(NUM_FU); i=i+1)

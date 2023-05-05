@@ -16,8 +16,9 @@ typedef TAdd#(
             RAS_EXTRA;
 
 typedef TAdd#(
-            TAdd#(NUM_ALU, NUM_MULDIV),
-            3
+            TAdd#(
+                TAdd#(NUM_ALU, NUM_MULDIV), NUM_BR),
+            2
             )
             NUM_FU;
 
