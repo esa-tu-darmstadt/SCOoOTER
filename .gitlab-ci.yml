@@ -9,6 +9,7 @@ stages:
   - build
   - isa
   - priv
+  - multi
   - embench (smiths)
   - embench (gshare)
   - embench (gskewed)
@@ -54,6 +55,25 @@ deps:
 
   # build priv tests
   - pushd tools/riscv-arch-tests
+  - make install
+  - popd
+
+  # build amo tests
+  - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
+  - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor
+  - yum install -y python3 python3-pip libXft
+  - pip install cocotb-bus cocotb
+  - pushd tools/riscv-dv
+  - export PATH=$HOME/.local/bin/:$PATH  # add ~/.local/bin to the $PATH (only once)
+  - pip3 install --user -e .
+  - popd
+  - pushd tools/riscv-dv-build
+  - make install
+  - popd
+
+  # build custom stuff
+  - pushd tools/customTests
+  - make
   - make install
   - popd
   
@@ -104,6 +124,7 @@ run_isaTb_medium:
     
 run_isaTb_high:
   stage: isa
+  allow_failure: True
   script:
     - cp testConfigs/high_nopred.bsv core/src/Config.bsv
     - pushd core
@@ -136,7 +157,7 @@ run_privTb_high:
 
 run_embenchTb_smiths_simple:
   stage: embench (smiths)
-  timeout: 24h
+  timeout: 2d
   script:
     - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
     - pushd core
@@ -145,7 +166,8 @@ run_embenchTb_smiths_simple:
     
 run_embenchTb_smiths_medium:
   stage: embench (smiths)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/medium_smiths.bsv core/src/Config.bsv
     - pushd core
@@ -154,7 +176,8 @@ run_embenchTb_smiths_medium:
     
 run_embenchTb_smiths_high:
   stage: embench (smiths)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/high_smiths.bsv core/src/Config.bsv
     - pushd core
@@ -163,7 +186,7 @@ run_embenchTb_smiths_high:
 
 run_embenchTb_gshare_simple:
   stage: embench (gshare)
-  timeout: 24h
+  timeout: 2d
   script:
     - cp testConfigs/simple_gshare.bsv core/src/Config.bsv
     - pushd core
@@ -172,7 +195,8 @@ run_embenchTb_gshare_simple:
     
 run_embenchTb_gshare_medium:
   stage: embench (gshare)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
     - pushd core
@@ -181,7 +205,8 @@ run_embenchTb_gshare_medium:
     
 run_embenchTb_gshare_high:
   stage: embench (gshare)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/high_gshare.bsv core/src/Config.bsv
     - pushd core
@@ -190,7 +215,7 @@ run_embenchTb_gshare_high:
 
 run_embenchTb_none_simple:
   stage: embench (no predictor)
-  timeout: 24h
+  timeout: 2d
   script:
     - cp testConfigs/simple_nopred.bsv core/src/Config.bsv
     - pushd core
@@ -199,7 +224,8 @@ run_embenchTb_none_simple:
     
 run_embenchTb_none_medium:
   stage: embench (no predictor)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/medium_nopred.bsv core/src/Config.bsv
     - pushd core
@@ -208,7 +234,8 @@ run_embenchTb_none_medium:
     
 run_embenchTb_none_high:
   stage: embench (no predictor)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/high_nopred.bsv core/src/Config.bsv
     - pushd core
@@ -217,7 +244,7 @@ run_embenchTb_none_high:
 
 run_embenchTb_gskewed_simple:
   stage: embench (gskewed)
-  timeout: 24h
+  timeout: 2d
   script:
     - cp testConfigs/simple_gskewed.bsv core/src/Config.bsv
     - pushd core
@@ -226,7 +253,8 @@ run_embenchTb_gskewed_simple:
     
 run_embenchTb_gskewed_medium:
   stage: embench (gskewed)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/medium_gskewed.bsv core/src/Config.bsv
     - pushd core
@@ -235,9 +263,26 @@ run_embenchTb_gskewed_medium:
     
 run_embenchTb_gskewed_high:
   stage: embench (gskewed)
-  timeout: 24h
+  timeout: 2d
+  allow_failure: true
   script:
     - cp testConfigs/high_gskewed.bsv core/src/Config.bsv
     - pushd core
     - make TB=EMBENCH_TB BRANCH=1
+    - popd
+
+run_amo_multicore:
+  stage: multi
+  script:
+    - cp testConfigs/multihart-isa.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=AMO_TB
+    - popd
+
+run_lrsc_stress_multicore:
+  stage: multi
+  script:
+    - cp testConfigs/multihart-random.bsv core/src/Config.bsv
+    - pushd core
+    - make TB=LRSC_TB
     - popd

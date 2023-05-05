@@ -13,3 +13,6 @@
 [submodule "tools/riscv-arch-tests/riscv-arch-test"]
 	path = tools/riscv-arch-tests/riscv-arch-test
 	url = https://github.com/riscv-non-isa/riscv-arch-test.git
+[submodule "tools/riscv-dv"]
+	path = tools/riscv-dv
+	url = https://github.com/chipsalliance/riscv-dv

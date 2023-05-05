@@ -36,6 +36,8 @@ interface BackendIFC;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
     method Bool store_queue_empty();
+    (* always_ready, always_enabled *)
+    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
@@ -63,7 +65,14 @@ module mkBackend(BackendIFC) provisos (
     // csr writing
     mkConnection(commit.csr_writes, csrf.writes);
     // mem writing
-    mkConnection(commit.memory_writes, store_buf.memory_writes);
+    rule pass_mem_to_sb;
+        store_buf.memory_writes.put(commit.memory_writes.first());
+    endrule
+    rule deq_mem_wrs;
+        if(store_buf.deq_memory_writes())
+            commit.memory_writes.deq();
+    endrule
+
     // reg writing
     rule connect_commit_regs;
         let requests <- commit.get_write_requests();
@@ -119,6 +128,7 @@ module mkBackend(BackendIFC) provisos (
         method UInt#(XLEN) correct_pred_j = commit.correct_pred_j;
         method UInt#(XLEN) wrong_pred_j = commit.wrong_pred_j;
     `endif
+    method Action hart_id(Bit#(TLog#(NUM_CPU)) in) = csrf.hart_id(in);
 endmodule
 
 endpackage

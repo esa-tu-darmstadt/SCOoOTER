@@ -77,7 +77,10 @@ for arch in [32, 64, 96, 128, 160, 192, 224, 256]:
 				chunk_hex = [chunk.hex()[i:i+2] for i in range(0, len(chunk.hex()), 2)]
 				chunks_inst = chunk_list(chunk_hex, int(arch/8)) # split byte array into words
 				for inst in chunks_inst:
-					out_b.write(inst[i])
+					try:
+						out_b.write(inst[i])
+					except:
+						out_b.write("00");
 				out_b.write("\n")
 		out_b.close();
 

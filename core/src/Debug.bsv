@@ -25,7 +25,8 @@ typedef enum {
     PRED,
     CSR,
     CSRFile,
-    History
+    History,
+    CoherentMem
 } DbgTag deriving(Eq, FShow);
 
 // List of currently allowed prints

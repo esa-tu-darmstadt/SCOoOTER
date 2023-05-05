@@ -15,12 +15,14 @@ import AlwaysUntaken::*;
 import Gshare::*;
 import Gskewed::*;
 import Smiths::*;
+import GetPut::*;
+import ClientServer::*;
 
 // this package contains the frontend components of the core
 // the frontend fetches instructions and provides them to the exec core
 
 interface FrontendIFC;
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
+    interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read_inst;
     method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
     interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
@@ -72,7 +74,7 @@ module mkFrontend(FrontendIFC);
     interface GetSC decoded_inst = decode.decoded_inst;
 
     // port to main mem
-    interface imem_axi = ifu.imem_axi;
+    interface read_inst = ifu.read;
 endmodule
 
 endpackage

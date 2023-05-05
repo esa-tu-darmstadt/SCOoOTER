@@ -136,12 +136,11 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != RET && stage1
         res = Result {
             result : tagged Except INVALID_INST,
             new_pc : tagged Invalid,
-            tag : internal.tag, 
+            tag : internal.tag,
             write : tagged None
         };
 
     out.enq(res);
-
 endrule
 
 // for an interrupt return, return dummy values

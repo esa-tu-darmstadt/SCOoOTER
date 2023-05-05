@@ -43,8 +43,7 @@ interface ExecCoreIFC;
 
     // memory handling
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
-    interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
-    interface Client#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType), Bit#(XLEN)) amo;
+    interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) read;
     interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     method Action store_queue_empty(Bool b);
 
@@ -165,8 +164,7 @@ module mkExecCore(ExecCoreIFC);
     endmethod
     method Action csr_busy(Bool b) = csr.block(b);
     interface Client check_store_buffer = mem.check_store_buffer();
-    interface Client read = mem.read();
-    interface Client amo = mem.amo();
+    interface Client read = mem.request();
     method Vector#(NUM_FU, Maybe#(Result)) res_bus = result_bus_vec;
     interface Client csr_read = csr.csr_read;
     method Action store_queue_empty(Bool b) = mem.store_queue_empty(b);

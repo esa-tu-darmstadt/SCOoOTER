@@ -27,8 +27,8 @@ module mkFetch(FetchIFC) provisos(
         Mul#(XLEN, IFUINST, ifuwidth) //the width of the IFU axi must be as large as the size of a word times the issuewidth
 );
 
-    //AXI for mem access
-    AXI4_Master_Rd#(XLEN, ifuwidth, 0, 0) axi <- mkAXI4_Master_Rd(0, 0, False);
+    FIFO#(Bit#(XLEN)) request_mem_f <- mkBypassFIFO();
+    FIFO#(Bit#(ifuwidth)) response_mem_f <- mkBypassFIFO();
 
     RASIfc ras <- mkRAS();
     //pc points to next instruction to load
@@ -60,7 +60,7 @@ module mkFetch(FetchIFC) provisos(
     // Due to the PC FIFO
     rule requestRead;
         // addrs to AXI may be weird here
-        axi4_read_data(axi, pc[2], 0);
+        request_mem_f.enq(pc[2]);
         inflight_pcs.enq(pc[2]);
         inflight_epoch.enq(epoch[1]);
         target_request_f.enq(pc[2]);
@@ -68,7 +68,7 @@ module mkFetch(FetchIFC) provisos(
 
     // if the epoch has changed, drop read data
     rule dropReadResp (inflight_epoch.first() != epoch[1]);
-        let r <- axi.response.get;
+        let r = response_mem_f.first(); response_mem_f.deq();
         inflight_pcs.deq();
         inflight_epoch.deq();
         dbg_print(Fetch, $format("drop read"));
@@ -93,8 +93,8 @@ module mkFetch(FetchIFC) provisos(
                         fetched_inst.notFull() &&
                         fetched_amount.notFull()
                         );
-        let r <- axi.response.get();
-        pass_incoming_w <= r.data;
+        let r = response_mem_f.first(); response_mem_f.deq();
+        pass_incoming_w <= r;
 
         let acqpc = inflight_pcs.first();
         let dir_predictions = target_resp_f.first();
@@ -104,7 +104,7 @@ module mkFetch(FetchIFC) provisos(
         // request predictions
         for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
             if(fromInteger(i) < count_read) begin
-                Bit#(XLEN) iword = r.data[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
+                Bit#(XLEN) iword = r[startpoint+fromInteger(i)*32+31 : startpoint+fromInteger(i)*32];
                 if(iword[6:0] == 7'b1100011) begin
                     dir_request_w_v[i] <= tuple2(acqpc + fromInteger(i)*4, isValid(dir_predictions[i]));
                 end
@@ -132,7 +132,7 @@ module mkFetch(FetchIFC) provisos(
 
     // Evaluates fetched instructions if there is enough space in the instruction window
     // TODO: make enqueued value dynamic
-    rule getReadResp;        
+    rule getReadResp (inflight_epoch.first() == epoch[1]);        
         target_resp_f.deq();
         inflight_epoch.deq();
 
@@ -236,7 +236,10 @@ module mkFetch(FetchIFC) provisos(
         endmethod
     endinterface
 
-    interface imem_axi = axi.fab;
+    interface Client read;
+        interface Get request = toGet(request_mem_f);
+        interface Put response = toPut(response_mem_f);
+    endinterface
 endmodule
 
 endpackage

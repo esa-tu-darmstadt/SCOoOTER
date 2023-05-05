@@ -16,7 +16,8 @@ import SpecialFIFOs::*;
 import Debug::*;
 
 module mkCSRFile(CsrFileIFC) provisos (
-    Add#(ISSUEWIDTH, 1, issuewidth_pad_t)
+    Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
+    Log#(NUM_CPU, cpu_idx_t)
 );
 
     // register implementations
@@ -28,6 +29,7 @@ module mkCSRFile(CsrFileIFC) provisos (
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mstatus <- mkEhr(0);
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mscratch <- mkEhr(0);
     Ehr#(issuewidth_pad_t, Bit#(XLEN)) mtval <- mkEhr(0);
+    Ehr#(issuewidth_pad_t, Bit#(XLEN)) mhartid <- mkEhr(?);
 
     // buffer for read responses
     FIFO#(Maybe#(Bit#(XLEN))) read_resp <- mkPipelineFIFO();
@@ -43,6 +45,7 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h340: tagged Valid mscratch;
             'h300: tagged Valid mstatus;
             'h343: tagged Valid mtval;
+            'hf14: tagged Valid mhartid;
             default: tagged Invalid;
         endcase;
     endfunction
@@ -92,7 +95,7 @@ module mkCSRFile(CsrFileIFC) provisos (
         endmethod
     endinterface
 
-    // output current trap vercor and return address to commit
+    // output current trap vector and return address to commit
     method Tuple2#(Bit#(XLEN), Bit#(XLEN)) trap_vectors() = tuple2(mtvec[0], mepc[0]);
     
     // output current interrupt bits to commit
@@ -105,6 +108,10 @@ module mkCSRFile(CsrFileIFC) provisos (
         // we do not provide MTVAL feature, therefore it is set to 0
         // we still need this reg to avoid fault loops
         mtval[valueOf(ISSUEWIDTH)] <= 0;
+    endmethod
+
+    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
+        mhartid[valueOf(ISSUEWIDTH)] <= extend(in);
     endmethod
 
 

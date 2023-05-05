@@ -26,16 +26,16 @@
 ARCH?="RV32"
 
 ifeq ($(ARCH), "RV32")
-	MARCH?="rv32im"
+	MARCH?="rv32ima"
 	MABI?="ilp32"
 	OUT?="32bit"
 else
-	MARCH?="rv64im"
+	MARCH?="rv64ima"
 	MABI?="lp64"
 	OUT?="64bit"
 endif
 
-CROSS_COMPILE?="riscv32-unknown-elf"
+CROSS_COMPILE?="riscv64-unknown-elf"
 CFLAGS+=-march=${MARCH} -mabi=${MABI} -fno-zero-initialized-in-bss -O0 -nostdlib -T rv.ld startup.s -g
 OFLAGS+=-O binary
 
