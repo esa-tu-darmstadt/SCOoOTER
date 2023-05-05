@@ -23,7 +23,6 @@ import Mem::*;
 import GetPut::*;
 import Connectable :: *;
 import MulDiv::*;
-import MemoryArbiter::*;
 import StoreBuffer::*;
 import BTB::*;
 import Smiths::*;
@@ -41,7 +40,8 @@ import Backend::*;
 module mkSCOOOTER_riscv(Top) provisos(
         Mul#(XLEN, IFUINST, ifuwidth),
         Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
-        Log#(issuewidth_pad_t, issuewidth_log_t)
+        Log#(issuewidth_pad_t, issuewidth_log_t),
+        Log#(NUM_CPU, idx_cpu_t)
     );
 
     let fe <- mkFrontend();
@@ -49,18 +49,10 @@ module mkSCOOOTER_riscv(Top) provisos(
     let be <- mkBackend();
 
     
-
-    let mem_arbiter <- mkMemoryArbiter();
-
-    mkConnection(be.write, mem_arbiter.write);
-
-    
     rule rob_csr;
         let b = be.csr_busy();
         ec.csr_busy(b);
     endrule
-
-    
 
     mkConnection(be.train, fe.train);
 
@@ -77,7 +69,6 @@ module mkSCOOOTER_riscv(Top) provisos(
     
     mkConnection(be.check_pending_memory, ec.check_rob);
     mkConnection(be.forward, ec.check_store_buffer);
-    mkConnection(mem_arbiter.read, ec.read); 
 
     mkConnection(ec.csr_read, be.csr_read);
 
@@ -104,16 +95,10 @@ module mkSCOOOTER_riscv(Top) provisos(
         uncurry(be.reserve)(req);
     endrule
 
-    mkConnection(mem_arbiter.amo, ec.amo);
-
     Vector#(3, Wire#(Bool)) int_mask <- replicateM(mkBypassWire());
     rule push_int;
         be.int_flags(Vector::readVReg(int_mask));
     endrule
-
-    interface imem_axi = fe.imem_axi;
-    interface dmem_axi_w = mem_arbiter.axi_w;
-    interface dmem_axi_r = mem_arbiter.axi_r;
 
     // interrupts
     method Action sw_int(Bool b) = int_mask[2]._write(b);
@@ -126,6 +111,12 @@ module mkSCOOOTER_riscv(Top) provisos(
         method UInt#(XLEN) correct_pred_j = be.correct_pred_j;
         method UInt#(XLEN) wrong_pred_j = be.wrong_pred_j;
     `endif
+
+    interface write_d = be.write;
+    interface read_d = ec.read;
+    interface read_i = fe.read_inst;
+
+    method Action hart_id(Bit#(TLog#(NUM_CPU)) in) = be.hart_id(in);
 
 endmodule
 

@@ -20,6 +20,7 @@ import SpecialFIFOs::*;
 import BlueAXI::*;
 import Connectable::*;
 import GetPut::*;
+import FIFOF::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -54,9 +55,9 @@ FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause <- mkBypassFIFO();
 RWire#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause_exc <- mkRWire();
 Wire#(Bit#(3)) int_in <- mkBypassWire();
 
-FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_rq_out <- mkBypassFIFO();
+FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_rq_out <- mkPipelineFIFOF();
 FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), MIMO::LUInt#(ISSUEWIDTH))) branch_train <- mkBypassFIFO();
-FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), MIMO::LUInt#(ISSUEWIDTH))) csr_rq_out <- mkBypassFIFO();
+FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), MIMO::LUInt#(ISSUEWIDTH))) csr_rq_out <- mkPipelineFIFO();
 
 
 function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch &&& re.write matches tagged Mem .v ? tagged Valid v : tagged Invalid; 
@@ -100,7 +101,7 @@ rule redirect_on_interrupt (int_in != 0 && !int_in_process_r[1]);
 endrule
 
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
-method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
+method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
     actionvalue
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
@@ -113,7 +114,6 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
             UInt#(XLEN) wrong_pred_j_local = wrong_pred_j_r;
         `endif
 
-        //only for bodge
         UInt#(issuewidth_log_t) count_committed = count;
 
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
@@ -125,7 +125,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                    !done) begin
                     instructions[i].next_pc = tvec;
                     instructions[i].pred_pc = ~tvec;
-                    Bit#(31) except_code = extend(pack(instructions[i].result.Except));
+                    Bit#(31) except_code = extend(pack(e));
                     mcause_exc.wset(tuple2( {1'b0, except_code} , instructions[i].pc));
                 end
 
@@ -149,7 +149,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     if(instructions[i].branch == True 
                         && fromInteger(i) < count && 
                         instructions[i].next_pc == instructions[i].pred_pc) begin
-                            if(instructions[i].br) dbg_print(History, $format("%b %b", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
+                            if(instructions[i].br) dbg_print(History, $format(" %b %b ", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
                             `ifdef EVA_BR
                                 if(instructions[i].br)
                                     correct_pred_br_local = correct_pred_br_local + 1;
@@ -165,7 +165,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     redirect_pc_w_exc.wset(tuple2(instructions[i].next_pc, instructions[i].ras));
                     done = True;
                     count_committed = fromInteger(i+1);
-                    if(instructions[i].br) dbg_print(History, $format("%b %b", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
+                    if(instructions[i].br) dbg_print(History, $format(" %b %b ", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
                     `ifdef EVA_BR
                         if(instructions[i].br)
                             wrong_pred_br_local = wrong_pred_br_local + 1;
@@ -207,7 +207,11 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
     endactionvalue
 endmethod
 
-interface Get memory_writes = toGet(memory_rq_out);
+interface GetS memory_writes;
+    interface first = memory_rq_out.first();
+    interface deq = memory_rq_out.deq();
+endinterface
+
 interface Get csr_writes = toGet(csr_rq_out);
 
 method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();

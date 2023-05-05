@@ -45,9 +45,9 @@ module mkSmiths(PredIfc) provisos (
     FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t))) trains <- mkPipelineFIFO();
 
     // train the predictor
+    for(Integer i = 0; i < valueOf(entries_t); i = i+1) begin
     rule elapse_train;
-        let in = trains.first(); trains.deq();
-        for(Integer i = 0; i < valueOf(entries_t); i = i+1) begin
+        let in = trains.first();
                 let found_idx = Vector::findIndex(matches_idx(fromInteger(i)), tpl_1(in));
                 if(found_idx matches tagged Valid .idx &&& extend(idx) < tpl_2(in)) begin
                     if (tpl_1(in)[idx].Valid.taken) begin
@@ -56,7 +56,11 @@ module mkSmiths(PredIfc) provisos (
                         if (pht[i] != 'b00) pht[i] <= pht[i] - 1;
                     end
                 end
-            end
+    endrule
+    end
+
+    rule predictor_deq;
+        trains.deq();
     endrule
 
     // build the prediction interface

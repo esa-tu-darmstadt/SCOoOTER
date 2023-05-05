@@ -1,18 +1,15 @@
 ###
 # DO NOT CHANGE
 ###
-TOP_MODULE=mkSCOOOTER_riscv
+TOP_MODULE=mkDave
 TESTBENCH_MODULE=mkTestbench
 IGNORE_MODULES=mkTestbench mkTestsMainTest
-MAIN_MODULE=src_core/SCOOOTER_riscv
+MAIN_MODULE=src_core/Dave
 TESTBENCH_FILE=src/src_test/Testbench.bsv
 
 ifeq ($(SOC), 1)
 	TOP_MODULE=mkExecCore
 	MAIN_MODULE=src_core/exec_core/ExecCore
-else
-	TOP_MODULE=mkSCOOOTER_riscv
-	MAIN_MODULE=src_core/SCOOOTER_riscv
 endif
 
 # Initialize

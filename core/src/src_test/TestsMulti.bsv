@@ -34,6 +34,18 @@ package TestsMulti;
 		    'hffffffff-1,
             1);
 
+        function inst_test_amo(String name_unit) = mkTestProgram("../../testPrograms/custom/test_multi_core_"+name_unit+"/bsv/test_multi_core_"+name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
+		    "../../testPrograms/custom/test_multi_core_"+name_unit+"/bsv/test_multi_core_"+name_unit+"-data_32.bsv", 
+		    name_unit,
+		    'hffffffff-1,
+            1);
+
+        function inst_test_lrsc(String name_unit) = mkTestProgram("../../testPrograms/amo/bsv_hex/"+name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
+		    "../../testPrograms/amo/bsv_hex/"+name_unit+"-data_32.bsv", 
+		    name_unit,
+		    'hffffffff-1,
+            'h00000800);
+
 
         `ifdef ISA_TB
 
@@ -126,6 +138,30 @@ package TestsMulti;
             );
 
             List#(TestProgIFC) inst_test_modules <- List::mapM(inst_test_priv, test_names);
+        `endif
+
+        `ifdef AMO_TB
+            List#(String) test_names = list(
+                "amoadd",
+                "amoand",
+                "amoswap",
+                "amomax",
+                "amomin",
+                "amoor",
+                "amoxor"
+            );
+
+            let amo_rv_test <- inst_test_ISA(Test_unit {isa: "32ua", name_unit: "rv32ua-p-lrsc"});
+            List#(TestProgIFC) inst_test_modules <- List::mapM(inst_test_amo, test_names);
+            inst_test_modules = List::cons(amo_rv_test, inst_test_modules);
+        `endif
+
+        `ifdef LRSC_TB
+            List#(String) test_names = list(
+                "riscv_amo_test_0",
+                "riscv_amo_test_1"
+            );
+            List#(TestProgIFC) inst_test_modules <- List::mapM(inst_test_lrsc, test_names);
         `endif
 
         `ifdef EMBENCH_TB

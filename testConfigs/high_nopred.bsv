@@ -1,6 +1,6 @@
 package Config;
 
-typedef 8 IFUINST;
+typedef 4 IFUINST;
 typedef 4 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
@@ -34,8 +34,8 @@ typedef 6 RS_DEPTH_BR;
 // 1: smiths
 typedef 0 BRANCHPRED;
 
-typedef 8 BITS_BTB;
-typedef 8 BITS_PHT;
+typedef 6 BITS_BTB;
+typedef 6 BITS_PHT;
 
 typedef 0 BITS_BHR;
 
@@ -45,4 +45,6 @@ typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
+
+typedef 1 NUM_CPU;
 endpackage

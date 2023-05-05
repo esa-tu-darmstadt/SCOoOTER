@@ -34,8 +34,8 @@ typedef 2 RS_DEPTH_BR;
 // 1: smiths
 typedef 3 BRANCHPRED;
 
-typedef 6 BITS_BTB;
-typedef 6 BITS_PHT;
+typedef 4 BITS_BTB;
+typedef 4 BITS_PHT;
 
 typedef 4 BITS_BHR;
 
@@ -45,4 +45,6 @@ typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
+
+typedef 1 NUM_CPU;
 endpackage

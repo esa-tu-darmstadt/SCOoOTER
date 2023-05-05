@@ -10,14 +10,14 @@ import GetPut::*;
 import GetPutCustom::*;
 import ClientServer::*;
 
-// Toplevel interface to external world
-interface Top;
+interface DaveIFC;
+
     (* prefix= "axi_master_fetch" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
+    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
     (* prefix= "axi_master_data" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 1, 0) dmem_axi_r;
+    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_r;
     (* prefix= "axi_master_data" *)
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 1, 0) dmem_axi_w;
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_w;
 
     (* always_ready, always_enabled *)
     method Action sw_int(Bool b);
@@ -32,24 +32,51 @@ interface Top;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
     `endif
+
+endinterface
+
+// Toplevel interface to external world
+interface Top;
+    interface Client#(MemWr, void) write_d;
+    interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) read_d;
+    interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read_i;
+
+    (* always_ready, always_enabled *)
+    method Action sw_int(Bool b);
+    (* always_ready, always_enabled *)
+    method Action timer_int(Bool b);
+    (* always_ready, always_enabled *)
+    method Action ext_int(Bool b);
+    (* always_ready, always_enabled *)
+    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
+
+    `ifdef EVA_BR
+        method UInt#(XLEN) correct_pred_br;
+        method UInt#(XLEN) wrong_pred_br;
+        method UInt#(XLEN) correct_pred_j;
+        method UInt#(XLEN) wrong_pred_j;
+    `endif
 endinterface
 
 interface MemoryArbiterIFC;
     // axi to data memory
-    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, 1, 0) axi_r;
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, 1, 0) axi_w;
+    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_r;
+    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_w;
     // normal reads/writes
-    //interface Put#(MemWr) write;
-    interface Server#(MemWr, void) write;
-    interface Server#(Bit#(XLEN), Bit#(XLEN)) read;
-    // TODO: add AMO
-    interface Server#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType), Bit#(XLEN)) amo;
+    interface Vector#(NUM_CPU, Server#(MemWr, void)) writes;
+    interface Vector#(NUM_CPU, Server#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN))) reads;
+endinterface
+
+interface InstArbiterIFC;
+    // axi to data memory
+    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) axi_r;
+    interface Vector#(NUM_CPU, Server#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST)))) reads;
 endinterface
 
 // Instruction fetch unit iface
 interface FetchIFC;
-    // AXI to IMEM
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), 0, 0) imem_axi;
+    // to IMEM
+    interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read;
     // mispredict signal
     method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
     // output
@@ -121,8 +148,7 @@ interface MemoryUnitIFC;
     interface FunctionalUnitIFC fu;
     interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
-    interface Client#(Bit#(XLEN), Bit#(XLEN)) read;
-    interface Client#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType), Bit#(XLEN)) amo;
+    interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) request;
     method Action flush();
     method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
     method Action store_queue_empty(Bool b);
@@ -148,7 +174,7 @@ interface CommitIFC;
     method ActionValue#(UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
-    interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
+    interface GetS#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
     interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) csr_writes;
     interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
 
@@ -183,6 +209,7 @@ endinterface
 
 interface StoreBufferIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
+    method Bool deq_memory_writes();
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     interface Client#(MemWr, void) write;
     method Bool empty();
@@ -204,6 +231,8 @@ interface CsrFileIFC;
     method Tuple2#(Bit#(XLEN), Bit#(XLEN)) trap_vectors();
     method Action write_int_data(Bit#(XLEN) cause, Bit#(XLEN) pc);
     method Bit#(3) ext_interrupt_mask();
+    (* always_ready, always_enabled *)
+    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
 endinterface
 
 endpackage

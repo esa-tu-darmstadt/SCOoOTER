@@ -1,6 +1,7 @@
 package StoreBuffer;
 
 import FIFO::*;
+import FIFOF::*;
 import SpecialFIFOs::*;
 import Types::*;
 import Inst_Types::*;
@@ -114,7 +115,7 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
         endactionvalue
     endmethod
     // test if the store buffer is empty - needed for atomic rl
-    method Bool empty() = tail_r == head_r && !full_r[0];
+    method Bool empty() = (tail_r == head_r && !full_r[0]);
 endmodule
 
 
@@ -128,13 +129,15 @@ module mkStoreBuffer(StoreBufferIFC);
     // create internal buffer
     InternalStoreIFC#(STORE_BUF_DEPTH) internal_buf <- mkInternalStore();
     // FIFO to hold outgoing write requests until they are completed (important for fwd)
-    FIFO#(MemWr) pending_buf <- mkPipelineFIFO();
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) in_f <- mkPipelineFIFO();
+    FIFOF#(MemWr) pending_buf <- mkPipelineFIFOF();
+    // wire for incoming data
+    Wire#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) incoming_writes_w <- mkWire();
+    PulseWire dequeue_incoming_w <- mkPulseWire();
 
     // flatten incloming buffer such that entries are consecutive
     rule flatten_incoming;
-        let writes_in = tpl_1(in_f.first());
-        let cnt_in = tpl_2(in_f.first());
+        let writes_in = tpl_1(incoming_writes_w);
+        let cnt_in = tpl_2(incoming_writes_w);
 
         // remove entries beyond count
         Vector#(ISSUEWIDTH, Maybe#(MemWr)) cleaned_maybes;
@@ -161,7 +164,7 @@ module mkStoreBuffer(StoreBufferIFC);
 
         //put into MIMO buffer
         if(internal_buf.enqReadyN(count)) begin
-            in_f.deq();
+            dequeue_incoming_w.send();
             internal_buf.enq(count, flattened);
         end
     endrule
@@ -201,7 +204,7 @@ module mkStoreBuffer(StoreBufferIFC);
                     // remove entries beyond count (could also be wired from flatten rule)
                     Vector#(ISSUEWIDTH, Maybe#(MemWr)) cleaned_maybes;
                     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                        cleaned_maybes[i] = fromInteger(i) < tpl_2(in_f.first()) ? tpl_1(in_f.first())[i] : tagged Invalid;
+                        cleaned_maybes[i] = fromInteger(i) < tpl_2(incoming_writes_w) ? tpl_1(incoming_writes_w)[i] : tagged Invalid;
                     end
                     // extract matching data
                     Maybe#(Maybe#(MemWr)) incoming_resp = Vector::find(find_addr(addr), Vector::reverse(cleaned_maybes));
@@ -214,17 +217,19 @@ module mkStoreBuffer(StoreBufferIFC);
                     let result = (incoming_res matches tagged Valid .vv ? 
                                   incoming_res : (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res));
 
+                    dbg_print(Mem, $format("calc fwd: ", fshow(addr), " ", fshow(pending_store_res), " ", fshow(incoming_resp), " ", fshow(internal_store_res), fshow(forward_pending), fshow(incoming_writes_w)));
+
                     return result;
                 endactionvalue
             endmethod
         endinterface
     endinterface
 
+    method Bool deq_memory_writes() = dequeue_incoming_w;
+
     // put write requests in from COMMIT
     interface Put memory_writes;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) in);
-            in_f.enq(in);
-        endmethod
+        interface put = incoming_writes_w._write();
     endinterface
 
     // interface for write dequeueing
@@ -244,7 +249,7 @@ module mkStoreBuffer(StoreBufferIFC);
             endmethod
         endinterface
     endinterface
-    method Bool empty() = internal_buf.empty();
+    method Bool empty() = internal_buf.empty() && pending_buf.notFull();
 endmodule
 
 endpackage

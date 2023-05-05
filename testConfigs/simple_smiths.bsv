@@ -32,10 +32,10 @@ typedef 2 RS_DEPTH_BR;
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 1 BRANCHPRED;
+typedef 2 BRANCHPRED;
 
-typedef 8 BITS_BTB;
-typedef 8 BITS_PHT;
+typedef 4 BITS_BTB;
+typedef 4 BITS_PHT;
 
 typedef 0 BITS_BHR;
 
@@ -45,4 +45,6 @@ typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
+
+typedef 1 NUM_CPU;
 endpackage

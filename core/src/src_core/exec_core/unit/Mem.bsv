@@ -98,6 +98,8 @@ rule calculate_store if (in.first().opc == STORE && !aq_r);
         H: ('b0011 << (pack(final_addr)[1] == 0 ? 0 : 2));
         B: (1 << pack(final_addr)[1:0]);
     endcase;
+
+    dbg_print(Mem, $format("instruction:  ", fshow(inst)));
     
     // produce result
     out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, write : tagged Mem MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask}});
@@ -124,6 +126,10 @@ endfunction
 
 
 // LOAD / AMO HANDLING
+
+// request/response buffers
+FIFO#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType)))) mem_rd_or_amo_request <- mkBypassFIFO();
+FIFO#(Bit#(XLEN)) mem_rd_or_amo_response <- mkBypassFIFO();
 
 // STAGE 1: calculate address and check if a memory access is pending in ROB
 
@@ -156,8 +162,6 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
         B, BU: (1 << pack(final_addr)[1:0]);
     endcase;
 
-    if (inst.opc == AMO) aq_r <= inst.aq;
-
     // fill internal data structure for load pipeline
     stage1_internal <= LoadPipe {
         tag: inst.tag,
@@ -183,14 +187,14 @@ endrule
 
 // check ROB response, if the instruction is clear, commence execution
 // otherwise do not dequeue it and try again next cycle
-rule check_rob_response if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r);
+rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r));
     let internal_state = stage1_internal;
     let rob_resp = response_ROB;
     if(!rob_resp) begin
         in.deq();
         stage1.enq(internal_state);
         dbg_print(AMO, $format("rob passed:  ", fshow(internal_state)));
-        
+        if (internal_state.amo) aq_r <= internal_state.aq;
     end
 endrule
 
@@ -225,6 +229,7 @@ rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r && !stage1.first()
     if (!struct_internal.amo && (!isValid(response) || (response.Valid.store_mask & struct_internal.load_mask) == struct_internal.load_mask)) begin
         stage2.enq(tuple2(struct_internal, response));
         stage1.deq();
+        dbg_print(Mem, $format("store buffer:  ", fshow(struct_internal), " ", fshow(response)));
     end
     // if AMO, no fwd is allowed
     if (struct_internal.amo && !isValid(response)) begin
@@ -245,14 +250,8 @@ endrule
 
 // STAGE 3: ask AXI or use fwd data
 
-// inter-clock buffers
-FIFO#(UInt#(XLEN)) mem_read_request <- mkBypassFIFO();
-FIFO#(UInt#(XLEN)) mem_read_response <- mkBypassFIFO();
 // output to next stage
 FIFO#(LoadPipe) stage3 <- mkPipelineFIFO();
-// output to mem arbiter
-FIFO#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType)) amo_request <- mkBypassFIFO();
-FIFO#(Bit#(XLEN)) amo_response <- mkBypassFIFO();
 
 rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r && !tpl_1(stage2.first()).mispredicted);
     let struct_internal = tpl_1(stage2.first());
@@ -269,17 +268,20 @@ rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r && !tpl_1(
         if(fwd matches tagged Invalid) begin
             stage2.deq();
             stage3.enq(struct_internal);
-            mem_read_request.enq(struct_internal.addr & 'hfffffffc);
+            let addr = struct_internal.addr & 'hfffffffc;
+            if (addr < fromInteger(valueOf(BRAMSIZE)) || addr >= fromInteger(2*valueOf(BRAMSIZE)))
+                    addr = fromInteger(valueOf(BRAMSIZE));
+            mem_rd_or_amo_request.enq(tuple2(pack(addr), tagged Invalid));
         end
     end
     else if(
             (rob_head == struct_internal.tag || valueOf(ROBDEPTH) == 1) && // wait until we are sure AMO is correct-path
-            (struct_internal.rl ? store_queue_empty_w : True)
+            (struct_internal.rl ? store_queue_empty_w : True) // on a release, stall the AMO such that pending writes get through
             ) begin
         dbg_print(AMO, $format("request:  ", fshow(struct_internal)));
         stage2.deq();
         stage3.enq(struct_internal);
-        amo_request.enq(tuple3(pack(struct_internal.addr), struct_internal.amo_modifier, struct_internal.amo_t));
+        mem_rd_or_amo_request.enq(tuple2(pack(struct_internal.addr), tagged Valid tuple2(struct_internal.amo_modifier, struct_internal.amo_t)));
     end
 endrule
 
@@ -321,26 +323,6 @@ endfunction
 
 // rules to collect the result from all available sources
 
-// collect response from AXI if needed
-rule collect_result_read_axi if(!stage3.first().amo &&& stage3.first().result matches tagged None &&& !stage3.first().mispredicted);
-    stage3.deq();
-    mem_read_response.deq();
-
-    let resp = pack(mem_read_response.first());
-    let internal_struct = stage3.first();
-
-    let result = internal_struct_and_data_to_result(internal_struct, resp);
-
-    // create misalign exception
-    if(check_misalign(truncate(pack(internal_struct.addr)), internal_struct.width)) begin
-        result.result = tagged Except MISALIGNED_LOAD;
-    end
-
-    dbg_print(Mem, $format("read:  ", fshow(result)));
-
-    out.enq(result);
-endrule
-
 // collect result from bypass
 rule collect_result_read_bypass if(!stage3.first().amo &&& stage3.first().result matches tagged Result .r &&& !stage3.first().mispredicted);
     stage3.deq();
@@ -354,21 +336,31 @@ rule collect_result_read_bypass if(!stage3.first().amo &&& stage3.first().result
         result.result = tagged Except MISALIGNED_LOAD;
     end
 
-    dbg_print(Mem, $format("read:  ", fshow(result)));
+    dbg_print(Mem, $format("read (byp):  ", fshow(result)));
     out.enq(result);
 endrule
 
-// collect AMO result
-rule collect_result_read_amo if(stage3.first().amo &&& !stage3.first().mispredicted);
+// collect response from AXI if needed
+rule collect_result_read if(stage3.first().result matches tagged None &&& !stage3.first().mispredicted);
     stage3.deq();
+    mem_rd_or_amo_response.deq();
+    let resp = pack(mem_rd_or_amo_response.first());
     let internal_struct = stage3.first();
-    let result = amo_response.first();
-    amo_response.deq();
 
-    if(internal_struct.aq) aq_r <= False;
+    if(internal_struct.aq && internal_struct.amo) aq_r <= False;
 
-    dbg_print(AMO, $format("got result:  ", fshow(result), " ", fshow(internal_struct)));
-    out.enq(Result {result : check_misalign(truncate(pack(internal_struct.addr)), internal_struct.width) ? tagged Except AMO_ST_MISALIGNED : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None});
+    let result = internal_struct_and_data_to_result(internal_struct, resp);
+
+    if(stage3.first().amo) dbg_print(AMO, $format("response:  ", fshow(internal_struct), fshow(resp)));
+
+    // create misalign exception
+    if(check_misalign(truncate(pack(internal_struct.addr)), internal_struct.width)) begin
+        result.result = tagged Except (stage3.first().amo ? AMO_ST_MISALIGNED : MISALIGNED_LOAD);
+    end
+
+    dbg_print(Mem, $format("read (axi):  ", fshow(result)));
+
+    out.enq(result);
 endrule
 
 rule collect_result_mispredict if(stage3.first().mispredicted);
@@ -378,9 +370,11 @@ rule collect_result_mispredict if(stage3.first().mispredicted);
     out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None});
 endrule
 
+(* conflict_free = "check_rob_response, collect_result_read, collect_result_mispredict,flush_invalid_axi_rq, flush_invalid_fwds" *)
+
 
 // generate output (and define in which urgency results shall be propagated)
-(* descending_urgency="collect_result_mispredict, collect_result_read_amo, collect_result_read_axi, collect_result_read_bypass, flush_invalid_axi_rq, calculate_store" *)
+(* descending_urgency="calculate_store, collect_result_mispredict, collect_result_read, collect_result_read_bypass, flush_invalid_axi_rq" *)
 rule propagate_result;
     out.deq();
     let res = out.first();
@@ -421,43 +415,12 @@ interface Client check_store_buffer;
     endinterface
 endinterface
 
-// normal reads
-interface Client read;
-    interface Get request;
-        method ActionValue#(Bit#(XLEN)) get();
-            actionvalue
-                mem_read_request.deq();
-                let addr = mem_read_request.first();
-                // fix exiting the DMEM space if speculating
-                if (addr < fromInteger(valueOf(BRAMSIZE)) || addr >= fromInteger(2*valueOf(BRAMSIZE)))
-                    addr = fromInteger(valueOf(BRAMSIZE));
-                return pack(addr);
-            endactionvalue
-        endmethod
-    endinterface
-    interface Put response;
-        method Action put(Bit#(XLEN) b);
-            mem_read_response.enq(unpack(b));
-        endmethod
-    endinterface
+interface Client request;
+    interface Get request = toGet(mem_rd_or_amo_request);
+    interface Put response = toPut(mem_rd_or_amo_response);
 endinterface
 
-// AMO reads/writes
-interface Client amo;
-    interface Get request;
-        method ActionValue#(Tuple3#(Bit#(XLEN), Bit#(XLEN), AmoType)) get();
-            actionvalue
-                amo_request.deq();
-                return amo_request.first();
-            endactionvalue
-        endmethod
-    endinterface
-    interface Put response;
-        method Action put(Bit#(XLEN) b);
-            amo_response.enq(b);
-        endmethod
-    endinterface
-endinterface
+
 
 // epoch handling
 method Action flush() = epoch_r._write(epoch_r + 1);

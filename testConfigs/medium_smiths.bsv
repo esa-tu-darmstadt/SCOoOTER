@@ -1,7 +1,7 @@
 package Config;
 
-typedef 3 IFUINST;
-typedef 3 ISSUEWIDTH;
+typedef 2 IFUINST;
+typedef 2 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
 typedef 'h10000 BRAMSIZE;
@@ -32,10 +32,10 @@ typedef 4 RS_DEPTH_BR;
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 1 BRANCHPRED;
+typedef 2 BRANCHPRED;
 
-typedef 10 BITS_BTB;
-typedef 10 BITS_PHT;
+typedef 5 BITS_BTB;
+typedef 5 BITS_PHT;
 
 typedef 0 BITS_BHR;
 
@@ -45,4 +45,6 @@ typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
+
+typedef 1 NUM_CPU;
 endpackage
