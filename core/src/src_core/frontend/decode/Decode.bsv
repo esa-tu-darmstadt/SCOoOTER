@@ -69,7 +69,7 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(XLEN) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),

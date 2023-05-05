@@ -129,7 +129,7 @@ typedef struct {
     Bit#(XLEN) immU;
     Bit#(XLEN) immJ;
 
-    UInt#(XLEN) epoch;
+    UInt#(EPOCH_WIDTH) epoch;
 
     Bit#(XLEN) predicted_pc;
 
@@ -185,7 +185,7 @@ typedef struct {
     Maybe#(ExceptionType) exception;
 
     // epoch is used to synchronize all units in case of misprediction
-    UInt#(XLEN) epoch;
+    UInt#(EPOCH_WIDTH) epoch;
 
     // log predicted successor instruction
     Bit#(XLEN) predicted_pc;
@@ -235,7 +235,7 @@ typedef struct {
     // next real pc and predicted one
     Bit#(XLEN) next_pc;
     Bit#(XLEN) pred_pc;
-    UInt#(XLEN) epoch; // epoch to synchronize on misprediction
+    UInt#(EPOCH_WIDTH) epoch; // epoch to synchronize on misprediction
     union tagged { // writes to memory or CSRs
         MemWr Mem;
         void Pending_mem;
@@ -267,7 +267,7 @@ typedef struct {
 typedef struct {
     RADDR addr;
     UInt#(TLog#(ROBDEPTH)) tag;
-    UInt#(XLEN) epoch;
+    UInt#(EPOCH_WIDTH) epoch;
 } RegReservation deriving(Bits, FShow);
 typedef struct {
     Vector#(ISSUEWIDTH, RegReservation) reservations;
@@ -285,7 +285,7 @@ typedef union tagged {
 typedef struct {
     Bit#(32) instruction;
     Bit#(32) pc;
-    UInt#(XLEN) epoch;
+    UInt#(EPOCH_WIDTH) epoch;
     // predictor metadata
     Bit#(32) next_pc;
     Bit#(BITS_BHR) history;

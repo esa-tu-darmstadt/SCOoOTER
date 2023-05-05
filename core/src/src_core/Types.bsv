@@ -23,4 +23,6 @@ typedef TAdd#(
             NUM_FU;
 
 typedef NUM_FU NUM_RS;
+
+typedef TLog#(TAdd#(TAdd#(IFUINST,ROBDEPTH),INST_WINDOW)) EPOCH_WIDTH;
 endpackage

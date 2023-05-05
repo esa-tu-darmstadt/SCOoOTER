@@ -48,7 +48,7 @@ module mkRegFileEvo(RegFileEvoIFC);
     Vector#(31, Reg#(EvoEntry)) registers_port2 = Vector::map(disassemble_creg(2), registers);
 
     //local epoch counter
-    Reg#(UInt#(XLEN)) epoch <- mkReg(0);
+    Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
 
     //helper function: tests if a result matches a given tag
     function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res)

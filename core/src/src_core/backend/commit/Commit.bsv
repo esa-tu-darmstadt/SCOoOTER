@@ -40,7 +40,7 @@ FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- mkPipelineFIFO();
     Reg#(UInt#(XLEN)) wrong_pred_j_r <- mkReg(0);
 `endif
 
-Reg#(UInt#(XLEN)) epoch <- mkReg(0);
+Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
 
 Wire#(Bit#(XLEN)) trap_return_w <- mkBypassWire();
 Array#(Reg#(Bool)) int_in_process_r <- mkCReg(2, False);

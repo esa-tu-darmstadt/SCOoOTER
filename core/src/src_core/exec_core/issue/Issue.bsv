@@ -275,7 +275,7 @@ rule assemble_instructions;
     dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
 endrule
 
-function UInt#(32) inst_to_epoch(Instruction inst) = inst.epoch;
+function UInt#(EPOCH_WIDTH) inst_to_epoch(Instruction inst) = inst.epoch;
 
 // return issue bus
 method Vector#(NUM_RS, Maybe#(Instruction)) get_issue() = instructions_rs_v;

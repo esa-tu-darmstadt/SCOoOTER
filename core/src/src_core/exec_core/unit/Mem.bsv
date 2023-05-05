@@ -33,7 +33,7 @@ typedef struct {
     Bit#(TDiv#(XLEN, 8)) load_mask;
     Width width;
     Bool sign;
-    UInt#(XLEN) epoch;
+    UInt#(EPOCH_WIDTH) epoch;
     Bool amo;
     AmoType amo_t;
     Bit#(XLEN) amo_modifier;
@@ -59,7 +59,7 @@ RWire#(Result) out_valid <- mkRWire();
 
 // local epoch for tossing wrong-path instructions
 // this reduces bus pressure 
-Reg#(UInt#(XLEN)) epoch_r <- mkReg(0);
+Reg#(UInt#(EPOCH_WIDTH)) epoch_r <- mkReg(0);
 
 // ROB head ID
 Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();

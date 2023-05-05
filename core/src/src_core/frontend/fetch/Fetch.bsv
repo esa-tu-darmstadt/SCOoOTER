@@ -36,11 +36,11 @@ module mkFetch(FetchIFC) provisos(
     // port 1 is used to redirect the program counter
     //port 0 is used to advance the PC
     Reg#(Bit#(XLEN)) pc[3] <- mkCReg(3, fromInteger(valueof(RESETVEC)));
-    Reg#(UInt#(XLEN)) epoch[2] <- mkCReg(2, 0);
+    Reg#(UInt#(EPOCH_WIDTH)) epoch[2] <- mkCReg(2, 0);
     FIFOF#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFOF();
-    FIFOF#(UInt#(XLEN)) inflight_epoch <- mkPipelineFIFOF();
+    FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkPipelineFIFOF();
     //holds outbound Instruction and PC
-    FIFOF#(Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(32), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)))) fetched_inst <- mkPipelineFIFOF();
+    FIFOF#(Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)))) fetched_inst <- mkPipelineFIFOF();
     FIFOF#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFOF();
 
     // wires for direction prediction response and request
@@ -140,7 +140,7 @@ module mkFetch(FetchIFC) provisos(
 
         let acqpc = inflight_pcs.first(); inflight_pcs.deq();
 
-        Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(XLEN), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA))) instructions_v = newVector; // temporary inst storage
+        Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA))) instructions_v = newVector; // temporary inst storage
         
         Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32; // pos of first useful instruction
 
@@ -189,7 +189,7 @@ module mkFetch(FetchIFC) provisos(
     endrule
 
     // build fetch response package
-    function FetchedInstruction build_fetch_resp(Tuple6#(Bit#(32), Bit#(32), UInt#(XLEN), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)) in)
+    function FetchedInstruction build_fetch_resp(Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)) in)
         = FetchedInstruction {instruction: tpl_1(in), pc: tpl_2(in), epoch: tpl_3(in), next_pc: fromMaybe(tpl_2(in)+4, tpl_4(in)), history: tpl_5(in), ras: tpl_6(in)};
 
     // interface for direction prediction requests
