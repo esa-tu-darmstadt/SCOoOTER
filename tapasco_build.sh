@@ -17,7 +17,7 @@ popd
 # clean previous TaPaSCo builds and patch tapasco-riscv accordingly
 pushd tools/tapasco-integration/tapasco-riscv/
 make clean
-patch -f -p1 < ../0001-add-SCOOOTER.patch
+patch -f -p1 < ../0001-add-SCOOOTER.patch || true
 popd
 
 # copy built SCOOOTER over
