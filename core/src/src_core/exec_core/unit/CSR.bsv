@@ -55,22 +55,24 @@ module mkCSR(CsrIFC);
 
 // in, out FIFOS and output wire
 FIFO#(Instruction) in <- mkPipelineFIFO();
-FIFOF#(Result) out <- mkPipelineFIFOF();
+FIFOF#(Result) out <- mkFIFOF();
 RWire#(Result) out_valid <- mkRWire();
+Reg#(Bool) inflight_r <- mkReg(False);
 
 // req and resp wires for CSR reading
 FIFO#(Bit#(12)) csr_req <- mkBypassFIFO();
 FIFO#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassFIFO();
 // Buffer between stages
-FIFOF#(Internal_struct) stage1 <- mkPipelineFIFOF();
+FIFO#(Internal_struct) stage1 <- mkFIFO();
 
 // wire to propagate if CSR is currently blocked
 Wire#(Bool) blocked <- mkBypassWire();
 
 // request CSR read and enqueue into buffer between stages
-rule get_request if (!blocked && stage1.notFull() && out.notFull());
+rule get_request if (!blocked && !inflight_r);
     let inst = in.first(); in.deq();
 
+    inflight_r <= True;
 
     Bit#(12) csr_addr = inst.imm[31:20];
     Bit#(5) csr_imm = inst.imm[19:15];
@@ -109,7 +111,7 @@ rule get_request if (!blocked && stage1.notFull() && out.notFull());
 endrule
 
 // read the CSR and write it if needed
-rule read_modify (stage1.first().op != RET && stage1.first().op != RET && stage1.first().op != EBREAK);
+rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stage1.first().op != EBREAK);
     let csr_data = csr_res.first(); csr_res.deq();
     let internal = stage1.first(); stage1.deq();
 
@@ -142,7 +144,6 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != RET && stage1
     out.enq(res);
 endrule
 
-(* mutually_exclusive="read_modify,dummy_result_ret" *)
 // for an interrupt return, return dummy values
 rule dummy_result_ret (stage1.first().op == RET || stage1.first().op == ECALL || stage1.first().op == EBREAK);
     let internal = stage1.first(); stage1.deq();
@@ -166,6 +167,10 @@ rule propagate_result;
     out_valid.wset(res);
 endrule
 
+rule clear_inflight if (inflight_r && out.notEmpty());
+    inflight_r <= False;
+endrule
+
 // FU interface
 interface FunctionalUnitIFC fu;
     method Action put(Instruction inst) = in.enq(inst);
@@ -185,3 +190,4 @@ endmodule
 
 
 endpackage
+
