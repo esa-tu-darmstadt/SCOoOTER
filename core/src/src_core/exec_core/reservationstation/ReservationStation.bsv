@@ -25,7 +25,7 @@ interface ReservationStationWrIFC;
     (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
     (* always_ready, always_enabled *)
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in);
 endinterface
 
 // Wrappers for different Unit types
@@ -117,7 +117,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     endfunction
 
     // wire to transport result bus
-    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
+    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
 
     // internal storage
     Vector#(entries, Array#(Reg#(Maybe#(Instruction)))) instruction_buffer_v <- replicateM(mkCReg(2, tagged Invalid));
@@ -141,12 +141,12 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
                         t == res.tag)
-                        current_instruction.rs1 = tagged Operand res.result.Result;
+                        current_instruction.rs1 = tagged Operand res.result;
                     // update rs2
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs2 matches tagged Tag .t &&& 
                         t == res.tag)
-                        current_instruction.rs2 = tagged Operand res.result.Result;
+                        current_instruction.rs2 = tagged Operand res.result;
                 end
 
                 instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
@@ -176,7 +176,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     method ExecUnitTag unit_type = eut;
 
     // input the result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in) = result_bus_vec._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
 
     // input instructions to RS
     interface ReservationStationPutIFC in;
@@ -200,7 +200,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 );
 
     // wire to distribute result bus
-    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
+    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
 
     //create a buffer of Instructions
     //Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
@@ -228,12 +228,12 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
                         t == res.tag)
-                        current_instruction.rs1 = tagged Operand res.result.Result;
+                        current_instruction.rs1 = tagged Operand res.result;
                     // update rs2
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs2 matches tagged Tag .t &&& 
                         t == res.tag)
-                        current_instruction.rs2 = tagged Operand res.result.Result;
+                        current_instruction.rs2 = tagged Operand res.result;
                 end
 
                 instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
@@ -271,7 +271,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     method ExecUnitTag unit_type = eut;
 
     // input result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in) = result_bus_vec._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
 
     // insert instructions
     interface ReservationStationPutIFC in;

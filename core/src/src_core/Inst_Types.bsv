@@ -223,6 +223,13 @@ typedef struct {
     } write;
 } Result deriving(Bits, FShow);
 
+// reservationStation result bus
+// RSs only require a tagged result. Exceptions and mem/CSR state is superficial here
+typedef struct {
+    UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
+    Bit#(XLEN) result;
+} ResultLoopback deriving(Bits, FShow);
+
 // entries to reorder buffer
 typedef struct {
     Bit#(XLEN) pc; // addr of the instruction

@@ -36,7 +36,7 @@ typedef union tagged {
 module mkRegFileEvo(RegFileEvoIFC);
 
     // wire for distributing the result bus
-    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
+    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
     // wire to transport read data from request to response
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
 
@@ -51,7 +51,7 @@ module mkRegFileEvo(RegFileEvoIFC);
     Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
 
     //helper function: tests if a result matches a given tag
-    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res)
+    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(ResultLoopback) res)
         = (isValid(res) && res.Valid.tag == current_tag);
     //evaluate result bus
     rule result_bus_r;
@@ -65,8 +65,8 @@ module mkRegFileEvo(RegFileEvoIFC);
             if(current_entry matches tagged Tag .current_tag) begin // reg is tagged
                 let result = Vector::find(test_result(current_tag), result_bus_vec); // find result matching tag
                 if(result matches tagged Valid .found_result) begin // if result exists, update value
-                    local_entries[i] = tagged Value found_result.Valid.result.Result;
-                    dbg_print(RegEvo, $format("Setting reg ", i+1, found_result.Valid.result.Result));
+                    local_entries[i] = tagged Value found_result.Valid.result;
+                    dbg_print(RegEvo, $format("Setting reg ", i+1, found_result.Valid.result));
                 end
             end
         end
@@ -87,7 +87,7 @@ module mkRegFileEvo(RegFileEvoIFC);
     endmethod
 
     // read the result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in);
         result_bus_vec <= bus_in;
     endmethod
 

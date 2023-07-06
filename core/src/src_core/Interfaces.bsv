@@ -129,7 +129,7 @@ interface ReservationStationIFC#(numeric type entries);
     (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
     (* always_ready, always_enabled *)
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in);
 endinterface
 
 interface FunctionalUnitIFC;
@@ -204,7 +204,7 @@ interface RegFileEvoIFC;
     //inform about misprediction
     method Action flush();
     (* always_ready, always_enabled *)
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in);
 endinterface
 
 interface StoreBufferIFC;

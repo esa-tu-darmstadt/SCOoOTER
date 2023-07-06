@@ -19,6 +19,7 @@ import Interfaces::*;
 import Types::*;
 import Inst_Types::*;
 import FIFO::*;
+import FIFOF::*;
 import SpecialFIFOs::*;
 import RWire::*;
 import Debug::*;
@@ -54,24 +55,22 @@ module mkCSR(CsrIFC);
 
 // in, out FIFOS and output wire
 FIFO#(Instruction) in <- mkPipelineFIFO();
-FIFO#(Result) out <- mkPipelineFIFO();
+FIFOF#(Result) out <- mkPipelineFIFOF();
 RWire#(Result) out_valid <- mkRWire();
-Reg#(Bool) inflight_r <- mkReg(False);
 
 // req and resp wires for CSR reading
 FIFO#(Bit#(12)) csr_req <- mkBypassFIFO();
 FIFO#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassFIFO();
 // Buffer between stages
-FIFO#(Internal_struct) stage1 <- mkPipelineFIFO();
+FIFOF#(Internal_struct) stage1 <- mkPipelineFIFOF();
 
 // wire to propagate if CSR is currently blocked
 Wire#(Bool) blocked <- mkBypassWire();
 
 // request CSR read and enqueue into buffer between stages
-rule get_request if (!blocked && !inflight_r);
+rule get_request if (!blocked && stage1.notFull() && out.notFull());
     let inst = in.first(); in.deq();
 
-    inflight_r <= True;
 
     Bit#(12) csr_addr = inst.imm[31:20];
     Bit#(5) csr_imm = inst.imm[19:15];
@@ -143,6 +142,7 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != RET && stage1
     out.enq(res);
 endrule
 
+(* mutually_exclusive="read_modify,dummy_result_ret" *)
 // for an interrupt return, return dummy values
 rule dummy_result_ret (stage1.first().op == RET || stage1.first().op == ECALL || stage1.first().op == EBREAK);
     let internal = stage1.first(); stage1.deq();
@@ -164,7 +164,6 @@ rule propagate_result;
     out.deq();
     let res = out.first();
     out_valid.wset(res);
-    inflight_r <= False;
 endrule
 
 // FU interface

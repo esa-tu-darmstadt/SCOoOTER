@@ -99,11 +99,14 @@ module mkExecCore(ExecCoreIFC);
             fu_vec[i].put(inst);
         endrule
 
+    // map the FU results to a minimal bus for RS loopback
+    function Maybe#(ResultLoopback) map_result_to_loopback_result(Maybe#(Result) a) = isValid(a) ? tagged Valid ResultLoopback {tag : a.Valid.tag, result : a.Valid.result.Result} : tagged Invalid;
+
     // connect results to issue stage and reservation stations
     rule propagate_result_bus;
         for(Integer i = 0; i < valueOf(NUM_FU); i=i+1)
-            rs_vec[i].result_bus(result_bus_vec);
-        regfile_evo.result_bus(result_bus_vec);
+            rs_vec[i].result_bus(Vector::map(map_result_to_loopback_result, result_bus_vec));
+        regfile_evo.result_bus(Vector::map(map_result_to_loopback_result, result_bus_vec));
     endrule
 
     // pass instructions from issue to rs
