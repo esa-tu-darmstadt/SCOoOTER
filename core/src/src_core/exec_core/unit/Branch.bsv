@@ -83,9 +83,8 @@ rule build_response_packet;
         result: (inst.exception matches tagged Valid .e ? tagged Except e :
                   target matches tagged Valid .a &&& a[1:0] != 0 ? tagged Except MISALIGNED_ADDR
                   : tagged Result (inst.pc+4)),
-        new_pc: target,
-        write : tagged None
-    };
+        new_pc: target
+        };
     dbg_print(BRU, $format("produced result: ", fshow(resp)));
     out_f.enq(resp);
 endrule

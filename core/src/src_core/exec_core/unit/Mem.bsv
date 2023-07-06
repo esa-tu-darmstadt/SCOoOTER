@@ -56,6 +56,9 @@ FIFO#(Instruction) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 // wrap outgoing result as maybe to avoid blocking behavior
 RWire#(Result) out_valid <- mkRWire();
+// outgoing memory write
+FIFO#(MemWr) out_wr <- mkFIFO();
+RWire#(MemWr) out_wr_valid <- mkRWire();
 
 // local epoch for tossing wrong-path instructions
 // this reduces bus pressure 
@@ -102,7 +105,8 @@ rule calculate_store if (in.first().opc == STORE && !aq_r);
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
     
     // produce result
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag, write : tagged Mem MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask}});
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag });
+    out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
 endrule
 
 
@@ -318,7 +322,7 @@ function Result internal_struct_and_data_to_result(LoadPipe internal_struct, Bit
     endcase;
 
     // produce result
-    return Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None};
+    return Result {result : tagged Result result, new_pc : tagged Invalid, tag : internal_struct.tag};
 endfunction
 
 // rules to collect the result from all available sources
@@ -367,7 +371,7 @@ rule collect_result_mispredict if(stage3.first().mispredicted);
     stage3.deq();
     let internal_struct = stage3.first();
     if(internal_struct.aq) aq_r <= False;
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag, write : tagged None});
+    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag});
 endrule
 
 (* conflict_free = "check_rob_response, collect_result_read, collect_result_mispredict,flush_invalid_axi_rq, flush_invalid_fwds" *)
@@ -379,6 +383,11 @@ rule propagate_result;
     out.deq();
     let res = out.first();
     out_valid.wset(res);
+endrule
+rule propagate_memory;
+    out_wr.deq();
+    let res = out_wr.first();
+    out_wr_valid.wset(res);
 endrule
 
 // FU iface
@@ -420,7 +429,8 @@ interface Client request;
     interface Put response = toPut(mem_rd_or_amo_response);
 endinterface
 
-
+// write req. handling
+method Maybe#(MemWr) write = out_wr_valid.wget();
 
 // epoch handling
 method Action flush() = epoch_r._write(epoch_r + 1);

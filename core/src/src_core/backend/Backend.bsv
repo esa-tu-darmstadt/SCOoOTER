@@ -21,7 +21,7 @@ import StoreBuffer::*;
 
 // connections to external world
 interface BackendIFC;
-    method Action res_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
+    method Action res_bus(Vector#(NUM_FU, Maybe#(FullResult)) res_bus);
     interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
     method Bool csr_busy();
     interface Client#(MemWr, void) write;
@@ -100,7 +100,7 @@ module mkBackend(BackendIFC) provisos (
     endrule
 
     // methods to external world
-    method Action res_bus(Vector#(NUM_FU, Maybe#(Result)) result_bus);
+    method Action res_bus(Vector#(NUM_FU, Maybe#(FullResult)) result_bus);
         rob.result_bus(result_bus);
     endmethod
     interface Get train = commit.train;

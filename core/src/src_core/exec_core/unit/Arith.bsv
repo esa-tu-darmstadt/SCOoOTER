@@ -61,8 +61,7 @@ rule calculate;
     let res = Result {
         result : (inst.exception matches tagged Valid .e ? tagged Except e : tagged Result result),
         new_pc : tagged Invalid,
-        tag : inst.tag, 
-        write : tagged None
+        tag : inst.tag
     };
 
     dbg_print(ALU, $format("generated result: ", fshow(res)));

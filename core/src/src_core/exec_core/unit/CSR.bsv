@@ -59,6 +59,10 @@ FIFOF#(Result) out <- mkFIFOF();
 RWire#(Result) out_valid <- mkRWire();
 Reg#(Bool) inflight_r <- mkReg(False);
 
+// outgoing csr write
+FIFO#(CsrWrite) out_wr <- mkFIFO();
+RWire#(CsrWrite) out_wr_valid <- mkRWire();
+
 // req and resp wires for CSR reading
 FIFO#(Bit#(12)) csr_req <- mkBypassFIFO();
 FIFO#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassFIFO();
@@ -130,15 +134,14 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
         res = Result {
             result : tagged Result data,
             new_pc : tagged Invalid,
-            tag : internal.tag, 
-            write : tagged Csr CsrWrite {addr: internal.addr, data: out}
+            tag : internal.tag
         };
+        out_wr.enq(CsrWrite {addr: internal.addr, data: out});
     end else // if no read was returned, the CSR does not exist
         res = Result {
             result : tagged Except INVALID_INST,
             new_pc : tagged Invalid,
-            tag : internal.tag,
-            write : tagged None
+            tag : internal.tag
         };
 
     out.enq(res);
@@ -154,8 +157,7 @@ rule dummy_result_ret (stage1.first().op == RET || stage1.first().op == ECALL ||
                     EBREAK: tagged Except BREAKPOINT;
                  endcase,
         new_pc : tagged Invalid,
-        tag : internal.tag, 
-        write : tagged None
+        tag : internal.tag
     };
     out.enq(res);
 endrule
@@ -165,6 +167,11 @@ rule propagate_result;
     out.deq();
     let res = out.first();
     out_valid.wset(res);
+endrule
+rule propagate_writes;
+    out_wr.deq();
+    let res = out_wr.first();
+    out_wr_valid.wset(res);
 endrule
 
 rule clear_inflight if (inflight_r && out.notEmpty());
@@ -185,6 +192,9 @@ endinterface
 
 // input from ROB that blocks CSR operations if one is pending
 method Action block(Bool b) = blocked._write(b);
+
+// write req. handling
+method Maybe#(CsrWrite) write = out_wr_valid.wget();
 
 endmodule
 

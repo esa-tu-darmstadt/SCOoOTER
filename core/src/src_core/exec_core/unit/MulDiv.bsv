@@ -363,7 +363,7 @@ rule read_result_signed_div;
     
     dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag})));
 
-    out.enq(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag, write : tagged None});
+    out.enq(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag});
 endrule
 
 rule read_result_unsigned_div;
@@ -378,7 +378,7 @@ rule read_result_unsigned_div;
 
     dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag})));
 
-    out.enq(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag, write : tagged None});
+    out.enq(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag});
 endrule
 
 (* descending_urgency = "read_result_signed_div, read_result_unsigned_div, read_result_mul" *)
@@ -390,7 +390,7 @@ rule read_result_mul;
 
     dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
 
-    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag, write : tagged None});
+    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag});
 endrule
 
 // output the current result

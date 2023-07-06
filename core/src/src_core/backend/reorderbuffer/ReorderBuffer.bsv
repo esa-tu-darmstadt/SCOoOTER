@@ -75,7 +75,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
 );
 
     // wire to distribute result bus
-    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
+    Wire#(Vector#(NUM_FU, Maybe#(FullResult))) result_bus_vec <- mkWire();
 
     //internal storage
     Vector#(ROBDEPTH, Array#(Reg#(RobEntry))) internal_store_v <- replicateM(mkCReg(2, unpack(0)));
@@ -188,7 +188,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
     endfunction
 
     // helper function to check if a result has a certain tag
-    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res)
+    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(FullResult) res)
         = isValid(res) && res.Valid.tag == current_tag;
 
     // read the result bus
@@ -259,7 +259,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
         = retrieve_fun(); // look at first avail. inst
     method Action complete_instructions(UInt#(issuewidth_log_t) count)
         = deq_instructions(count); // dequeue count inst.
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in)
+    method Action result_bus(Vector#(NUM_FU, Maybe#(FullResult)) bus_in)
         = result_bus_vec._write(bus_in); // connect to result bus
 
     // check if there is a blocking memory write

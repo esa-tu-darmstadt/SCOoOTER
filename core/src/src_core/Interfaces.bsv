@@ -142,6 +142,7 @@ interface CsrIFC;
     interface FunctionalUnitIFC fu;
     interface Client#(Bit#(12), Maybe#(Bit#(XLEN))) csr_read;
     method Action block(Bool b);
+    method Maybe#(CsrWrite) write;
 endinterface
 
 interface MemoryUnitIFC;
@@ -152,6 +153,7 @@ interface MemoryUnitIFC;
     method Action flush();
     method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
     method Action store_queue_empty(Bool b);
+    method Maybe#(MemWr) write;
 endinterface
 
 interface RobIFC;
@@ -164,7 +166,7 @@ interface RobIFC;
     method Vector#(ISSUEWIDTH, RobEntry) get();
     method Action complete_instructions(UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
 
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(FullResult)) bus_in);
 
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     method Bool csr_busy();

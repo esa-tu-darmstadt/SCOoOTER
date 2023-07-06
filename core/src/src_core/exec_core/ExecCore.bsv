@@ -53,7 +53,7 @@ interface ExecCoreIFC;
     method Action csr_busy(Bool b);
 
     // result bus output
-    method Vector#(NUM_FU, Maybe#(Result)) res_bus;
+    method Vector#(NUM_FU, Maybe#(FullResult)) res_bus;
 endinterface
 
 `ifdef SYNTH_SEPARATE_BLOCKS
@@ -75,9 +75,22 @@ module mkExecCore(ExecCoreIFC);
     let csr <- mkCSR();
 
     // generate the result bus
-    let fu_vec = append(alus, append(append(mds, vec(mem.fu, csr.fu)), brs));
+    let fu_vec = append(alus, append(append(mds, brs), vec(mem.fu, csr.fu)));
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
+    // generate the result bus with memory and CSR writes
+    ResultWrite mem_wr = isValid(mem.write()) ? tagged Mem mem.write.Valid : tagged None;
+    Vector#(NUM_FU, ResultWrite) write_result_bus_vec = Vector::append(Vector::replicate(tagged None), vec( // zero out non-mem/csr units
+        mem_wr,
+        isValid(csr.write()) ? tagged Csr csr.write.Valid : tagged None
+    ));
+    function Maybe#(FullResult) parts_to_full_result(Maybe#(Result) r, ResultWrite w) = isValid(r) ? tagged Valid FullResult {
+        tag : r.Valid.tag,
+        new_pc : r.Valid.new_pc,
+        result : r.Valid.result,
+        write : w
+    } : tagged Invalid;
+    let full_result_bus_vec = Vector::map(uncurry(parts_to_full_result), Vector::zip(result_bus_vec, write_result_bus_vec));
 
     // generate the ReservationStations
     // ALU unit
@@ -90,7 +103,7 @@ module mkExecCore(ExecCoreIFC);
     //csr unit
     ReservationStationWrIFC rs_csr <- mkReservationStationCSR();
     Vector#(NUM_RS, ReservationStationWrIFC) rs_vec = 
-        append(rs_alus, append(append(rs_mds, vec(rs_mem, rs_csr)), rs_brs));
+        append(rs_alus, append(append(rs_mds, rs_brs), vec(rs_mem, rs_csr)));
 
     // connect RS and FUs
     for(Integer i = 0; i < valueOf(NUM_FU); i=i+1)
@@ -168,7 +181,7 @@ module mkExecCore(ExecCoreIFC);
     method Action csr_busy(Bool b) = csr.block(b);
     interface Client check_store_buffer = mem.check_store_buffer();
     interface Client read = mem.request();
-    method Vector#(NUM_FU, Maybe#(Result)) res_bus = result_bus_vec;
+    method Vector#(NUM_FU, Maybe#(FullResult)) res_bus = full_result_bus_vec;
     interface Client csr_read = csr.csr_read;
     method Action store_queue_empty(Bool b) = mem.store_queue_empty(b);
 endmodule

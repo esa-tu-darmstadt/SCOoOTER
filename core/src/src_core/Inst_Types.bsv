@@ -208,20 +208,31 @@ typedef struct {
     Bit#(TDiv#(XLEN, 8)) store_mask;
 } MaskedWord deriving(Bits, FShow);
 
-// type tramsported via result bus
+typedef union tagged { // resulting value or exception
+    Bit#(XLEN) Result;
+    ExceptionType Except;
+} ResultOrExcept deriving(Bits, FShow);
+
+// type transported via result bus
 typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
     Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
-    union tagged { // resulting value or exception
-        Bit#(XLEN) Result;
-        ExceptionType Except;
-    } result;
-    union tagged { // writes to mem or csr
+    ResultOrExcept result;
+} Result deriving(Bits, FShow);
+
+// Entire result struct also containing CSR and mem operations
+// the struct is bulkier than required by most units
+typedef union tagged { // writes to mem or csr
         MemWr Mem;
         void None;
         CsrWrite Csr;
-    } write;
-} Result deriving(Bits, FShow);
+} ResultWrite deriving(Bits, FShow);
+typedef struct {
+    UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
+    Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
+    ResultOrExcept result;
+    ResultWrite write;
+} FullResult deriving(Bits, FShow);
 
 // reservationStation result bus
 // RSs only require a tagged result. Exceptions and mem/CSR state is superficial here
