@@ -19,36 +19,16 @@ import MIMO              ::*;
 
 module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     Bits#(t, st),              // object must have bit representation
-    Add#(__f, 1, st),          // object is at least 1 byte in size
-	Add#(2, __a, size),        // must have at least 2 elements of storage
-	Add#(__b, max_in, size),   // the max enqueued amount must be less than or equal to the full storage
-	Add#(__c, max_out, size),  // the max dequeued amount must be less than or equal to the full storage
-    Mul#(st, size, total),     // total bits of storage
-    Mul#(st, max_in, intot),   // total bits to be enqueued
-    Mul#(st, max_out, outtot), // total bits to be dequeued
-    Add#(__d, outtot, total),  // make sure the number of dequeue bits is not larger than the total storage
-	Max#(max_in, max_out, max),// calculate the max width of the memories
-	Div#(size, max, em1),      // calculate the number of entries for each memory required
-	Add#(em1, 1, e),
-	Add#(__e, max_out, max),
     Log#(size, idx_t),
-    Add#(1, size, size_pad),
-    Log#(size_pad, fill_state_t),
-    Add#(1, max_out, max_out_p),
-    Log#(max_out_p, max_out_idx),
-    Add#(1, max_in, max_in_p),
-    Log#(max_in_p, max_in_idx),
 
     Add#(a__, max_out_idx, fill_state_t),
     Add#(b__, max_in_idx, fill_state_t),
+    Add#(c__, idx_t, fill_state_t),
 
     // needed for compatibility with the vanilla MIMO interface
     Log#(TAdd#(size, 1), fill_state_t),
     Log#(TAdd#(max_in, 1), max_in_idx),
-    Log#(TAdd#(max_out, 1), max_in_idx),
-  
-    Add#(c__, max_in_idx, fill_state_t),
-    Add#(d__, idx_t, fill_state_t),
+    Log#(TAdd#(max_out, 1), max_out_idx),
 
     FShow#(Vector::Vector#(max_in, t))
 );
