@@ -76,6 +76,10 @@ deps:
   - make
   - make install
   - popd
+
+  - pushd core
+  - make clean
+  - popd
   
   artifacts:
     paths:

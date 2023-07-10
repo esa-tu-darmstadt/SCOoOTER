@@ -46,8 +46,7 @@ module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     Log#(TAdd#(size, 1), fill_state_t),
     Log#(TAdd#(max_in, 1), max_in_idx),
     Log#(TAdd#(max_out, 1), max_in_idx),
-
-    
+  
     Add#(c__, max_in_idx, fill_state_t),
     Add#(d__, idx_t, fill_state_t),
 
