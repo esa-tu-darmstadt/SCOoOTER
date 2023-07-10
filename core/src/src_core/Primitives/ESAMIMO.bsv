@@ -21,6 +21,8 @@ module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     Bits#(t, st),              // object must have bit representation
     Log#(size, idx_t),
 
+    Add#(d__, 1, size),
+
     Add#(a__, max_out_idx, fill_state_t),
     Add#(b__, max_in_idx, fill_state_t),
     Add#(c__, idx_t, fill_state_t),
@@ -30,8 +32,39 @@ module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     Log#(TAdd#(max_in, 1), max_in_idx),
     Log#(TAdd#(max_out, 1), max_out_idx),
 
-    FShow#(Vector::Vector#(max_in, t))
+    FShow#(Vector::Vector#(max_in, t)),
+
+    Add#(e__, fill_state_t, TAdd#(1, idx_t))
 );
+
+    function UInt#(idx_t) truncate_index(UInt#(idx_t) new_idx, UInt#(fill_state_t) add) provisos (
+        // create types to test if depth is pwr of 2
+        Add#(1, size_dec_t, size),
+        Max#(1, size_dec_t, size_dec_pos_t),
+        Log#(size_dec_pos_t, size_test_t),
+
+        Add#(e__, fill_state_t, overflow_state),
+        Add#(1, idx_t, overflow_state)
+        
+    );
+        
+        UInt#(idx_t) output_idx;
+
+        //if size is not a pwr of two, explicitly implement rollover
+        if( valueOf(idx_t) == valueOf(size_test_t) ) begin
+            UInt#(overflow_state) new_idx_ext = extend(new_idx);
+            UInt#(overflow_state) add_ext = extend(add);
+            UInt#(overflow_state) max_idx = fromInteger(valueOf(size));
+            UInt#(overflow_state) overflow_idx = new_idx_ext + add_ext;
+            output_idx = overflow_idx >= max_idx ?
+                            truncate( overflow_idx - max_idx ) :
+                            truncate( overflow_idx );
+        // if size is power of two, the index will roll over naturally
+        // this is more efficient!
+        end else output_idx = new_idx + truncate(add);
+
+        return output_idx;
+    endfunction
 
     // fullness state
     Reg#(UInt#(idx_t)) head_r <- mkReg(0);
@@ -54,12 +87,12 @@ module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     endfunction
 
     method Action enq(UInt#(max_in_idx) count, Vector#(max_in, t) data);
-        UInt#(fill_state_t) tmp = extend(head_r) + extend(count);
-        head_r <= truncate(tmp);
-        if(tail_r == truncate(tmp)) full_r[0] <= True;
+        UInt#(idx_t) tmp = truncate_index(head_r, extend(count));
+        head_r <= tmp;
+        if(tail_r == tmp) full_r[0] <= True;
         for(Integer i = 0; i < valueOf(max_in); i=i+1) begin
             if(fromInteger(i)<count) begin
-                internal_store[head_r + fromInteger(i)] <= data[i];
+                internal_store[truncate_index(head_r, fromInteger(i))] <= data[i];
             end
         end
     endmethod
@@ -67,14 +100,13 @@ module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     method Vector#(max_out, t) first;
         Vector#(max_out, t) result;
         for(Integer i = 0; i < valueOf(max_out); i=i+1)
-            result[i] = internal_store[tail_r + fromInteger(i)];
+            result[i] = internal_store[truncate_index(tail_r, fromInteger(i))];
         return result;
     endmethod
 
     method Action deq(UInt#(max_out_idx) count);
         if(count > 0) full_r[1] <= False;
-        UInt#(fill_state_t) tmp = extend(tail_r) + extend(count);
-        tail_r <= truncate(tmp);
+        tail_r <= truncate_index(tail_r, extend(count));
     endmethod
 
     method Bool enqReady = (full_slots() < fromInteger(valueOf(size)));
