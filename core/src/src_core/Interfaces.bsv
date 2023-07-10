@@ -162,11 +162,12 @@ interface RobIFC;
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
 
+    (* always_enabled, always_ready *)
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method Vector#(ISSUEWIDTH, RobEntry) get();
     method Action complete_instructions(UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
 
-    method Action result_bus(Vector#(NUM_FU, Maybe#(FullResult)) bus_in);
+    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
 
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     method Bool csr_busy();

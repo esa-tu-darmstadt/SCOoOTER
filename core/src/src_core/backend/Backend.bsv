@@ -102,22 +102,7 @@ module mkBackend(BackendIFC) provisos (
 
     // methods to external world
     method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) result_bus);
-        let results = tpl_1(result_bus);
-        ResultWrite mem_wr = isValid(tpl_2(result_bus)) ? tagged Mem tpl_2(result_bus).Valid : tagged None;
-        ResultWrite csr_wr = isValid(tpl_3(result_bus)) ? tagged Csr tpl_3(result_bus).Valid : tagged None;
-        Vector#(NUM_FU, ResultWrite) write_result_bus_vec = Vector::append(Vector::replicate(tagged None), vec( // zero out non-mem/csr units
-            mem_wr,
-            csr_wr
-        ));
-        function Maybe#(FullResult) parts_to_full_result(Maybe#(Result) r, ResultWrite w) = isValid(r) ? tagged Valid FullResult {
-            tag : r.Valid.tag,
-            new_pc : r.Valid.new_pc,
-            result : r.Valid.result,
-            write : w
-        } : tagged Invalid;
-        let full_result_bus_vec = Vector::map(uncurry(parts_to_full_result), Vector::zip(results, write_result_bus_vec));
-
-        rob.result_bus(full_result_bus_vec);
+        rob.result_bus(result_bus);
     endmethod
     interface Get train = commit.train;
     method Bool csr_busy() = rob.csr_busy();

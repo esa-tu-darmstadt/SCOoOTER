@@ -22,6 +22,7 @@ import Debug::*;
 import TestFunctions::*;
 import GetPut::*;
 import ClientServer::*;
+import BuildVector::*;
 
 //allow the index to wrap around
 //only needed if size is not pwr2, as the index can naturally overflow here
@@ -157,7 +158,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
             // calculate new head
             head_r <= truncate_index(head_r, truncate(count_ext));
             // set full flag if full
-            if(tail_r == truncate_index(head_r, truncate(count_ext))) full_r[0] <= True;
+            if(count > 0 && tail_r == truncate_index(head_r, truncate(count_ext))) full_r[0] <= True;
         endaction
     endfunction
 
@@ -259,8 +260,24 @@ module mkReorderBuffer_in(RobIFC) provisos (
         = retrieve_fun(); // look at first avail. inst
     method Action complete_instructions(UInt#(issuewidth_log_t) count)
         = deq_instructions(count); // dequeue count inst.
-    method Action result_bus(Vector#(NUM_FU, Maybe#(FullResult)) bus_in)
-        = result_bus_vec._write(bus_in); // connect to result bus
+    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
+        let results = tpl_1(res_bus);
+        ResultWrite mem_wr = isValid(tpl_2(res_bus)) ? tagged Mem tpl_2(res_bus).Valid : tagged None;
+        ResultWrite csr_wr = isValid(tpl_3(res_bus)) ? tagged Csr tpl_3(res_bus).Valid : tagged None;
+        Vector#(NUM_FU, ResultWrite) write_result_bus_vec = Vector::append(Vector::replicate(tagged None), vec( // zero out non-mem/csr units
+            mem_wr,
+            csr_wr
+        ));
+        function Maybe#(FullResult) parts_to_full_result(Maybe#(Result) r, ResultWrite w) = isValid(r) ? tagged Valid FullResult {
+            tag : r.Valid.tag,
+            new_pc : r.Valid.new_pc,
+            result : r.Valid.result,
+            write : w
+        } : tagged Invalid;
+        let full_result_bus_vec = Vector::map(uncurry(parts_to_full_result), Vector::zip(results, write_result_bus_vec));
+
+        result_bus_vec._write(full_result_bus_vec); // connect to result bus
+    endmethod
 
     // check if there is a blocking memory write
     //TODO: can be more efficient if checking for epoch and address

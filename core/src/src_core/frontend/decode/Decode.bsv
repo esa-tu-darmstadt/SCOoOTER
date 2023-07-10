@@ -7,6 +7,7 @@ import MIMO::*;
 import Vector::*;
 import GetPut::*;
 import GetPutCustom::*;
+import ESAMIMO::*;
 
 ///////////////////////////////////////////////////
 // This package implements decoding of instructions
@@ -323,12 +324,10 @@ endfunction
 `endif
 module mkDecode(DecodeIFC) provisos (
         Bits#(Instruction, instruction_width_t),
-        Mul#(INST_WINDOW, instruction_width_t, mimosize_t), //the output MIMO holds the amount of bits equal to the bit width of a predecoded inst and the mimo depth
-        Add#(__a, instruction_width_t, mimosize_t), // the MIMO should hold at least one predecoded instruction
         Log#(RASDEPTH, ras_log_t)
 );
 
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkMIMO(defaultValue);
+    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO();
     PulseWire clear_buffer <- mkPulseWire();
 
     interface Put instructions;

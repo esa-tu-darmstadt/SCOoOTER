@@ -195,6 +195,10 @@ typedef struct {
     Bit#(RAS_EXTRA) ras;
 } Instruction deriving(Bits, Eq, FShow);
 
+instance DefaultValue#(Instruction);
+    defaultValue = ?;
+endinstance
+
 // write accesses to memory
 typedef struct {
     UInt#(XLEN) mem_addr;
