@@ -47,11 +47,11 @@ Array#(Reg#(Bool)) int_in_process_r <- mkCReg(2, False);
 
 Array#(Reg#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) next_pc_r <- mkCRegU(2);
 
-Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w <- mkWire();
+FIFO#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w <- mkPipelineFIFO();
 RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w_exc <- mkRWire();
 
 Wire#(Bit#(XLEN)) tvec <- mkWire();
-FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause <- mkBypassFIFO();
+FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause <- mkPipelineFIFO();
 RWire#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause_exc <- mkRWire();
 Wire#(Bit#(3)) int_in <- mkBypassWire();
 
@@ -74,7 +74,7 @@ endfunction
 rule redirect_on_no_interrupt (int_in == 0 || int_in_process_r[1]);
     if(redirect_pc_w_exc.wget() matches tagged Valid .v) begin
         epoch <= epoch + 1;
-        redirect_pc_w <= v;
+        redirect_pc_w.enq(v);
     end
     if(mcause_exc.wget() matches tagged Valid .v) begin
         mcause.enq(v);
@@ -96,8 +96,12 @@ endfunction
 rule redirect_on_interrupt (int_in != 0 && !int_in_process_r[1]);
     epoch <= epoch + 1;
     int_in_process_r[1] <= True;
-    redirect_pc_w <= tuple2(tvec, tpl_2(next_pc_r[1]));
+    redirect_pc_w.enq(tuple2(tvec, tpl_2(next_pc_r[1])));
     mcause.enq(tuple2({1'b1, fromInteger(cause_for_int(int_in))}, tpl_1(next_pc_r[1])));
+endrule
+
+rule deq_redirs;
+    redirect_pc_w.deq();
 endrule
 
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
@@ -215,7 +219,7 @@ endinterface
 interface Get csr_writes = toGet(csr_rq_out);
 
 method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
-    return redirect_pc_w;
+    return redirect_pc_w.first();
 endmethod
 
 method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
