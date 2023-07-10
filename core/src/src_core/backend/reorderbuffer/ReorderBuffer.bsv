@@ -79,10 +79,9 @@ module mkReorderBuffer_in(RobIFC) provisos (
     Wire#(Vector#(NUM_FU, Maybe#(FullResult))) result_bus_vec <- mkWire();
 
     //internal storage
-    Vector#(ROBDEPTH, Array#(Reg#(RobEntry))) internal_store_v <- replicateM(mkCReg(2, unpack(0)));
+    Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_v <- replicateM(mkRegU());
     //separate the ports
-    Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_port0_v = Vector::map(disassemble_creg(0), internal_store_v);
-    Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_port1_v = Vector::map(disassemble_creg(1), internal_store_v);
+    Wire#(Vector#(ROBDEPTH, RobEntry)) internal_store_preread_v <- mkBypassWire();
     //pointers for head and tail
     Reg#(UInt#(size_logidx_t)) head_r <- mkReg(0);
     Reg#(UInt#(size_logidx_t)) tail_r <- mkReg(0);
@@ -118,7 +117,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
         // loop through buffer
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             let idx = truncate_index(tail_r, fromInteger(i));
-            let inst = internal_store_port0_v[idx];
+            let inst = internal_store_v[idx];
             // test for completed instructions
             if(!done && (fromInteger(i) < full_slots()))
                 if(inst.result matches tagged Tag .e)
@@ -136,22 +135,22 @@ module mkReorderBuffer_in(RobIFC) provisos (
     // this means, enqueue new instructions
     // called from ISSUE
     // caller has to guard that buffer does not overflow!
-    function Action reserve_fun(Vector#(ISSUEWIDTH, RobEntry) new_entries, UInt#(issuewidth_log_t) count);
-        action
+    Wire#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) reserve_data_w <- mkWire();
+    rule reserve_fun;
+            let new_entries = tpl_1(reserve_data_w);
+            let count = tpl_2(reserve_data_w);
             // print an error in simulation if the buffer is too full to hold the new instructions
             if(empty_slots() < extend(count)) begin
                 err_print(ROB, $format("Error while insert - inserting too much! - free: ", empty_slots, " in: ", count));
             end
 
-            Vector#(ROBDEPTH, RobEntry) local_values = Vector::readVReg(internal_store_port1_v);
             // loop over elements
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
                 // calculate idx of insertion
                 let new_idx = truncate_index(head_r, fromInteger(i));
                 if(fromInteger(i) < count)
-                    local_values[new_idx] = new_entries[i]; // insert entry
+                    internal_store_v[new_idx] <= new_entries[i]; // insert entry
             end
-            Vector::writeVReg(internal_store_port1_v, local_values);
 
             // update pointers
             UInt#(count_width_t) count_ext = extend(count);
@@ -159,8 +158,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
             head_r <= truncate_index(head_r, truncate(count_ext));
             // set full flag if full
             if(count > 0 && tail_r == truncate_index(head_r, truncate(count_ext))) full_r[0] <= True;
-        endaction
-    endfunction
+    endrule
 
     // take functions out of the ROB
     // called from Commit
@@ -171,7 +169,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
                 let deq_idx = truncate_index(tail_r, fromInteger(i));
-                tmp_res[i] = internal_store_port0_v[deq_idx];
+                tmp_res[i] = internal_store_v[deq_idx];
             end
 
             return tmp_res;
@@ -192,15 +190,18 @@ module mkReorderBuffer_in(RobIFC) provisos (
     function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(FullResult) res)
         = isValid(res) && res.Valid.tag == current_tag;
 
+    rule bypass_cdb;
+        internal_store_preread_v <= Vector::readVReg(internal_store_v);
+    endrule
     // read the result bus
+    (* conflict_free="reserve_fun,read_cdb" *)
     rule read_cdb;
         // debug print
         dbg_print(ROB, $format("result_bus: ", fshow(result_bus_vec)));
-        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
 
         // for every ROB entry
         for(Integer i = 0; i < valueOf(ROBDEPTH); i=i+1) begin
-            let current_entry = local_store[i];
+            let current_entry = internal_store_preread_v[i];
 
             // check if the entry is tagged
             if(current_entry.result matches tagged Tag .tag) begin
@@ -226,14 +227,12 @@ module mkReorderBuffer_in(RobIFC) provisos (
                         tagged Valid .v : v;
                         tagged Invalid  : (current_entry.pc+4);
                     endcase;
+
+                    // update entry
+                    internal_store_v[i] <= current_entry;
                 end
             end
-
-            // update entry
-            local_store[i] = current_entry;
         end
-
-        Vector::writeVReg(internal_store_port0_v, local_store);
     endrule
 
     // print rob content for debugging
@@ -243,7 +242,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
             let current_ptr = truncate_index(tail_r, fromInteger(i));
 
             if( (current_ptr != head_r || full_r[0]) && !done )
-                dbg_print(ROB, $format("Stored ", i, " ", fshow(internal_store_port0_v[current_ptr])));
+                dbg_print(ROB, $format("Stored ", i, " ", fshow(internal_store_v[current_ptr])));
             else done = True;
         end
     endrule
@@ -255,7 +254,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
     method UInt#(size_log_t) free = empty_slots(); // how many inst can be enqueued?
     method UInt#(size_logidx_t) current_idx = head_r; // head ptr for idx generation
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issuewidth_log_t) num)
-        = reserve_fun(data, num); // put instructions into ROB
+        = reserve_data_w._write(tuple2(data, num)); // put instructions into ROB
     method Vector#(ISSUEWIDTH, RobEntry) get()
         = retrieve_fun(); // look at first avail. inst
     method Action complete_instructions(UInt#(issuewidth_log_t) count)
@@ -289,7 +288,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
         interface Get response;
             method ActionValue#(Bool) get();
                 actionvalue
-                    Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
+                    Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);
                     let idx = fwd_test_mem_f.first(); fwd_test_mem_f.deq();
                     //rob cannot be empty!
                     //this slice of ROB cannot be full (since the instruction for which we request is excluded)
@@ -305,7 +304,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
     // check if there is a pending CSR operation
     method Bool csr_busy();
-        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_port0_v);
+        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);
         Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(full_r[0], head_r, tail_r), Vector::map(fromInteger, Vector::genVector()));
         Vector#(ROBDEPTH, Bool) pending_csr_vector = Vector::map(pending_csr, local_store);
         Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_csr_vector));
