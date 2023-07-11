@@ -56,7 +56,7 @@ RWire#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause_exc <- mkRWire();
 Wire#(Bit#(3)) int_in <- mkBypassWire();
 
 FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_rq_out <- mkPipelineFIFOF();
-FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), MIMO::LUInt#(ISSUEWIDTH))) branch_train <- mkBypassFIFO();
+FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), MIMO::LUInt#(ISSUEWIDTH))) branch_train <- mkPipelineFIFO();
 FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), MIMO::LUInt#(ISSUEWIDTH))) csr_rq_out <- mkPipelineFIFO();
 
 
