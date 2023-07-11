@@ -272,6 +272,76 @@ module mkNaiveDivSigned(Server#(Tuple2#(Int#(64),Int#(XLEN)),Tuple2#(Int#(XLEN),
     endinterface
 endmodule
 
+// mul requiring multiple CPU cycles but allowing for higher clock speed
+module mkMultiCycleDiv(Server#(Tuple2#(UInt#(64),UInt#(XLEN)),Tuple2#(UInt#(XLEN),UInt#(XLEN)))) provisos (
+    Add#(2, XLEN, divlen),
+    Log#(XLEN, dlen_log_t)
+);
+    
+    FIFOF#(Tuple2#(UInt#(XLEN),UInt#(XLEN))) out_f <- mkPipelineFIFOF();
+    
+    Reg#(Int#(divlen)) nom <- mkRegU();
+    Reg#(Int#(divlen)) den <- mkRegU();
+    Reg#(Int#(divlen)) res <- mkRegU();
+    Reg#(UInt#(dlen_log_t)) cnt <- mkRegU();
+    Reg#(Bool) busy_r <- mkReg(False); 
+
+    rule compute if (busy_r == True);
+        Int#(divlen) nom_loc = nom;
+        Int#(divlen) res_loc = res;
+
+        // new AQ calculation
+        res_loc = unpack({truncate(pack(res_loc)),pack(nom_loc)[valueOf(XLEN)-1]});
+        nom_loc = nom_loc<<1;
+
+        // new res calculation
+        if(res_loc >= 0) $display("sub");
+        else             $display("add");
+        if(res_loc >= 0) res_loc = res_loc-den;
+        else             res_loc = res_loc+den;
+
+        // update nominator
+        nom_loc = unpack({truncateLSB(pack(nom_loc)), res_loc>=0 ? 1'b1: 1'b0});
+
+        // end condition
+        if(cnt == 0) begin
+            if(res<0) res_loc = res_loc+den;
+            out_f.enq(tuple2(truncate(unpack(pack(nom_loc))), truncate(unpack(pack(res_loc)))));
+            busy_r <= False;
+        end
+
+        // update registers
+        nom <= nom_loc;
+        res <= res_loc;
+
+        // decrement counter
+        cnt <= cnt-1;
+    endrule
+
+    interface Put request;
+        method Action put(Tuple2#(UInt#(64),UInt#(XLEN)) operands) if (busy_r == False && out_f.notFull());
+            busy_r <= True;
+            Int#(divlen) nom_loc = unpack(pack('hffffffff & truncate(tpl_1(operands))));
+            nom <= nom_loc;
+            Int#(divlen) den_loc = zeroExtend(unpack(pack(tpl_2(operands))));
+            den <= den_loc;
+            res <= 0;
+            cnt <= fromInteger(valueOf(XLEN)-1);
+        endmethod
+    endinterface
+
+    interface Get response;
+        method ActionValue#(Tuple2#(UInt#(XLEN),UInt#(XLEN))) get();
+            actionvalue
+                out_f.deq();
+                return out_f.first();
+            endactionvalue
+        endmethod
+    endinterface
+    
+endmodule
+
+
 ///////////////////////////////////////////////////////////////////
 // Real FU module
 ///////////////////////////////////////////////////////////////////
@@ -289,7 +359,7 @@ RWire#(Result) out_valid <- mkRWire();
 //Select correct multipliers and dividers based on configured strategy
 Server#(Tuple2#(UInt#(64),UInt#(XLEN)),Tuple2#(UInt#(XLEN),UInt#(XLEN))) unsigned_div <- case (valueOf(MUL_DIV_STRATEGY)) 
     2: mkDivider(4);
-    1: mkNonPipelinedDivider(4);
+    1: mkMultiCycleDiv();
     0: mkNaiveDivUnsigned();
     endcase;
 
