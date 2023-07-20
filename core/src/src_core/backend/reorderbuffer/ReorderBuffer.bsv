@@ -75,6 +75,16 @@ module mkReorderBuffer_in(RobIFC) provisos (
     Max#(issuewidth_log_t, size_logidx_t, count_width_t)
 );
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
     // wire to distribute result bus
     Wire#(Vector#(NUM_FU, Maybe#(FullResult))) result_bus_vec <- mkWire();
 
@@ -230,6 +240,10 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
                     // update entry
                     internal_store_v[i] <= current_entry;
+
+                    `ifdef LOG_PIPELINE
+                        $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, current_entry.pc, i, current_entry.epoch);
+                    `endif
                 end
             end
         end

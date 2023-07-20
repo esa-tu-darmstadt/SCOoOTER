@@ -104,6 +104,16 @@ rule deq_redirs;
     redirect_pc_w.deq();
 endrule
 
+`ifdef LOG_PIPELINE
+    Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+    Reg#(File) out_log <- mkRegU();
+    rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+    rule open if (clk_ctr == 0);
+        File out_log_l <- $fopen("scoooter.log", "a");
+        out_log <= out_log_l;
+    endrule
+`endif
+
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
 method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
     actionvalue
@@ -118,10 +128,15 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
             UInt#(XLEN) wrong_pred_j_local = wrong_pred_j_r;
         `endif
 
+
         UInt#(issuewidth_log_t) count_committed = count;
 
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             if(instructions[i].epoch == epoch) begin
+
+                `ifdef LOG_PIPELINE
+                    if(fromInteger(i) < count && done) $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                `endif
 
                 // handle exceptions
                 if(fromInteger(i) < count &&& 
@@ -149,6 +164,10 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                    !done) begin
                     dbg_print(Commit, $format(fshow(instructions[i])));
                     temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r};
+
+                    `ifdef LOG_PIPELINE
+                        $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                    `endif
 
                     if(instructions[i].branch == True 
                         && fromInteger(i) < count && 
@@ -178,7 +197,12 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     `endif
                 end
 
-            end
+            end 
+            `ifdef LOG_PIPELINE
+                else if(fromInteger(i) < count) begin
+                    $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                end
+            `endif
 
             
         end

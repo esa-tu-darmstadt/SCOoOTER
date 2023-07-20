@@ -8,6 +8,7 @@ import Vector::*;
 import GetPut::*;
 import GetPutCustom::*;
 import ESAMIMO::*;
+import Config::*;
 
 ///////////////////////////////////////////////////
 // This package implements decoding of instructions
@@ -327,6 +328,16 @@ module mkDecode(DecodeIFC) provisos (
         Log#(RASDEPTH, ras_log_t)
 );
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
     MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO();
     PulseWire clear_buffer <- mkPulseWire();
 
@@ -335,6 +346,10 @@ module mkDecode(DecodeIFC) provisos (
             if (!clear_buffer) begin
                 let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
                 decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
+                `ifdef LOG_PIPELINE
+                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count)
+                        $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
+                `endif
             end
         endmethod
     endinterface

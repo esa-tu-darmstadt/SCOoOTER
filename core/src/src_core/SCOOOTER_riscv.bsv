@@ -118,6 +118,8 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     method Action hart_id(Bit#(TLog#(NUM_CPU)) in) = be.hart_id(in);
 
+
+
 endmodule
 
 endpackage
