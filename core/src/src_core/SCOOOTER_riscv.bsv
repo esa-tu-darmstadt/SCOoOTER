@@ -35,6 +35,7 @@ import CSRFile::*;
 import Frontend::*;
 import ExecCore::*;
 import Backend::*;
+import ShiftBuffer::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(

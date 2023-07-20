@@ -30,6 +30,11 @@ typedef 2 RS_DEPTH_CSR;
 typedef 2 RS_DEPTH_MULDIV;
 typedef 2 RS_DEPTH_BR;
 
+// bus buffering
+typedef 0 RS_LATCH_BUS;
+typedef 1 DECODE_LATCH_OUTPUT;
+typedef 1 ROB_LATCH_OUTPUT;
+
 // prediction strategy
 // 0: always untaken
 // 1: smiths

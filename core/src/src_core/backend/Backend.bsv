@@ -93,11 +93,8 @@ module mkBackend(BackendIFC) provisos (
     // pass instructions from ROB to commit
     Wire#(UInt#(issuewidth_log_t)) deq_rob_wire <- mkDWire(0);
     rule connect_rob_commit;
-        let deq <- commit.consume_instructions(rob.get(), rob.available());
-        deq_rob_wire <= deq;
-    endrule
-    rule deq_rob_entries;
-        rob.complete_instructions(deq_rob_wire);
+        let insts <- rob.get();
+        commit.consume_instructions(insts, rob.available());
     endrule
 
     // methods to external world

@@ -202,7 +202,7 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
     method Vector#(max_out, t) first;
         Vector#(max_out, t) result;
         for(Integer i = 0; i < valueOf(max_out); i=i+1)
-            result[i] = internal_store[truncate_index(tail_r[0], fromInteger(i))];
+            result[i] = internal_store[truncate_index(tail_r[1], fromInteger(i))];
         return result;
     endmethod
 
@@ -215,7 +215,7 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
     method Bool enqReadyN(UInt#(max_in_idx) count) = (fromInteger(valueOf(size)) - full_slots(1) >= extend(count));
     method Bool deqReady = (full_slots(0) > 0);
     method Bool deqReadyN(UInt#(max_out_idx) count) = (full_slots(0) >= extend(count));
-    method UInt#(fill_state_t) count = full_slots(0);
+    method UInt#(fill_state_t) count = full_slots(1);
 
 
 endmodule

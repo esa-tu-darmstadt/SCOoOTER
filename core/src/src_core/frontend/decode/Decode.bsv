@@ -338,8 +338,16 @@ module mkDecode(DecodeIFC) provisos (
         endrule
     `endif
 
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO();
+    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO_pipeline();
     PulseWire clear_buffer <- mkPulseWire();
+    Reg#(DecodeResponse) buffer_output <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkReg(DecodeResponse {count: 0, instructions: ?}) : mkBypassWire());
+
+    (* fire_when_enabled,no_implicit_conditions *)
+    rule fill_buffer;
+        let inst_vec = decoded_inst_m.first();
+        MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
+        buffer_output <= DecodeResponse {count: amount_loc, instructions: inst_vec};
+    endrule
 
     interface Put instructions;
         method Action put(FetchResponse inst_from_decode) if (decoded_inst_m.enqReadyN(fromInteger(valueOf(IFUINST))));
@@ -356,10 +364,7 @@ module mkDecode(DecodeIFC) provisos (
 
     interface GetSC decoded_inst;
         method DecodeResponse first;
-            
-            let inst_vec = decoded_inst_m.first();
-            MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
-            return DecodeResponse {count: amount_loc, instructions: inst_vec};
+            return buffer_output;
         endmethod
         method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst_m.deq(amount);
     endinterface

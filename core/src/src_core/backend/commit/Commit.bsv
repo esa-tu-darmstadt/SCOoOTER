@@ -115,8 +115,8 @@ endrule
 `endif
 
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
-method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
-    actionvalue
+method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
+    action
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
         Bool done = False;
@@ -231,8 +231,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
             wrong_pred_j_r <= wrong_pred_j_local;
         `endif
 
-        return count;
-    endactionvalue
+    endaction
 endmethod
 
 interface GetS memory_writes;

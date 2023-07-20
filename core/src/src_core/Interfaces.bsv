@@ -164,8 +164,7 @@ interface RobIFC;
 
     (* always_enabled, always_ready *)
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
-    method Vector#(ISSUEWIDTH, RobEntry) get();
-    method Action complete_instructions(UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
+    method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
     method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
 
@@ -174,7 +173,7 @@ interface RobIFC;
 endinterface
 
 interface CommitIFC;
-    method ActionValue#(UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
+    method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
     interface GetS#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
