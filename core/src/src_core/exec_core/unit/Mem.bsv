@@ -191,6 +191,7 @@ endrule
 
 // check ROB response, if the instruction is clear, commence execution
 // otherwise do not dequeue it and try again next cycle
+Wire#(UInt#(XLEN)) request_sb <- mkWire();
 rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r));
     let internal_state = stage1_internal;
     let rob_resp = response_ROB;
@@ -199,6 +200,7 @@ rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) &
         stage1.enq(internal_state);
         dbg_print(AMO, $format("rob passed:  ", fshow(internal_state)));
         if (internal_state.amo) aq_r <= internal_state.aq;
+        request_sb <= unpack({pack(internal_state.addr)[31:2], 2'b00});
     end
 endrule
 
@@ -211,22 +213,14 @@ endrule
 // STAGE 2: forward data from store buffer
 
 // intra-clock buffer
-Wire#(LoadPipe) stage2_internal <- mkWire();
-Wire#(UInt#(XLEN)) request_sb <- mkWire();
 Wire#(Maybe#(MaskedWord)) response_sb <- mkWire();
 // output to next stage
 FIFO#(Tuple2#(LoadPipe, Maybe#(MaskedWord))) stage2 <- mkPipelineFIFO();
 
 // raise request to store buffer
-rule check_fwd_path if (stage1.first().epoch == epoch_r && !stage1.first().mispredicted);
-    let internal_struct = stage1.first();
-    request_sb <= unpack({pack(internal_struct.addr)[31:2], 2'b00});
-    stage2_internal <= internal_struct;
-endrule
-
 // get response from store buffer
 rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r && !stage1.first().mispredicted);
-    let struct_internal = stage2_internal;
+    let struct_internal = stage1.first();
     let response = response_sb;
     // if the response matches our load/store mask, move into next stage
     // otherwise wait
@@ -236,11 +230,12 @@ rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r && !stage1.first()
         dbg_print(Mem, $format("store buffer:  ", fshow(struct_internal), " ", fshow(response)));
     end
     // if AMO, no fwd is allowed
-    if (struct_internal.amo && !isValid(response)) begin
+    else if (struct_internal.amo && !isValid(response)) begin
         stage2.enq(tuple2(struct_internal, response));
         stage1.deq();
         dbg_print(AMO, $format("store buffer passed:  ", fshow(struct_internal)));
-    end
+    end 
+        else request_sb <= unpack({pack(struct_internal.addr)[31:2], 2'b00}); // re-request fwd
 endrule
 
 // remove wrong-epoch instructions from pipeline
