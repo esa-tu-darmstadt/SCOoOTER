@@ -15,6 +15,7 @@ import Types::*;
 import Debug::*;
 import TestFunctions::*;
 import GetPut::*;
+import Ehr::*;
 
 // interface for the wrappers
 // the wrappers abstract the depth of the RS
@@ -117,12 +118,14 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     endfunction
 
     // wire to transport result bus
-    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkRegU();
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_bypass <- mkBypassWire();
+    rule propagate_res_bus;
+        result_bus_vec <= result_bus_bypass;
+    endrule
 
     // internal storage
-    Vector#(entries, Array#(Reg#(Maybe#(Instruction)))) instruction_buffer_v <- replicateM(mkCReg(2, tagged Invalid));
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port0_v = Vector::map(disassemble_creg(0), instruction_buffer_v);
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port1_v = Vector::map(disassemble_creg(1), instruction_buffer_v);
+    Vector#(entries, Ehr#(2, Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkEhr(tagged Invalid));
     // head, tail and full pointers
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
@@ -132,7 +135,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
-            if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
+            if(instruction_buffer_v[j][0] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
 
                 // loop pver result bus
@@ -149,7 +152,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
                         current_instruction.rs2 = tagged Operand res.result;
                 end
 
-                instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
+                instruction_buffer_v[j][0] <= tagged Valid current_instruction;
             end
         end
     endrule
@@ -161,14 +164,27 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         tail_r <= increment_index(tail_r);
     endrule
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
     // dequeue an instruction if one is ready
     method ActionValue#(Instruction) get if (
             (head_r != tail_r || full_r[0]) && 
-            is_ready(instruction_buffer_port0_v[tail_r])
+            is_ready(instruction_buffer_v[tail_r][0])
         );
-        let inst = fromMaybe(?, instruction_buffer_port0_v[tail_r]);
+        let inst = fromMaybe(?, instruction_buffer_v[tail_r][0]);
         clear_full_flag_w.send();
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(inst)));
+        `ifdef LOG_PIPELINE
+            $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
+        `endif
         return inst;
     endmethod
 
@@ -176,13 +192,13 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     method ExecUnitTag unit_type = eut;
 
     // input the result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_bypass._write(bus_in);
 
     // input instructions to RS
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
-                instruction_buffer_port1_v[head_r] <= tagged Valid inst;
+                instruction_buffer_v[head_r][1] <= tagged Valid inst;
                 head_r <= increment_index(head_r);
                 if(tail_r == increment_index(head_r)) full_r[0] <= True;
             endmethod
@@ -200,7 +216,11 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 );
 
     // wire to distribute result bus
-    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkRegU();
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_bypass <- mkBypassWire();
+    rule propagate_res_bus;
+        result_bus_vec <= result_bus_bypass;
+    endrule
 
     //create a buffer of Instructions
     //Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
@@ -221,22 +241,27 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 
             if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
+                Bool chg = False;
 
                 // loop pver result bus
                 for(Integer i = 0; i < valueOf(NUM_FU); i=i+1) begin
                     // update rs1
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs1 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs1 = tagged Operand res.result;
+                            chg = True;
+                        end
                     // update rs2
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs2 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs2 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs2 = tagged Operand res.result;
+                            chg = True;
+                        end
                 end
 
-                instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
+                if(chg) instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
             end
         end
     endrule
@@ -257,6 +282,16 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         instruction_buffer_port1_v[clear_idx_w] <= tagged Invalid;
     endrule
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
     // method to request an instruction
     Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_port0_v);
     method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
@@ -264,6 +299,9 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         let inst = fromMaybe(?, instruction_buffer_read_v[idx]);
         clear_idx_w <= idx;
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(idx)));
+        `ifdef LOG_PIPELINE
+            $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
+        `endif
         return inst;
     endmethod
 
@@ -271,7 +309,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     method ExecUnitTag unit_type = eut;
 
     // input result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_bypass._write(bus_in);
 
     // insert instructions
     interface ReservationStationPutIFC in;
