@@ -74,5 +74,15 @@ function Bool part_of_rob_slice(Bool def, UInt#(TLog#(ROBDEPTH)) head, UInt#(TLo
     return out;
 endfunction
 
+function Bool ispwr2(Integer test);
+    Maybe#(Bool) ret = tagged Invalid;
+    while (!isValid(ret)) begin
+        if (test == 1) ret = tagged Valid True;
+        else if (test%2 != 0) ret = tagged Valid False;
+        test = test/2;
+    end
+    return ret.Valid;
+endfunction
+
 endpackage
 
