@@ -24,7 +24,7 @@ import Ehr::*;
 (* synthesize *)
 module mkInstructionArbiter(InstArbiterIFC) provisos (
     Log#(NUM_CPU, idx_cpu_t),
-    Mul#(NUM_CPU, 2, num_by_two_cpu_t),
+    Mul#(NUM_CPU, 8, num_by_two_cpu_t),
     Mul#(XLEN, IFUINST, ifuwidth)
 );
 
@@ -32,6 +32,7 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
     AXI4_Master_Rd#(XLEN, ifuwidth, idx_cpu_t, 0) axi_rd <- mkAXI4_Master_Rd(0, 0, False);
 
     //request buffers
+    Vector#(NUM_CPU, FIFO#(Bit#(XLEN))) mem_rd_req_f_v <- replicateM(mkPipelineFIFO());
     Vector#(NUM_CPU, FIFO#(Bit#(ifuwidth))) mem_rd_resp_f_v <- replicateM(mkPipelineFIFO());
 
     //load/store queues
@@ -74,15 +75,23 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
             });
     endrule
 
+    for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) begin
+        rule commit_request if (load_queue.enqReadyN(rd_req_in_count[i]+1));
+            let in = mem_rd_req_f_v[i].first();
+            mem_rd_req_f_v[i].deq();
+            rd_req_in_count[i] <= rd_req_in_count[i]+1;
+            incoming_inst[rd_req_in_count[i]] <= Rd_req {addr: in, cpu_id: fromInteger(i)};
+        endrule
+    end
+
     // read request interface
     // provide incoming data in order for reset_count_and_collapse_buffer rule
     Vector#(NUM_CPU, Server#(Bit#(XLEN), Bit#(ifuwidth))) reads_loc = ?;
     for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) begin
         reads_loc[i] = (interface Server;
             interface Put request;
-                method Action put(Bit#(XLEN) in) if (load_queue.enqReadyN(rd_req_in_count[i]+1));
-                    rd_req_in_count[i] <= rd_req_in_count[i]+1;
-                    incoming_inst[rd_req_in_count[i]] <= Rd_req {addr: in, cpu_id: fromInteger(i)};
+                method Action put(Bit#(XLEN) in);
+                    mem_rd_req_f_v[i].enq(in);
                 endmethod
             endinterface
             interface Get response = toGet(mem_rd_resp_f_v[i]);
