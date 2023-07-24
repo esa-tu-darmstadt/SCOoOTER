@@ -24,6 +24,7 @@ import GetPut::*;
 import ClientServer::*;
 import BuildVector::*;
 import Ehr::*;
+import FIFOF::*;
 
 //allow the index to wrap around
 //only needed if size is not pwr2, as the index can naturally overflow here
@@ -267,8 +268,8 @@ module mkReorderBuffer_in(RobIFC) provisos (
     rule dequeue_insts;
         deq_instructions(deq_bypass);
     endrule
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) insts_passing <-
-        (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkPipelineFIFO() : mkBypassFIFO());
+    FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) insts_passing <-
+        (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkPipelineFIFOF() : mkBypassFIFOF());
     rule collect_instructions;
         deq_bypass <= ready();
         insts_passing.enq(tuple2(retrieve_fun(), ready())); // look at first avail. inst
@@ -322,8 +323,14 @@ module mkReorderBuffer_in(RobIFC) provisos (
                     Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(False, idx, tail_r), Vector::map(fromInteger, Vector::genVector()));
                     Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
                     Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
-
-                    return Vector::elem(True, inhibitants_map);
+                    Bool out = Vector::elem(True, inhibitants_map);
+                    if (valueOf(ROB_LATCH_OUTPUT) == 1) begin 
+                        Vector#(ISSUEWIDTH, Bool) pending_write_rdy_vector = Vector::map(pending_write, tpl_1(insts_passing.first()));
+                        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+                            if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_write_rdy_vector[i] = False;
+                        out = out || Vector::elem(True, pending_write_rdy_vector);
+                    end
+                    return out;
                 endactionvalue
             endmethod
         endinterface
@@ -335,8 +342,14 @@ module mkReorderBuffer_in(RobIFC) provisos (
         Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(full_r[0], head_r, tail_r), Vector::map(fromInteger, Vector::genVector()));
         Vector#(ROBDEPTH, Bool) pending_csr_vector = Vector::map(pending_csr, local_store);
         Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_csr_vector));
-
-        return Vector::countElem(True, inhibitants_map) >= 1;
+        Bool out = Vector::countElem(True, inhibitants_map) >= 1;
+        if (valueOf(ROB_LATCH_OUTPUT) == 1) begin
+            Vector#(ISSUEWIDTH, Bool) pending_csr_rdy_vector = Vector::map(pending_csr, tpl_1(insts_passing.first()));
+            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+                if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_csr_rdy_vector[i] = False;
+            out = out || (Vector::countElem(True, pending_csr_rdy_vector) >= 1);
+        end
+        return out;
     endmethod
 
     
