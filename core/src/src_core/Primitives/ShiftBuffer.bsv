@@ -23,7 +23,7 @@ module mkShiftBuffer#(t init)(ShiftBufferIfc#(n, t)) provisos (
     Vector#(TAdd#(n,1), Reg#(t)) full_store = Vector::cons(bypass, storage);
 
     rule propagate;
-        for(Integer i = 0; i <= valueOf(n); i=i+1)
+        for(Integer i = 0; i < valueOf(n); i=i+1)
             full_store[i+1]._write(full_store[i]._read());
     endrule
     interface Reg r;

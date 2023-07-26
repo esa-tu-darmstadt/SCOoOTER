@@ -16,6 +16,8 @@ import Debug::*;
 import TestFunctions::*;
 import GetPut::*;
 import Ehr::*;
+import FIFOF::*;
+import SpecialFIFOs::*;
 
 // interface for the wrappers
 // the wrappers abstract the depth of the RS
@@ -125,7 +127,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     endrule
 
     // internal storage
-    Vector#(entries, Ehr#(2, Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkEhr(tagged Invalid));
+    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
     // head, tail and full pointers
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
@@ -135,24 +137,30 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
-            if(instruction_buffer_v[j][0] matches tagged Valid .inst) begin
+            if(instruction_buffer_v[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
+
+                Bool change = False;
 
                 // loop pver result bus
                 for(Integer i = 0; i < valueOf(NUM_FU); i=i+1) begin
                     // update rs1
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs1 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs1 = tagged Operand res.result;
+                            change = True;
+                        end
                     // update rs2
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs2 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs2 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs2 = tagged Operand res.result;
+                            change = True;
+                        end
                 end
 
-                instruction_buffer_v[j][0] <= tagged Valid current_instruction;
+                if (change) instruction_buffer_v[j] <= tagged Valid current_instruction;
             end
         end
     endrule
@@ -174,12 +182,22 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         endrule
     `endif
 
+    Wire#(Instruction) inst_to_enqueue <- mkWire();
+
+    (* conflict_free="enqueue, listen_to_cdb" *)
+    rule enqueue;
+        instruction_buffer_v[head_r] <= tagged Valid inst_to_enqueue;
+        let new_head = increment_index(head_r);
+        head_r <= new_head;
+        if(tail_r == new_head) full_r[0] <= True;
+    endrule
+
     // dequeue an instruction if one is ready
     method ActionValue#(Instruction) get if (
             (head_r != tail_r || full_r[0]) && 
-            is_ready(instruction_buffer_v[tail_r][0])
+            is_ready(instruction_buffer_v[tail_r])
         );
-        let inst = fromMaybe(?, instruction_buffer_v[tail_r][0]);
+        let inst = fromMaybe(?, instruction_buffer_v[tail_r]);
         clear_full_flag_w.send();
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(inst)));
         `ifdef LOG_PIPELINE
@@ -198,9 +216,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
-                instruction_buffer_v[head_r][1] <= tagged Valid inst;
-                head_r <= increment_index(head_r);
-                if(tail_r == increment_index(head_r)) full_r[0] <= True;
+                inst_to_enqueue <= inst;
             endmethod
         endinterface
         method Bool can_insert = !full_r[0];
@@ -223,15 +239,12 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     endrule
 
     //create a buffer of Instructions
-    //Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
-    Vector#(entries, Array#(Reg#(Maybe#(Instruction)))) instruction_buffer_v <- replicateM(mkCReg(2, tagged Invalid));
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port0_v = Vector::map(disassemble_creg(0), instruction_buffer_v);
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port1_v = Vector::map(disassemble_creg(1), instruction_buffer_v);
+    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
 
     // print contents for debugging
     rule print_innards;
         for(Integer i = 0; i < valueOf(entries); i=i+1) begin
-            dbg_print(RS, $format("ROB ", fshow(eut), " ", i, " ", fshow(instruction_buffer_port1_v[i])));
+            dbg_print(RS, $format("ROB ", fshow(eut), " ", i, " ", fshow(instruction_buffer_v[i])));
         end
     endrule
 
@@ -239,7 +252,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
-            if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
+            if(instruction_buffer_v[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
                 Bool chg = False;
 
@@ -261,7 +274,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
                         end
                 end
 
-                if(chg) instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
+                if(chg) instruction_buffer_v[j] <= tagged Valid current_instruction;
             end
         end
     endrule
@@ -269,17 +282,17 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     // insert instruction, wires will be written by method
     Wire#(Instruction) inst_to_insert <- mkWire();
     Wire#(UInt#(entries_idx_t)) inst_to_insert_idx <- mkWire();
-    rule insert_instruction;        
-        instruction_buffer_port1_v[inst_to_insert_idx] <= tagged Valid inst_to_insert;
+    rule insert_instruction;
+        instruction_buffer_v[inst_to_insert_idx] <= tagged Valid inst_to_insert;
         dbg_print(RS, $format("inserting inst: idx ", inst_to_insert_idx));
     endrule
 
     // dequeue an instruction if it was retrieved
     Wire#(UInt#(entries_idx_t)) clear_idx_w <- mkWire();
-    (* conflict_free = "insert_instruction, clear_instruction" *)
+    (* conflict_free = "listen_to_cdb, insert_instruction, clear_instruction" *)
     rule clear_instruction;
         dbg_print(RS, $format("clearing inst: idx ", fshow(clear_idx_w)));
-        instruction_buffer_port1_v[clear_idx_w] <= tagged Invalid;
+        instruction_buffer_v[clear_idx_w] <= tagged Invalid;
     endrule
 
     `ifdef LOG_PIPELINE
@@ -293,7 +306,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     `endif
 
     // method to request an instruction
-    Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_port0_v);
+    Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_v);
     method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
         let idx = fromMaybe(?, Vector::findIndex(is_ready, instruction_buffer_read_v));
         let inst = fromMaybe(?, instruction_buffer_read_v[idx]);
@@ -316,11 +329,11 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         interface Put instruction;
             method Action put(Instruction inst);
                 inst_to_insert <= inst;
-                inst_to_insert_idx <= Vector::findElem(tagged Invalid, instruction_buffer_read_v).Valid;
+                inst_to_insert_idx <= Vector::findElem(tagged Invalid, Vector::readVReg(instruction_buffer_v)).Valid;
                 dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
-        method Bool can_insert = Vector::elem(tagged Invalid, instruction_buffer_read_v);
+        method Bool can_insert = Vector::elem(tagged Invalid, Vector::readVReg(instruction_buffer_v));
     endinterface
 endmodule
 
