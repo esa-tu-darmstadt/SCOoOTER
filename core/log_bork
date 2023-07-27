@@ -1,0 +1,56 @@
+Adding BlueAXI from /scratch_ssd/ms/scoooter/scoooter/core/libraries/BlueAXI/src
+Adding BlueLib from /scratch_ssd/ms/scoooter/scoooter/core/libraries/BlueLib/src
+checking package dependencies
+All packages are up to date.
+Linking build/out...
+Bluesim object reused: mkTestbench.{h,o}
+Bluesim object reused: mkDave.{h,o}
+Bluesim object reused: mkMemoryArbiter.{h,o}
+Bluesim object reused: mkInstructionArbiter.{h,o}
+Bluesim object reused: mkSCOOOTER_riscv.{h,o}
+make[1]: Entering directory '/scratch_ssd/ms/scoooter/scoooter/core/build'
+exec: c++ -O0  -Wall -Wno-unused -D_FILE_OFFSET_BITS=64 -I"/scratch/ms/bsc/inst/lib"/Bluesim -Wno-uninitialized -fPIC -c -o "model_mkTestbench.o" "model_mkTestbench.cxx"
+exec: cc -O3  -Wall -Wno-unused -D_FILE_OFFSET_BITS=64 -fPIC -c -o "/scratch_ssd/ms/scoooter/scoooter/core/libraries/BlueLib/src/BDPI/bad_exit.o" "/scratch_ssd/ms/scoooter/scoooter/core/libraries/BlueLib/src/BDPI/bad_exit.c"
+User object created: /scratch_ssd/ms/scoooter/scoooter/core/libraries/BlueLib/src/BDPI/bad_exit.o
+Bluesim object created: model_mkTestbench.{h,o}
+make[1]: Leaving directory '/scratch_ssd/ms/scoooter/scoooter/core/build'
+Simulation shared library created: out.so
+Simulation executable created: out
+Linking finished
+Simulating build/out
+Warning: file '../../testPrograms/isa/32ua/bsv_hex/rv32ua-p-amoadd_w_32.bsv' for memory 'testCustom_ibram_memory' has a gap at addresses 146 to 4294967295.
+[33m[Commit]: [0mRobEntry { pc: 'h00000000, destination: 'h01, result: tagged Result 'h00000000, next_pc: 'h00000004, pred_pc: 'h00000004, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000004, destination: 'h02, result: tagged Result 'h00000000, next_pc: 'h00000008, pred_pc: 'h00000008, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000008, destination: 'h03, result: tagged Result 'h00000000, next_pc: 'h0000000c, pred_pc: 'h0000000c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000000c, destination: 'h04, result: tagged Result 'h00000000, next_pc: 'h00000010, pred_pc: 'h00000010, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000010, destination: 'h05, result: tagged Result 'h00000000, next_pc: 'h00000014, pred_pc: 'h00000014, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000014, destination: 'h06, result: tagged Result 'h00000000, next_pc: 'h00000018, pred_pc: 'h00000018, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000018, destination: 'h07, result: tagged Result 'h00000000, next_pc: 'h0000001c, pred_pc: 'h0000001c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000001c, destination: 'h08, result: tagged Result 'h00000000, next_pc: 'h00000020, pred_pc: 'h00000020, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000020, destination: 'h09, result: tagged Result 'h00000000, next_pc: 'h00000024, pred_pc: 'h00000024, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000024, destination: 'h0a, result: tagged Result 'h00000000, next_pc: 'h00000028, pred_pc: 'h00000028, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000028, destination: 'h0b, result: tagged Result 'h00000000, next_pc: 'h0000002c, pred_pc: 'h0000002c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000002c, destination: 'h0c, result: tagged Result 'h00000000, next_pc: 'h00000030, pred_pc: 'h00000030, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000030, destination: 'h0d, result: tagged Result 'h00000000, next_pc: 'h00000034, pred_pc: 'h00000034, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000034, destination: 'h0e, result: tagged Result 'h00000000, next_pc: 'h00000038, pred_pc: 'h00000038, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000038, destination: 'h0f, result: tagged Result 'h00000000, next_pc: 'h0000003c, pred_pc: 'h0000003c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000003c, destination: 'h10, result: tagged Result 'h00000000, next_pc: 'h00000040, pred_pc: 'h00000040, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000040, destination: 'h11, result: tagged Result 'h00000000, next_pc: 'h00000044, pred_pc: 'h00000044, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000044, destination: 'h12, result: tagged Result 'h00000000, next_pc: 'h00000048, pred_pc: 'h00000048, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000048, destination: 'h13, result: tagged Result 'h00000000, next_pc: 'h0000004c, pred_pc: 'h0000004c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000004c, destination: 'h14, result: tagged Result 'h00000000, next_pc: 'h00000050, pred_pc: 'h00000050, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000050, destination: 'h15, result: tagged Result 'h00000000, next_pc: 'h00000054, pred_pc: 'h00000054, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000054, destination: 'h16, result: tagged Result 'h00000000, next_pc: 'h00000058, pred_pc: 'h00000058, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000058, destination: 'h17, result: tagged Result 'h00000000, next_pc: 'h0000005c, pred_pc: 'h0000005c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000005c, destination: 'h18, result: tagged Result 'h00000000, next_pc: 'h00000060, pred_pc: 'h00000060, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000060, destination: 'h19, result: tagged Result 'h00000000, next_pc: 'h00000064, pred_pc: 'h00000064, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000064, destination: 'h1a, result: tagged Result 'h00000000, next_pc: 'h00000068, pred_pc: 'h00000068, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000068, destination: 'h1b, result: tagged Result 'h00000000, next_pc: 'h0000006c, pred_pc: 'h0000006c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000006c, destination: 'h1c, result: tagged Result 'h00000000, next_pc: 'h00000070, pred_pc: 'h00000070, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000070, destination: 'h1d, result: tagged Result 'h00000000, next_pc: 'h00000074, pred_pc: 'h00000074, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000074, destination: 'h1e, result: tagged Result 'h00000000, next_pc: 'h00000078, pred_pc: 'h00000078, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000078, destination: 'h1f, result: tagged Result 'h00000000, next_pc: 'h0000007c, pred_pc: 'h0000007c, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h0000007c, destination: 'h02, result: tagged Result 'h00020000, next_pc: 'h00000080, pred_pc: 'h00000080, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000080, destination: 'h02, result: tagged Result 'h00020000, next_pc: 'h00000084, pred_pc: 'h00000084, epoch:  0, write: tagged None , branch: False, br: False, history: 'h0, ras: 'h000000000, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000084, destination: 'h01, result: tagged Result 'h00000088, next_pc: 'h00000094, pred_pc: 'h00000088, epoch:  0, write: tagged None , branch: True, br: False, history: 'h0, ras: 'h100000088, ret: False }
+[33m[Commit]: [0mRobEntry { pc: 'h00000094, destination: 'h00, result: tagged Result 'h00000098, next_pc: 'h0000009c, pred_pc: 'h00000098, epoch:  1, write: tagged None , branch: True, br: False, history: 'h0, ras: 'h100000088, ret: False }

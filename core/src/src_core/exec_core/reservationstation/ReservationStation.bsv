@@ -17,6 +17,8 @@ import TestFunctions::*;
 import GetPut::*;
 import Ehr::*;
 import FIFOF::*;
+import FIFO::*;
+import WireFIFO::*;
 import SpecialFIFOs::*;
 
 // interface for the wrappers
@@ -102,18 +104,14 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     // types to track fullness and index
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),
-    Log#(entries, entries_idx_t),
-    // types to test if depth is pwr2
-    Add#(1, depth_dec_t, entries),
-    Max#(1, depth_dec_t, depth_dec_pos_t),
-    Log#(depth_dec_pos_t, depth_test_t)
+    Log#(entries, entries_idx_t)
 );
     // implement idx rollover
     function UInt#(size_logidx_t) increment_index(UInt#(size_logidx_t) new_idx);
         UInt#(size_logidx_t) output_idx;
         //if DEPTH is not a pwr of two, explicitly implement rollover
-        if( valueOf(entries_idx_t) == valueOf(depth_test_t) ) begin
-            output_idx = new_idx == fromInteger(valueOf(entries)-1) ? 0 : new_idx + 1;
+        if( !ispwr2(valueOf(entries)) ) begin
+            output_idx = (new_idx == fromInteger(valueOf(entries)-1) ? 0 : (new_idx + 1));
         // if depth is power of two, the index will roll over naturally
         end else output_idx = new_idx + 1;
         return output_idx;
@@ -132,6 +130,16 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
     Reg#(Bool) full_r[2] <- mkCReg(2, False);
+
+    rule print_innards;
+        let idx = tail_r;
+        Bool nodone = True;
+        for(Integer i = 0; i < valueOf(entries); i=i+1) 
+        if ((tail_r != head_r || full_r[0]) && nodone) begin
+            dbg_print(RS, $format(fshow(eut), " ", i, " ", fshow(instruction_buffer_v[idx])));
+            if (idx == head_r) nodone = False;            
+        end
+    endrule
 
     // evaluate result bus
     rule listen_to_cdb;
@@ -182,11 +190,12 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         endrule
     `endif
 
-    Wire#(Instruction) inst_to_enqueue <- mkWire();
+    FIFO#(Instruction) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFO() : mkWireFIFO());
 
     (* conflict_free="enqueue, listen_to_cdb" *)
     rule enqueue;
-        instruction_buffer_v[head_r] <= tagged Valid inst_to_enqueue;
+        instruction_buffer_v[head_r] <= tagged Valid inst_to_enqueue.first();
+        inst_to_enqueue.deq();
         let new_head = increment_index(head_r);
         head_r <= new_head;
         if(tail_r == new_head) full_r[0] <= True;
@@ -216,10 +225,10 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
-                inst_to_enqueue <= inst;
+                inst_to_enqueue.enq(inst);
             endmethod
         endinterface
-        method Bool can_insert = !full_r[0];
+        method Bool can_insert = !(valueOf(RS_LATCH_INPUT) == 1 ? full_r[1] : full_r[0]);
     endinterface
 endmodule
 
@@ -244,15 +253,20 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     // print contents for debugging
     rule print_innards;
         for(Integer i = 0; i < valueOf(entries); i=i+1) begin
-            dbg_print(RS, $format("ROB ", fshow(eut), " ", i, " ", fshow(instruction_buffer_v[i])));
+            dbg_print(RS, $format(fshow(eut), " ", i, " ", fshow(instruction_buffer_v[i])));
         end
+    endrule
+
+    Wire#(Vector#(entries, Maybe#(Instruction))) instruction_buffer_preread <- mkBypassWire();
+    rule preread;
+        instruction_buffer_preread <= Vector::readVReg(instruction_buffer_v);
     endrule
 
     // evaluate result bus
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
-            if(instruction_buffer_v[j] matches tagged Valid .inst) begin
+            if(instruction_buffer_preread[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
                 Bool chg = False;
 
@@ -280,10 +294,12 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     endrule
 
     // insert instruction, wires will be written by method
-    Wire#(Instruction) inst_to_insert <- mkWire();
-    Wire#(UInt#(entries_idx_t)) inst_to_insert_idx <- mkWire();
+    FIFOF#(Instruction) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF();
     rule insert_instruction;
-        instruction_buffer_v[inst_to_insert_idx] <= tagged Valid inst_to_insert;
+        let inst = inst_to_insert.first();
+        inst_to_insert.deq();
+        let inst_to_insert_idx = Vector::findElem(tagged Invalid, instruction_buffer_preread).Valid;
+        instruction_buffer_v[inst_to_insert_idx] <= tagged Valid inst;
         dbg_print(RS, $format("inserting inst: idx ", inst_to_insert_idx));
     endrule
 
@@ -328,12 +344,11 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
-                inst_to_insert <= inst;
-                inst_to_insert_idx <= Vector::findElem(tagged Invalid, Vector::readVReg(instruction_buffer_v)).Valid;
+                inst_to_insert.enq(inst);
                 dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
-        method Bool can_insert = Vector::elem(tagged Invalid, Vector::readVReg(instruction_buffer_v));
+        method Bool can_insert = (Vector::countElem(tagged Invalid, Vector::readVReg(instruction_buffer_v)) > (inst_to_insert.notEmpty() && (valueOf(RS_LATCH_INPUT) == 1) ? 1 : 0) );
     endinterface
 endmodule
 

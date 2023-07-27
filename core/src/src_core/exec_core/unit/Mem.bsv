@@ -234,8 +234,10 @@ rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r && !stage1.first()
         stage2.enq(tuple2(struct_internal, response));
         stage1.deq();
         dbg_print(AMO, $format("store buffer passed:  ", fshow(struct_internal)));
-    end 
-        else request_sb <= unpack({pack(struct_internal.addr)[31:2], 2'b00}); // re-request fwd
+    end else begin
+        request_sb <= unpack({pack(struct_internal.addr)[31:2], 2'b00}); // re-request fwd
+        dbg_print(AMO, $format("store buffer retry:  ", fshow(struct_internal), fshow(response)));
+    end
 endrule
 
 // remove wrong-epoch instructions from pipeline
@@ -277,11 +279,11 @@ rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r && !tpl_1(
             (rob_head == struct_internal.tag || valueOf(ROBDEPTH) == 1) && // wait until we are sure AMO is correct-path
             (struct_internal.rl ? store_queue_empty_w : True) // on a release, stall the AMO such that pending writes get through
             ) begin
-        dbg_print(AMO, $format("request:  ", fshow(struct_internal)));
-        stage2.deq();
-        stage3.enq(struct_internal);
-        mem_rd_or_amo_request.enq(tuple2(pack(struct_internal.addr), tagged Valid tuple2(struct_internal.amo_modifier, struct_internal.amo_t)));
-    end
+                dbg_print(AMO, $format("request:  ", fshow(struct_internal)));
+                stage2.deq();
+                stage3.enq(struct_internal);
+                mem_rd_or_amo_request.enq(tuple2(pack(struct_internal.addr), tagged Valid tuple2(struct_internal.amo_modifier, struct_internal.amo_t)));
+            end
 endrule
 
 // remove wrong-epoch instructions
@@ -387,7 +389,10 @@ endrule
 
 // FU iface
 interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst) = in.enq(inst);
+    method Action put(Instruction inst);
+        dbg_print(Mem, $format("got from RS:  ", fshow(inst)));
+        in.enq(inst);
+    endmethod
     method Maybe#(Result) get() = out_valid.wget();
 endinterface
 

@@ -1,0 +1,15 @@
+#-----------------------------------------------------------
+# Vivado v2020.2 (64-bit)
+# SW Build 3064766 on Wed Nov 18 09:12:47 MST 2020
+# IP Build 3064653 on Wed Nov 18 14:17:31 MST 2020
+# Start of session at: Thu Jul  6 12:50:22 2023
+# Process ID: 747071
+# Current directory: /scratch_ssd/ms/scoooter/scoooter/core
+# Command line: vivado /scratch_ssd/ms/tapwork_scoooter/compose/axi4mm/AU280/scoooter_pe/001/170.0/microarch/microarch.xpr
+# Log file: /scratch_ssd/ms/scoooter/scoooter/core/vivado.log
+# Journal file: /scratch_ssd/ms/scoooter/scoooter/core/vivado.jou
+#-----------------------------------------------------------
+start_gui
+open_project /scratch_ssd/ms/tapwork_scoooter/compose/axi4mm/AU280/scoooter_pe/001/170.0/microarch/microarch.xpr
+update_compile_order -fileset sources_1
+open_run impl_1

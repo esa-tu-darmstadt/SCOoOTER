@@ -32,6 +32,8 @@ interface ExecCoreIFC;
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
     (* always_ready, always_enabled *)
     method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
+    (* always_ready, always_enabled *)
+    method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx);
     // reserve space in ROB
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
 
@@ -165,10 +167,9 @@ module mkExecCore(ExecCoreIFC);
     // expose interfaces from internal units to outside world
     interface decoded_inst = issue.decoded_inst();
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = issue.rob_free(free);
-    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
-        issue.rob_current_idx(idx);
-        mem.current_rob_id(idx);
-    endmethod
+    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = issue.rob_current_idx(idx);
+    method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx) = mem.current_rob_id(idx);
+
     interface Client check_rob = mem.check_rob;
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
     method Action flush();

@@ -34,6 +34,8 @@ interface BackendIFC;
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
+    (* always_enabled, always_ready *)
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
     method Bool store_queue_empty();
@@ -117,6 +119,7 @@ module mkBackend(BackendIFC) provisos (
     endmethod
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc() = commit.redirect_pc;
     method UInt#(TLog#(ROBDEPTH)) current_idx = rob.current_idx();
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num) = rob.reserve(data, num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free = rob.free();
     method Bool store_queue_empty() = store_buf.empty();

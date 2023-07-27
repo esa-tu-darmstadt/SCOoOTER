@@ -161,6 +161,8 @@ interface RobIFC;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
+    (* always_enabled, always_ready *)
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
 
     (* always_enabled, always_ready *)
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);

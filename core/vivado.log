@@ -1,0 +1,35 @@
+#-----------------------------------------------------------
+# Vivado v2020.2 (64-bit)
+# SW Build 3064766 on Wed Nov 18 09:12:47 MST 2020
+# IP Build 3064653 on Wed Nov 18 14:17:31 MST 2020
+# Start of session at: Thu Jul  6 12:50:22 2023
+# Process ID: 747071
+# Current directory: /scratch_ssd/ms/scoooter/scoooter/core
+# Command line: vivado /scratch_ssd/ms/tapwork_scoooter/compose/axi4mm/AU280/scoooter_pe/001/170.0/microarch/microarch.xpr
+# Log file: /scratch_ssd/ms/scoooter/scoooter/core/vivado.log
+# Journal file: /scratch_ssd/ms/scoooter/scoooter/core/vivado.jou
+#-----------------------------------------------------------
+start_gui
+open_project /scratch_ssd/ms/tapwork_scoooter/compose/axi4mm/AU280/scoooter_pe/001/170.0/microarch/microarch.xpr
+Scanning sources...
+Finished scanning sources
+CRITICAL WARNING: [Common 17-1649] The Vivado message database '/scratch_ssd/ms/tapwork_scoooter/compose/axi4mm/AU280/scoooter_pe/001/170.0/microarch/microarch.runs/synth_1/vivado.pb' contains 22103 messages. Restoring all messages from this message database will impact Vivado performance, so only WARNING, CRITICAL WARNING, and ERROR messages will be restored. To restore all messages from this file use the tcl command 'set_param messaging.loadPbLimit 22104' and re-open the project.
+open_project: Time (s): cpu = 00:00:28 ; elapsed = 00:00:16 . Memory (MB): peak = 7601.418 ; gain = 55.301 ; free physical = 27095 ; free virtual = 87646
+update_compile_order -fileset sources_1
+open_run impl_1
+Netlist sorting complete. Time (s): cpu = 00:00:04 ; elapsed = 00:00:03 . Memory (MB): peak = 9023.188 ; gain = 21.000 ; free physical = 22695 ; free virtual = 83447
+WARNING: [Constraints 18-550] Could not create 'DRIVE' constraint because net 'system_i/memory/mig/inst/u_ddr4_mem_intfc/u_mig_ddr4_phy/cal_RESET_n[0]' is not directly connected to top level port. Synthesis is ignored for DRIVE but preserved for implementation.
+WARNING: [Constraints 18-550] Could not create 'SLEW' constraint because net 'system_i/memory/mig/inst/u_ddr4_mem_intfc/u_mig_ddr4_phy/cal_RESET_n[0]' is not directly connected to top level port. Synthesis is ignored for SLEW but preserved for implementation.
+WARNING: [Constraints 18-550] Could not create 'IBUF_LOW_PWR' constraint because net 'system_i/memory/mig/inst/u_ddr4_mem_intfc/u_mig_ddr4_phy/mmcm_clk_in' is not directly connected to top level port. Synthesis is ignored for IBUF_LOW_PWR but preserved for implementation.
+Reading XDEF placement.
+Reading placer database...
+Reading XDEF routing.
+Read XDEF File: Time (s): cpu = 00:00:18 ; elapsed = 00:00:17 . Memory (MB): peak = 12090.586 ; gain = 316.352 ; free physical = 17723 ; free virtual = 78649
+Restored from archive | CPU: 18.360000 secs | Memory: 311.483345 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:18 ; elapsed = 00:00:17 . Memory (MB): peak = 12090.586 ; gain = 316.352 ; free physical = 17716 ; free virtual = 78641
+Generating merged BMM file for the design top 'system_wrapper'...
+Netlist sorting complete. Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.04 . Memory (MB): peak = 12102.461 ; gain = 0.000 ; free physical = 17812 ; free virtual = 79023
+open_run: Time (s): cpu = 00:04:10 ; elapsed = 00:03:12 . Memory (MB): peak = 12495.430 ; gain = 4511.828 ; free physical = 17831 ; free virtual = 78804
+open_report: Time (s): cpu = 00:00:56 ; elapsed = 00:00:12 . Memory (MB): peak = 12666.109 ; gain = 165.680 ; free physical = 17567 ; free virtual = 78541
+WARNING: [Timing 38-436] There are set_bus_skew constraint(s) in this design. Please run report_bus_skew to ensure that bus skew requirements are met.
+exit
