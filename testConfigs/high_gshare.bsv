@@ -34,6 +34,8 @@ typedef 6 RS_DEPTH_BR;
 typedef 1 RS_LATCH_BUS;
 typedef 1 DECODE_LATCH_OUTPUT;
 typedef 1 ROB_LATCH_OUTPUT;
+typedef 0 RESBUS_ADDED_DELAY;
+typedef 1 RS_LATCH_INPUT;
 
 
 // prediction strategy

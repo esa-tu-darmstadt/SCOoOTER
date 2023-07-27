@@ -31,9 +31,11 @@ typedef 6 RS_DEPTH_MULDIV;
 typedef 6 RS_DEPTH_BR;
 
 // bus buffering
-typedef 1 RS_LATCH_BUS;
+typedef 0 RS_LATCH_BUS;
 typedef 1 DECODE_LATCH_OUTPUT;
 typedef 1 ROB_LATCH_OUTPUT;
+typedef 1 RESBUS_ADDED_DELAY;
+typedef 1 RS_LATCH_INPUT;
 
 
 // prediction strategy
