@@ -69,7 +69,7 @@ module mkESAMIMO(MIMO#(max_in, max_out, size, t)) provisos (
     // fullness state
     Reg#(UInt#(idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(idx_t)) tail_r <- mkReg(0);
-    Array#(Reg#(Bool)) full_r <- mkCReg(2, False);
+    Ehr#(2, Bool) full_r <- mkEhr(False);
     Vector#(size, Reg#(t)) internal_store <- replicateM(mkRegU());
 
     //find out how many slots are full
@@ -169,7 +169,7 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
 
     // fullness state
     Reg#(UInt#(idx_t)) head_r <- mkReg(0);
-    Array#(Reg#(UInt#(idx_t))) tail_r <- mkCReg(2,0);
+    Ehr#(2,UInt#(idx_t)) tail_r <- mkEhr(0);
     //Array#(Reg#(Bool)) full_r <- mkCReg(2, False);
     Ehr#(2, Bool) full_r <- mkEhr(False);
     Vector#(size, Reg#(t)) internal_store <- replicateM(mkRegU());
@@ -188,10 +188,20 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
         return result;
     endfunction
 
+    PulseWire has_deq <- mkPulseWire();
+    rule clear_full_flag if (has_deq);
+        full_r[1] <= False;
+    endrule
+    Wire#(UInt#(idx_t)) pass_new_head <- mkWire();
+    rule write_head; head_r <= pass_new_head; endrule
+
+    Wire#(Vector#(size, t)) preread_buffer <- mkBypassWire();
+    rule preread; preread_buffer <= Vector::readVReg(internal_store); endrule
+
     method Action enq(UInt#(max_in_idx) count, Vector#(max_in, t) data);
         UInt#(idx_t) tmp = truncate_index(head_r, extend(count));
-        head_r <= tmp;
-        if(tail_r[1] == tmp) full_r[1] <= True;
+        pass_new_head <= tmp;
+        if(tail_r[0] == tmp) full_r[0] <= True;
         for(Integer i = 0; i < valueOf(max_in); i=i+1) begin
             if(fromInteger(i)<count) begin
                 internal_store[truncate_index(head_r, fromInteger(i))] <= data[i];
@@ -202,19 +212,19 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
     method Vector#(max_out, t) first;
         Vector#(max_out, t) result;
         for(Integer i = 0; i < valueOf(max_out); i=i+1)
-            result[i] = internal_store[truncate_index(tail_r[1], fromInteger(i))];
+            result[i] = preread_buffer[truncate_index(tail_r[1], fromInteger(i))];
         return result;
     endmethod
 
     method Action deq(UInt#(max_out_idx) count);
-        if(count > 0) full_r[0] <= False;
+        if(count > 0) has_deq.send();
         tail_r[0] <= truncate_index(tail_r[0], extend(count));
     endmethod
 
-    method Bool enqReady = (full_slots(1) < fromInteger(valueOf(size)));
-    method Bool enqReadyN(UInt#(max_in_idx) count) = (fromInteger(valueOf(size)) - full_slots(1) >= extend(count));
-    method Bool deqReady = (full_slots(0) > 0);
-    method Bool deqReadyN(UInt#(max_out_idx) count) = (full_slots(0) >= extend(count));
+    method Bool enqReady = (full_slots(0) < fromInteger(valueOf(size)));
+    method Bool enqReadyN(UInt#(max_in_idx) count) = (fromInteger(valueOf(size)) - full_slots(0) >= extend(count));
+    method Bool deqReady = (full_slots(1) > 0);
+    method Bool deqReadyN(UInt#(max_out_idx) count) = (full_slots(1) >= extend(count));
     method UInt#(fill_state_t) count = full_slots(1);
 
 

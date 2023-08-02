@@ -217,7 +217,7 @@ module mkStoreBuffer(StoreBufferIFC);
                     let result = (incoming_res matches tagged Valid .vv ? 
                                   incoming_res : (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res));
 
-                    dbg_print(Mem, $format("calc fwd: ", fshow(addr), " ", fshow(pending_store_res), " ", fshow(incoming_resp), " ", fshow(internal_store_res), fshow(forward_pending), fshow(incoming_writes_w)));
+                    //dbg_print(Mem, $format("calc fwd: ", fshow(addr), " ", fshow(pending_store_res), " ", fshow(incoming_resp), " ", fshow(internal_store_res), fshow(forward_pending), fshow(incoming_writes_w)));
 
                     return result;
                 endactionvalue

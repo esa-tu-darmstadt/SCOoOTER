@@ -241,11 +241,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
 );
 
     // wire to distribute result bus
-    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkRegU() : mkBypassWire());
-    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_bypass <- mkBypassWire();
-    rule propagate_res_bus;
-        result_bus_vec <= result_bus_bypass;
-    endrule
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkReg(replicate(tagged Invalid)) : mkBypassWire());
 
     //create a buffer of Instructions
     Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
@@ -338,7 +334,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     method ExecUnitTag unit_type = eut;
 
     // input result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_bypass._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
 
     // insert instructions
     interface ReservationStationPutIFC in;

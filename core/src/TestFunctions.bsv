@@ -7,8 +7,13 @@ package TestFunctions;
 import Types :: *;
 import Inst_Types :: *;
 import Vector::*;
+import Ehr::*;
 
 function a disassemble_creg(Integer num, Array#(a) creg);
+    return creg[num];
+endfunction
+
+function Reg#(a) disassemble_ehr(Integer num, Ehr#(n, a) creg);
     return creg[num];
 endfunction
 

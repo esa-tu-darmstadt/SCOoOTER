@@ -112,13 +112,14 @@ module mkExecCore(ExecCoreIFC);
     // connect results to issue stage and reservation stations   
     ShiftBufferIfc#(RESBUS_ADDED_DELAY, Vector#(NUM_RS, Maybe#(ResultLoopback))) delay_bus_rs <- mkShiftBuffer(replicate(tagged Invalid));
     rule input_result_bus_delay_loop;
-        delay_bus_rs.r <= Vector::map(map_result_to_loopback_result, result_bus_vec);
+        let loopback = Vector::map(map_result_to_loopback_result, result_bus_vec);
+        regfile_evo.result_bus(loopback);
+        delay_bus_rs.r <= loopback;
     endrule 
 
     rule propagate_result_bus;
         for(Integer i = 0; i < valueOf(NUM_FU); i=i+1)
             rs_vec[i].result_bus(delay_bus_rs.r);
-        regfile_evo.result_bus(delay_bus_rs.r);
     endrule
 
     // pass instructions from issue to rs

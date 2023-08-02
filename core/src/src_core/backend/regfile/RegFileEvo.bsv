@@ -19,6 +19,7 @@ import TestFunctions::*;
 import Debug::*;
 import ClientServer::*;
 import GetPut::*;
+import Ehr::*;
 
 // Union for holding data in the evolving RegFile
 // The evolving RegFile stores which tag corresponds to
@@ -41,11 +42,11 @@ module mkRegFileEvo(RegFileEvoIFC);
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
 
     //register storage
-    Vector#(31, Array#(Reg#(EvoEntry))) registers <- replicateM(mkCReg(3, tagged Invalid));
+    Vector#(31, Ehr#(3, EvoEntry)) registers <- replicateM(mkEhr(tagged Invalid));
     //derived Reg ifaces from CReg
-    Vector#(31, Reg#(EvoEntry)) registers_port0 = Vector::map(disassemble_creg(0), registers);
-    Vector#(31, Reg#(EvoEntry)) registers_port1 = Vector::map(disassemble_creg(1), registers);
-    Vector#(31, Reg#(EvoEntry)) registers_port2 = Vector::map(disassemble_creg(2), registers);
+    Vector#(31, Reg#(EvoEntry)) registers_port0 = Vector::map(disassemble_ehr(0), registers);
+    Vector#(31, Reg#(EvoEntry)) registers_port1 = Vector::map(disassemble_ehr(1), registers);
+    Vector#(31, Reg#(EvoEntry)) registers_port2 = Vector::map(disassemble_ehr(2), registers);
 
     //local epoch counter
     Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
