@@ -3,13 +3,12 @@
 #include "../csr.h"
 
 volatile uint_xlen_t mutex = 0;
-uint_xlen_t cnt = 0;
 
 volatile int arr[] = {65, 47, 362, 455, 868, 22, 5, 6, 33, 1, 9, 5, 77, 14, 4, 978};
 volatile int amount = 16;
 
 int main() {
-	volatile int cnt = arr[0];
+	volatile int cnt = 0;
 	volatile int hartid_max = 0;
 	volatile int arrived = 0;
 	

@@ -47,7 +47,7 @@ Array#(Reg#(Bool)) int_in_process_r <- mkCReg(2, False);
 
 Array#(Reg#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) next_pc_r <- mkCRegU(2);
 
-FIFO#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w <- mkPipelineFIFO();
+FIFO#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w <- mkBypassFIFO();
 RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w_exc <- mkRWire();
 
 Wire#(Bit#(XLEN)) tvec <- mkWire();

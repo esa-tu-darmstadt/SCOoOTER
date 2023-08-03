@@ -19,10 +19,10 @@ int main() {
 		                          , "r" ( &hartid_max ));
 	
 	register int i = 0;
-	while(i*hartid_max+csr_read_mhartid() < amount) {
+	while((i*(hartid_max+1)+csr_read_mhartid()) < amount) {
 		__asm__ volatile ("amoand.w    x0, %0, (%1)"  
 		                          : /* output: register %0 */
-		                          : "r" (i*hartid_max+csr_read_mhartid())  /* input : register */
+		                          : "r" (arr[(i*(hartid_max+1)+csr_read_mhartid())])  /* input : register */
 		                          , "r" ( &cnt ));
 		i++;
 	}

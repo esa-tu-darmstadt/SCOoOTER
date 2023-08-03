@@ -174,13 +174,18 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
     Ehr#(2, Bool) full_r <- mkEhr(False);
     Vector#(size, Reg#(t)) internal_store <- replicateM(mkRegU());
 
+    Wire#(UInt#(idx_t)) pass_new_head <- mkDWire(head_r);
+    rule write_head; head_r <= pass_new_head; endrule
+
     //find out how many slots are full
     function UInt#(fill_state_t) full_slots(Integer i);
         UInt#(fill_state_t) result;
 
+        let head = head_r;
+
         //calculate from head and tail pointers
-        if (head_r > tail_r[i]) result = extend(head_r) - extend(tail_r[i]);
-        else if (tail_r[i] > head_r) result = fromInteger(valueOf(size)) - extend(tail_r[i]) + extend(head_r);
+        if (head > tail_r[i]) result = extend(head) - extend(tail_r[i]);
+        else if (tail_r[i] > head) result = fromInteger(valueOf(size)) - extend(tail_r[i]) + extend(head);
         // if both pointers are equal, must be full or empty
         else if (full_r[i]) result = fromInteger(valueOf(size));
         else result = 0;
@@ -189,11 +194,14 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
     endfunction
 
     PulseWire has_deq <- mkPulseWire();
+    PulseWire has_enq <- mkPulseWire();
     rule clear_full_flag if (has_deq);
-        full_r[1] <= False;
+        full_r[0] <= False;
     endrule
-    Wire#(UInt#(idx_t)) pass_new_head <- mkWire();
-    rule write_head; head_r <= pass_new_head; endrule
+    rule set_full_flag if (has_enq);
+        full_r[1] <= True;
+    endrule
+    
 
     Wire#(Vector#(size, t)) preread_buffer <- mkBypassWire();
     rule preread; preread_buffer <= Vector::readVReg(internal_store); endrule
@@ -201,7 +209,7 @@ module mkESAMIMO_pipeline(MIMO#(max_in, max_out, size, t)) provisos (
     method Action enq(UInt#(max_in_idx) count, Vector#(max_in, t) data);
         UInt#(idx_t) tmp = truncate_index(head_r, extend(count));
         pass_new_head <= tmp;
-        if(tail_r[0] == tmp) full_r[0] <= True;
+        if(tail_r[0] == tmp) has_enq.send();
         for(Integer i = 0; i < valueOf(max_in); i=i+1) begin
             if(fromInteger(i)<count) begin
                 internal_store[truncate_index(head_r, fromInteger(i))] <= data[i];
