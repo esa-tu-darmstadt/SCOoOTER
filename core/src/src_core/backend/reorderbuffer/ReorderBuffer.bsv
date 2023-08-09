@@ -23,6 +23,9 @@ import TestFunctions::*;
 import GetPut::*;
 import ClientServer::*;
 import BuildVector::*;
+import Ehr::*;
+import FIFOF::*;
+import WireFIFO::*;
 
 //allow the index to wrap around
 //only needed if size is not pwr2, as the index can naturally overflow here
@@ -75,6 +78,16 @@ module mkReorderBuffer_in(RobIFC) provisos (
     Max#(issuewidth_log_t, size_logidx_t, count_width_t)
 );
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
     // wire to distribute result bus
     Wire#(Vector#(NUM_FU, Maybe#(FullResult))) result_bus_vec <- mkWire();
 
@@ -88,7 +101,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
     //as empty and full states look similar if only
     //head and tail are regarded, we add a flag to
     //avoid sacrificing one storage space
-    Reg#(Bool) full_r[2] <- mkCReg(2, False);
+    Ehr#(2, Bool) full_r <- mkEhr(False);
 
     // those functions test if a pending write to memory or CSR space is in the current instruction
     function Bool pending_write(RobEntry re) = (re.write matches tagged Mem .v ? True : (re.write matches tagged Pending_mem ? True : False)); 
@@ -230,6 +243,10 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
                     // update entry
                     internal_store_v[i] <= current_entry;
+
+                    `ifdef LOG_PIPELINE
+                        $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, current_entry.pc, i, current_entry.epoch);
+                    `endif
                 end
             end
         end
@@ -247,18 +264,34 @@ module mkReorderBuffer_in(RobIFC) provisos (
         end
     endrule
 
+    // propagate count and instructions
+    Wire#(UInt#(issuewidth_log_t)) deq_bypass <- mkWire();
+    rule dequeue_insts;
+        deq_instructions(deq_bypass);
+    endrule
+    FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) insts_passing <-
+        (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
+    Reg#(UInt#(size_logidx_t)) tail_delay_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ?  mkReg(0) : mkWire());
+    rule collect_instructions;
+        if (valueOf(ROB_LATCH_OUTPUT) == 1) deq_bypass <= ready();
+        insts_passing.enq(tuple2(retrieve_fun(), ready())); // look at first avail. inst
+        tail_delay_r <= tail_r;
+    endrule
+
     // used to bypass request/response pairs in server
     FIFO#(UInt#(TLog#(ROBDEPTH))) fwd_test_mem_f <- mkBypassFIFO();
 
-    method UInt#(issuewidth_log_t) available = ready(); // how many inst can be dequeued?
+    method UInt#(issuewidth_log_t) available = tpl_2(insts_passing.first()); // how many inst can be dequeued?
     method UInt#(size_log_t) free = empty_slots(); // how many inst can be enqueued?
     method UInt#(size_logidx_t) current_idx = head_r; // head ptr for idx generation
+    method UInt#(size_logidx_t) current_tail_idx = (valueOf(ROB_LATCH_OUTPUT) == 1 ? tail_delay_r : tail_r); // tail ptr for atomic predication
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issuewidth_log_t) num)
         = reserve_data_w._write(tuple2(data, num)); // put instructions into ROB
-    method Vector#(ISSUEWIDTH, RobEntry) get()
-        = retrieve_fun(); // look at first avail. inst
-    method Action complete_instructions(UInt#(issuewidth_log_t) count)
-        = deq_instructions(count); // dequeue count inst.
+    method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
+        if (valueOf(ROB_LATCH_OUTPUT) == 0) deq_bypass <= ready();
+        insts_passing.deq();
+        return tpl_1(insts_passing.first());
+    endmethod
     method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
         let results = tpl_1(res_bus);
         ResultWrite mem_wr = isValid(tpl_2(res_bus)) ? tagged Mem tpl_2(res_bus).Valid : tagged None;
@@ -295,8 +328,14 @@ module mkReorderBuffer_in(RobIFC) provisos (
                     Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(False, idx, tail_r), Vector::map(fromInteger, Vector::genVector()));
                     Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
                     Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
-
-                    return Vector::elem(True, inhibitants_map);
+                    Bool out = Vector::elem(True, inhibitants_map);
+                    if (valueOf(ROB_LATCH_OUTPUT) == 1) begin 
+                        Vector#(ISSUEWIDTH, Bool) pending_write_rdy_vector = Vector::map(pending_write, tpl_1(insts_passing.first()));
+                        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+                            if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_write_rdy_vector[i] = False;
+                        out = out || Vector::elem(True, pending_write_rdy_vector);
+                    end
+                    return out;
                 endactionvalue
             endmethod
         endinterface
@@ -308,8 +347,14 @@ module mkReorderBuffer_in(RobIFC) provisos (
         Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(full_r[0], head_r, tail_r), Vector::map(fromInteger, Vector::genVector()));
         Vector#(ROBDEPTH, Bool) pending_csr_vector = Vector::map(pending_csr, local_store);
         Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_csr_vector));
-
-        return Vector::countElem(True, inhibitants_map) >= 1;
+        Bool out = Vector::countElem(True, inhibitants_map) >= 1;
+        if (valueOf(ROB_LATCH_OUTPUT) == 1) begin
+            Vector#(ISSUEWIDTH, Bool) pending_csr_rdy_vector = Vector::map(pending_csr, tpl_1(insts_passing.first()));
+            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+                if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_csr_rdy_vector[i] = False;
+            out = out || (Vector::countElem(True, pending_csr_rdy_vector) >= 1);
+        end
+        return out;
     endmethod
 
     

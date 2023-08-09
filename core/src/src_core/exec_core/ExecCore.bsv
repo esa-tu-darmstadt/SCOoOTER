@@ -21,6 +21,7 @@ import CSR::*;
 import RegFileEvo::*;
 import BuildVector::*;
 import ReservationStation::*;
+import ShiftBuffer::*;
 
 interface ExecCoreIFC;
     // instruction input
@@ -31,6 +32,8 @@ interface ExecCoreIFC;
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
     (* always_ready, always_enabled *)
     method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
+    (* always_ready, always_enabled *)
+    method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx);
     // reserve space in ROB
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
 
@@ -106,11 +109,17 @@ module mkExecCore(ExecCoreIFC);
     // map the FU results to a minimal bus for RS loopback
     function Maybe#(ResultLoopback) map_result_to_loopback_result(Maybe#(Result) a) = isValid(a) ? tagged Valid ResultLoopback {tag : a.Valid.tag, result : a.Valid.result.Result} : tagged Invalid;
 
-    // connect results to issue stage and reservation stations
+    // connect results to issue stage and reservation stations   
+    ShiftBufferIfc#(RESBUS_ADDED_DELAY, Vector#(NUM_RS, Maybe#(ResultLoopback))) delay_bus_rs <- mkShiftBuffer(replicate(tagged Invalid));
+    rule input_result_bus_delay_loop;
+        let loopback = Vector::map(map_result_to_loopback_result, result_bus_vec);
+        regfile_evo.result_bus(loopback);
+        delay_bus_rs.r <= loopback;
+    endrule 
+
     rule propagate_result_bus;
         for(Integer i = 0; i < valueOf(NUM_FU); i=i+1)
-            rs_vec[i].result_bus(Vector::map(map_result_to_loopback_result, result_bus_vec));
-        regfile_evo.result_bus(Vector::map(map_result_to_loopback_result, result_bus_vec));
+            rs_vec[i].result_bus(delay_bus_rs.r);
     endrule
 
     // pass instructions from issue to rs
@@ -159,10 +168,9 @@ module mkExecCore(ExecCoreIFC);
     // expose interfaces from internal units to outside world
     interface decoded_inst = issue.decoded_inst();
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = issue.rob_free(free);
-    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
-        issue.rob_current_idx(idx);
-        mem.current_rob_id(idx);
-    endmethod
+    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = issue.rob_current_idx(idx);
+    method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx) = mem.current_rob_id(idx);
+
     interface Client check_rob = mem.check_rob;
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
     method Action flush();

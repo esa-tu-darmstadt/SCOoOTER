@@ -24,6 +24,8 @@ import Vector::*;
 // convert between absolute value and twos complement for negative integers
 function Bit#(64) two_complement_backward(Bit#(XLEN) op) = (signExtend(op) - 1) ^ 'hffffffffffffffff;
 function Bit#(64) two_complement_forward(Bit#(64) op) = (op  ^ 'hffffffffffffffff) + 1;
+function Bit#(32) two_complement_backward_32(Bit#(XLEN) op) = (op - 1) ^ 'hffffffff;
+function Bit#(32) two_complement_forward_32(Bit#(32) op) = (op  ^ 'hffffffff) + 1;
 
 // convert operands to unsigned operands and a flag indicating if the output will be negative
 // incoming operands are accompanied by a flag indicating if they are signed or unsigned
@@ -36,6 +38,22 @@ function Tuple3#(Bit#(64), Bit#(64), Bool) operands_to_unsigned_tuple(Tuple4#(Bi
 
             Bit#(64) op1 = tpl_2(req) ? op1_s : op1_u;
             Bit#(64) op2 = tpl_4(req) ? op2_s : op2_u;
+            Bool must_negate = (tpl_2(req) && (op1_u[31] == 1)) != ((tpl_4(req) && (op2_u[31] == 1)));
+
+            return tuple3(op1, op2, must_negate);
+endfunction
+
+// convert operands to unsigned operands and a flag indicating if the output will be negative
+// incoming operands are accompanied by a flag indicating if they are signed or unsigned
+function Tuple3#(Bit#(XLEN), Bit#(XLEN), Bool) operands_to_unsigned_tuple_32(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool) req);
+    Bit#(XLEN) op1_u = extend(tpl_1(req));
+            Bit#(XLEN) op2_u = extend(tpl_3(req));
+
+            Bit#(XLEN) op1_s = op1_u[31] == 1 ? two_complement_backward_32(tpl_1(req)) : (tpl_1(req));
+            Bit#(XLEN) op2_s = op2_u[31] == 1 ? two_complement_backward_32(tpl_3(req)) : (tpl_3(req));
+
+            Bit#(XLEN) op1 = tpl_2(req) ? op1_s : op1_u;
+            Bit#(XLEN) op2 = tpl_4(req) ? op2_s : op2_u;
             Bool must_negate = (tpl_2(req) && (op1_u[31] == 1)) != ((tpl_4(req) && (op2_u[31] == 1)));
 
             return tuple3(op1, op2, must_negate);
@@ -209,61 +227,41 @@ endmodule
 ///////////////////////////////////////////////////////////////////
 // Div Implementations
 ///////////////////////////////////////////////////////////////////
-// we mostly use the BSV builtin ones, only naive is implemented here
 
-// naive divider using BSV operator (unsigned)
+// naive divider using BSV operator
 // takes two operands, returns result and remainder
-module mkNaiveDivUnsigned(Server#(Tuple2#(UInt#(64),UInt#(XLEN)),Tuple2#(UInt#(XLEN),UInt#(XLEN)))); 
-    FIFO#(Tuple2#(UInt#(XLEN),UInt#(XLEN))) out_f <- mkPipelineFIFO();
-    Wire#(UInt#(XLEN)) op1_w <- mkWire();
-    Wire#(UInt#(XLEN)) op2_w <- mkWire();
+module mkNaiveDiv(Server#(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool),Tuple2#(Bit#(XLEN),Bit#(XLEN))));
+    
+    FIFOF#(Tuple2#(Bit#(XLEN),Bit#(XLEN))) out_f <- mkPipelineFIFOF();
 
     interface Put request;
-        method Action put(Tuple2#(UInt#(64),UInt#(XLEN)) req);
-            UInt#(XLEN) op1 = truncate(tpl_1(req));
-            UInt#(XLEN) op2 = tpl_2(req);
+        method Action put(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool) operands);
+            let operands_unsigned = operands_to_unsigned_tuple_32(tuple4(tpl_1(operands), tpl_3(operands), tpl_2(operands), tpl_3(operands)));
 
-            // we could also just return ? if the operand is 0 because this will be 
-            // caught later but bluesim crashes if we do so
-            UInt#(XLEN) result_div =  op2 == 0 ? 'hffffffff : (op1/op2);
-            UInt#(XLEN) result_mod =  op2 == 0 ? op1        : (op1%op2);
-
-            out_f.enq(tuple2(result_div, result_mod));
-        endmethod
-    endinterface
-
-    interface Get response;
-        method ActionValue#(Tuple2#(UInt#(XLEN),UInt#(XLEN))) get();
-            actionvalue
-                out_f.deq();
-                return out_f.first();
-            endactionvalue
-        endmethod
-    endinterface
-endmodule
-
-// naive divider using BSV operator (signed)
-// takes two operands, returns result and remainder
-module mkNaiveDivSigned(Server#(Tuple2#(Int#(64),Int#(XLEN)),Tuple2#(Int#(XLEN),Int#(XLEN)))); 
-    FIFO#(Tuple2#(Int#(XLEN),Int#(XLEN))) out_f <- mkPipelineFIFO();
-
-    interface Put request;
-        method Action put(Tuple2#(Int#(64),Int#(XLEN)) req);
-            Int#(XLEN) op1  = truncate(tpl_1(req));
-            Int#(XLEN) op2  = tpl_2(req);
+            UInt#(XLEN) op1 = unpack(tpl_1(operands_unsigned));
+            UInt#(XLEN) op2 = unpack(tpl_2(operands_unsigned));
 
             // hack as BlueSim crashes otherwise
-            Int#(XLEN) op2m = tpl_2(req) == 0 ? 1 : tpl_2(req);
+            UInt#(XLEN) op2m = op2 == 0 ? 1 : op2;
 
-            Int#(XLEN) result_div = op2 == 0 ?  -1 : (op1/op2m);
-            Int#(XLEN) result_mod = op2 == 0 ? op1 : (op1%op2m);
+            // calculate quotient and remainder
+            UInt#(XLEN) result_div = op2 == 0 ?  'hffffffff : (op1/op2m);
+            UInt#(XLEN) result_mod = op2 == 0 ? op1 : (op1%op2m);
 
-            out_f.enq(tuple2(result_div, result_mod));
+            // calculate if sign inversion is needed anywhere
+            let invert_r = tpl_3(operands_unsigned);
+            let invert_rem_r = unpack(truncateLSB(tpl_1(operands))) && tpl_3(operands);
+
+            // invert sign and provide result
+            Bit#(XLEN) nom_out = invert_r ? two_complement_forward_32(truncate(pack(result_div))) : truncate(pack(result_div));
+            Bit#(XLEN) res_out = invert_rem_r ? two_complement_forward_32(truncate(pack(result_mod))) : truncate(pack(result_mod));
+            out_f.enq(tuple2(nom_out, res_out));
+            
         endmethod
     endinterface
 
     interface Get response;
-        method ActionValue#(Tuple2#(Int#(XLEN),Int#(XLEN))) get();
+        method ActionValue#(Tuple2#(Bit#(XLEN),Bit#(XLEN))) get();
             actionvalue
                 out_f.deq();
                 return out_f.first();
@@ -271,6 +269,165 @@ module mkNaiveDivSigned(Server#(Tuple2#(Int#(64),Int#(XLEN)),Tuple2#(Int#(XLEN),
         endmethod
     endinterface
 endmodule
+
+// mul requiring multiple CPU cycles but allowing for higher clock speed
+module mkMultiCycleDiv(Server#(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool),Tuple2#(Bit#(XLEN),Bit#(XLEN)))) provisos (
+    Add#(2, XLEN, divlen),
+    Log#(XLEN, dlen_log_t)
+);
+    
+    FIFOF#(Tuple2#(Bit#(XLEN),Bit#(XLEN))) out_f <- mkPipelineFIFOF();
+    
+    Reg#(Int#(divlen)) nom <- mkRegU();
+    Reg#(Int#(divlen)) den <- mkRegU();
+    Reg#(Int#(divlen)) rem <- mkRegU();
+    Reg#(UInt#(dlen_log_t)) cnt <- mkRegU();
+    Reg#(Bool) busy_r <- mkReg(False);
+    Reg#(Bool) invert_r <- mkRegU();
+    Reg#(Bool) invert_rem_r <- mkRegU();
+
+    rule compute if (busy_r == True);
+        Int#(divlen) nom_loc = nom;
+        Int#(divlen) rem_loc = rem;
+
+        // new AQ calculation
+        rem_loc = unpack({truncate(pack(rem_loc)),pack(nom_loc)[valueOf(XLEN)-1]});
+        nom_loc = nom_loc<<1;
+
+        // new rem calculation
+        if(rem_loc >= 0) rem_loc = rem_loc-den;
+        else             rem_loc = rem_loc+den;
+
+        // update nominator
+        nom_loc = unpack({truncateLSB(pack(nom_loc)), rem_loc>=0 ? 1'b1: 1'b0});
+
+        // end condition
+        if(cnt == 0) begin
+            if(rem_loc<0) rem_loc = rem_loc+den;
+            Bit#(XLEN) nom_out = invert_r ? two_complement_forward_32(truncate(pack(nom_loc))) : truncate(pack(nom_loc));
+            Bit#(XLEN) rem_out = invert_rem_r ? two_complement_forward_32(truncate(pack(rem_loc))) : truncate(pack(rem_loc));
+            out_f.enq(tuple2(nom_out, rem_out));
+            busy_r <= False;
+        end
+
+        // update registers
+        nom <= nom_loc;
+        rem <= rem_loc;
+
+        // decrement counter
+        cnt <= cnt-1;
+    endrule
+
+    interface Put request;
+        method Action put(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool) operands) if (busy_r == False && out_f.notFull());
+            let operands_unsigned = operands_to_unsigned_tuple_32(tuple4(tpl_1(operands), tpl_3(operands), tpl_2(operands), tpl_3(operands)));
+            busy_r <= True;
+            nom <= unpack(zeroExtend(tpl_1(operands_unsigned)));
+            den <= unpack(zeroExtend(tpl_2(operands_unsigned)));
+            rem <= 0;
+            cnt <= fromInteger(valueOf(XLEN)-1);
+            invert_r <= tpl_3(operands_unsigned);
+            invert_rem_r <= unpack(truncateLSB(tpl_1(operands))) && tpl_3(operands);
+        endmethod
+    endinterface
+
+    interface Get response;
+        method ActionValue#(Tuple2#(Bit#(XLEN),Bit#(XLEN))) get();
+            actionvalue
+                out_f.deq();
+                return out_f.first();
+            endactionvalue
+        endmethod
+    endinterface
+
+    
+endmodule
+
+typedef struct {
+    Int#(TAdd#(XLEN, 2)) nom;
+    Int#(TAdd#(XLEN, 2)) den;
+    Int#(TAdd#(XLEN, 2)) rem;
+    Bool invert;
+    Bool invert_rem;
+} DivState deriving(Bits, FShow);
+
+// mul requiring multiple CPU cycles but allowing for higher clock speed
+module mkPipelineDiv(Server#(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool),Tuple2#(Bit#(XLEN),Bit#(XLEN)))) provisos (
+    Add#(2, XLEN, divlen),
+    Log#(XLEN, dlen_log_t),
+    Add#(1, XLEN, vlen_t)
+);
+    
+    FIFOF#(Tuple2#(Bit#(XLEN),Bit#(XLEN))) out_f <- mkPipelineFIFOF();
+    
+    Vector#(vlen_t, FIFO#(DivState)) states_v <- replicateM(mkPipelineFIFO());
+
+    for(Integer i = 0; i < valueOf(XLEN); i=i+1) begin
+        rule compute;
+
+            let state = states_v[i].first();
+            states_v[i].deq();
+            
+
+            Int#(divlen) nom_loc = state.nom;
+            Int#(divlen) rem_loc = state.rem;
+
+            // new AQ calculation
+            rem_loc = unpack({truncate(pack(rem_loc)),pack(nom_loc)[valueOf(XLEN)-1]});
+            nom_loc = nom_loc<<1;
+
+            // new rem calculation
+            if(rem_loc >= 0) rem_loc = rem_loc-state.den;
+            else             rem_loc = rem_loc+state.den;
+
+            // update nominator
+            nom_loc = unpack({truncateLSB(pack(nom_loc)), rem_loc>=0 ? 1'b1: 1'b0});
+
+            // update registers
+            state.nom = nom_loc;
+            state.rem = rem_loc;
+
+            //pass on stuff
+            states_v[i+1].enq(state);
+        endrule
+    end
+
+    rule finalize;
+        let state = Vector::last(states_v).first();
+        Vector::last(states_v).deq();
+
+        if(state.rem<0) state.rem = state.rem+state.den;
+        Bit#(XLEN) nom_out = state.invert ? two_complement_forward_32(truncate(pack(state.nom))) : truncate(pack(state.nom));
+        Bit#(XLEN) rem_out = state.invert_rem ? two_complement_forward_32(truncate(pack(state.rem))) : truncate(pack(state.rem));
+        out_f.enq(tuple2(nom_out, rem_out));
+    endrule
+
+    interface Put request;
+        method Action put(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool) operands);
+            let operands_unsigned = operands_to_unsigned_tuple_32(tuple4(tpl_1(operands), tpl_3(operands), tpl_2(operands), tpl_3(operands)));
+
+            states_v[0].enq(DivState {
+                nom : unpack(zeroExtend(tpl_1(operands_unsigned))),
+                den : unpack(zeroExtend(tpl_2(operands_unsigned))),
+                rem : 0,
+                invert : tpl_3(operands_unsigned),
+                invert_rem : unpack(truncateLSB(tpl_1(operands))) && tpl_3(operands)
+            });
+        endmethod
+    endinterface
+
+    interface Get response;
+        method ActionValue#(Tuple2#(Bit#(XLEN),Bit#(XLEN))) get();
+            actionvalue
+                out_f.deq();
+                return out_f.first();
+            endactionvalue
+        endmethod
+    endinterface
+
+    
+endmodule
+
 
 ///////////////////////////////////////////////////////////////////
 // Real FU module
@@ -287,18 +444,11 @@ FIFO#(Result) out <- mkPipelineFIFO();
 RWire#(Result) out_valid <- mkRWire();
 
 //Select correct multipliers and dividers based on configured strategy
-Server#(Tuple2#(UInt#(64),UInt#(XLEN)),Tuple2#(UInt#(XLEN),UInt#(XLEN))) unsigned_div <- case (valueOf(MUL_DIV_STRATEGY)) 
-    2: mkDivider(4);
-    1: mkNonPipelinedDivider(4);
-    0: mkNaiveDivUnsigned();
+Server#(Tuple3#(Bit#(XLEN),Bit#(XLEN),Bool),Tuple2#(Bit#(XLEN),Bit#(XLEN))) div <- case (valueOf(MUL_DIV_STRATEGY)) 
+    2: mkPipelineDiv();
+    1: mkMultiCycleDiv();
+    0: mkNaiveDiv();
     endcase;
-
-Server#(Tuple2#(Int#(64),Int#(XLEN)),Tuple2#(Int#(XLEN),Int#(XLEN))) signed_div <- case (valueOf(MUL_DIV_STRATEGY)) 
-    2: mkSignedDivider(4);
-    1: mkNonPipelinedSignedDivider(4);
-    0: mkNaiveDivSigned();
-    endcase;
-    
 Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(64)) mul <- case (valueOf(MUL_DIV_STRATEGY))
     2: mkPipelineMul();
     1: mkMultiCycleMul();
@@ -306,8 +456,7 @@ Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(64)) mul <- case (valu
     endcase;
 
 // buffers for in flight instructions
-FIFO#(Instruction) pending_results_sign <- mkSizedFIFO(35); //latency of divider is 32 + 3
-FIFO#(Instruction) pending_results_nosign <- mkSizedFIFO(35); //latency of divider is 32 + 3
+FIFO#(Instruction) pending_results_div <- mkSizedFIFO(32);
 FIFO#(Instruction) pending_results_mul <- mkSizedFIFO(9); //at most 9 mul are in flight at once
 
 // this rule distributes the incoming instructions upon the multipliers and dividers
@@ -317,22 +466,17 @@ rule calculate;
 
     dbg_print(MulDiv, $format("got instruction: ", fshow(inst)));
 
-    // generate signed, unsigned and bit variants of the operands
     Bit#(XLEN) op1 = unpack(inst.rs1.Operand);
     Bit#(XLEN) op2 = unpack(inst.rs2.Operand);
-    UInt#(XLEN) op1_u = unpack(inst.rs1.Operand);
-    UInt#(XLEN) op2_u = unpack(inst.rs2.Operand);
-    Int#(XLEN) op1_s = unpack(inst.rs1.Operand);
-    Int#(XLEN) op2_s = unpack(inst.rs2.Operand);
 
     // distribute the instructions
     if(inst.funct == DIV || inst.funct == REM) begin
-        signed_div.request.put(tuple2(extend(op1_s), op2_s));
-        pending_results_sign.enq(inst);
+        div.request.put(tuple3(op1, op2, True));
+        pending_results_div.enq(inst);
     end else
     if(inst.funct == DIVU || inst.funct == REMU) begin
-        unsigned_div.request.put(tuple2(extend(op1_u), op2_u));
-        pending_results_nosign.enq(inst);
+        div.request.put(tuple3(op1, op2, False));
+        pending_results_div.enq(inst);
     end else
     if (inst.funct == MUL || inst.funct == MULHU) begin
         mul.request.put(tuple4(op1, False, op2, False));
@@ -351,37 +495,24 @@ endrule
 // those rules read results from the multipliers and dividers
 // and dequeue inflight instructions
 
-rule read_result_signed_div;
-    let inst = pending_results_sign.first(); pending_results_sign.deq();
-    let resp <- signed_div.response.get();
+rule read_result_div;
+    let inst = pending_results_div.first(); pending_results_div.deq();
+    let resp <- div.response.get();
 
     // catch edge case that the divisor is zero
-    Int#(XLEN) result = case (inst.funct)  
+    Bit#(XLEN) result = case (inst.funct)  
         DIV: ( inst.rs2.Operand == 0 ? unpack('hffffffff)       : tpl_1(resp));
         REM: ( inst.rs2.Operand == 0 ? unpack(inst.rs1.Operand) : tpl_2(resp));
-    endcase;
-    
-    dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag})));
-
-    out.enq(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag});
-endrule
-
-rule read_result_unsigned_div;
-    let inst = pending_results_nosign.first(); pending_results_nosign.deq();
-    let resp <- unsigned_div.response.get();
-    
-    // catch edge case that the divisor is zero
-    UInt#(XLEN) result = case (inst.funct)  
         DIVU: ( inst.rs2.Operand == 0 ? unpack('hffffffff)       : tpl_1(resp));
         REMU: ( inst.rs2.Operand == 0 ? unpack(inst.rs1.Operand) : tpl_2(resp));
     endcase;
+    
+    dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
 
-    dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag})));
-
-    out.enq(Result {result : tagged Result pack(result), new_pc : tagged Invalid, tag : inst.tag});
+    out.enq(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag});
 endrule
 
-(* descending_urgency = "read_result_signed_div, read_result_unsigned_div, read_result_mul" *)
+(* descending_urgency = "read_result_div, read_result_mul" *)
 rule read_result_mul;
     let inst = pending_results_mul.first(); pending_results_mul.deq();
     let resp <- mul.response.get();

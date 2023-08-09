@@ -78,12 +78,12 @@ package TestbenchProgram;
 
         // create a fitting BRAM
         BRAM_Configure cfg_i = defaultValue;
-        cfg_i.allowWriteResponseBypass = False;
+        cfg_i.allowWriteResponseBypass = True;
         cfg_i.loadFormat = tagged Hex imem_file;
         cfg_i.latency = 1;
         BRAM1Port#(Bit#(XLEN), Bit#(ifuwidth)) ibram <- mkBRAM1Server(cfg_i);
 
-        FIFO#(Bit#(cpu_idx_t)) inflight_ids_inst <- mkPipelineFIFO();
+        FIFO#(Bit#(cpu_idx_t)) inflight_ids_inst <- mkSizedFIFO(16);
 
         // handle read requests
         rule ifuread if (start_r && !done_r && count_r <= fromInteger(max_ticks));
@@ -121,9 +121,9 @@ package TestbenchProgram;
         BRAM2PortBE#(Bit#(XLEN), Bit#(XLEN), 4) dbram <- mkBRAM2ServerBE(cfg_d);
 
         // Buffer for write address prior to data arrival
-        FIFO#(AXI4_Write_Rq_Addr#(XLEN, cpu_and_amo_idx_t, 0)) w_request <- mkPipelineFIFO();
+        FIFO#(AXI4_Write_Rq_Addr#(XLEN, cpu_and_amo_idx_t, 0)) w_request <- mkSizedFIFO(16);
 
-        FIFO#(Bit#(cpu_and_amo_idx_t)) w_id <- mkPipelineFIFO();
+        FIFO#(Bit#(cpu_and_amo_idx_t)) w_id <- mkSizedFIFO(16);
     
         // get address requests and store them
   	    rule handleWriteRequest;

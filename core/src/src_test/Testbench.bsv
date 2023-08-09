@@ -12,8 +12,8 @@ package Testbench;
         `endif
 
         `ifdef CUSTOM_TB
-            let testCustom <- mkTestProgram("../../testPrograms/embench/aha-mont64/32bit/bsv_hex/aha-mont64_96.bsv", 
-		    "../../testPrograms/embench/aha-mont64/32bit/bsv_hex/aha-mont64-data_32.bsv", 
+            let testCustom <- mkTestProgram("../../testPrograms/isa/32ua/bsv_hex/rv32ua-p-amoadd_w_32.bsv", 
+		    "../../testPrograms/isa/32ua/bsv_hex/rv32ua-p-amoadd_w-data_32.bsv", 
                 "custom", 
                 'hffffffff, 
                 'hffffffff);

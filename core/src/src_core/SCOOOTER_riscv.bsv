@@ -35,6 +35,7 @@ import CSRFile::*;
 import Frontend::*;
 import ExecCore::*;
 import Backend::*;
+import ShiftBuffer::*;
 
 (* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(
@@ -88,6 +89,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     rule connect_rob_issue;
         ec.rob_free(be.rob_free());
         ec.rob_current_idx(be.current_idx());
+        ec.rob_current_tail_idx(be.current_tail_idx());
     endrule
 
     rule connect_rob_issue2;
@@ -117,6 +119,8 @@ module mkSCOOOTER_riscv(Top) provisos(
     interface read_i = fe.read_inst;
 
     method Action hart_id(Bit#(TLog#(NUM_CPU)) in) = be.hart_id(in);
+
+
 
 endmodule
 

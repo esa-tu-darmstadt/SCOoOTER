@@ -8,6 +8,7 @@ import Vector::*;
 import GetPut::*;
 import GetPutCustom::*;
 import ESAMIMO::*;
+import Config::*;
 
 ///////////////////////////////////////////////////
 // This package implements decoding of instructions
@@ -327,24 +328,46 @@ module mkDecode(DecodeIFC) provisos (
         Log#(RASDEPTH, ras_log_t)
 );
 
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO();
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
+    // select correct MIMO
+    // the pipelined mimo schedules deq() prior to first() and enq() - therefore a circular dependency occurs if the output is not buffered
+    // therefore the normal esamimo is used instead if no bufering is enabled, which schedules {first, enq} > deq
+    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkESAMIMO_pipeline() : mkESAMIMO());
     PulseWire clear_buffer <- mkPulseWire();
+    Reg#(DecodeResponse) buffer_output <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkReg(DecodeResponse {count: 0, instructions: ?}) : mkBypassWire());
+
+    (* fire_when_enabled,no_implicit_conditions *)
+    rule fill_buffer;
+        let inst_vec = decoded_inst_m.first();
+        MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
+        buffer_output <= DecodeResponse {count: amount_loc, instructions: inst_vec};
+    endrule
 
     interface Put instructions;
         method Action put(FetchResponse inst_from_decode) if (decoded_inst_m.enqReadyN(fromInteger(valueOf(IFUINST))));
             if (!clear_buffer) begin
                 let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
                 decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
+                `ifdef LOG_PIPELINE
+                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count)
+                        $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
+                `endif
             end
         endmethod
     endinterface
 
     interface GetSC decoded_inst;
         method DecodeResponse first;
-            
-            let inst_vec = decoded_inst_m.first();
-            MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
-            return DecodeResponse {count: amount_loc, instructions: inst_vec};
+            return buffer_output;
         endmethod
         method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst_m.deq(amount);
     endinterface

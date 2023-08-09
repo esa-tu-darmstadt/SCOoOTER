@@ -34,6 +34,8 @@ interface BackendIFC;
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
+    (* always_enabled, always_ready *)
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
     method Bool store_queue_empty();
@@ -93,11 +95,8 @@ module mkBackend(BackendIFC) provisos (
     // pass instructions from ROB to commit
     Wire#(UInt#(issuewidth_log_t)) deq_rob_wire <- mkDWire(0);
     rule connect_rob_commit;
-        let deq <- commit.consume_instructions(rob.get(), rob.available());
-        deq_rob_wire <= deq;
-    endrule
-    rule deq_rob_entries;
-        rob.complete_instructions(deq_rob_wire);
+        let insts <- rob.get();
+        commit.consume_instructions(insts, rob.available());
     endrule
 
     // methods to external world
@@ -120,6 +119,7 @@ module mkBackend(BackendIFC) provisos (
     endmethod
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc() = commit.redirect_pc;
     method UInt#(TLog#(ROBDEPTH)) current_idx = rob.current_idx();
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num) = rob.reserve(data, num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free = rob.free();
     method Bool store_queue_empty() = store_buf.empty();

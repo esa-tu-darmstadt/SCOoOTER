@@ -174,7 +174,7 @@ module mkStoreBuffer(StoreBufferIFC);
     function MaskedWord mw_from_memory_write(MemWr in) = MaskedWord {data: in.data, store_mask: in.store_mask};
     
     // forward memory data - create a wire which holds pending requests or a default value
-    Wire#(UInt#(XLEN)) forward_test_addr_w <- mkWire();
+    Reg#(UInt#(XLEN)) forward_test_addr_w <- mkRegU();
     Wire#(MemWr) forward_pending <- mkDWire(MemWr {mem_addr: 0, store_mask: ?, data: ?});
     rule fwd_pend;
         forward_pending <= pending_buf.first();
@@ -183,7 +183,7 @@ module mkStoreBuffer(StoreBufferIFC);
     // real forwarding
     interface Server forward;
         interface Put request;
-            method Action put(UInt#(XLEN) addr) = forward_test_addr_w._write(addr);
+            method Action put(UInt#(XLEN) a) = forward_test_addr_w._write(a);
         endinterface
         interface Get response;
             method ActionValue#(Maybe#(MaskedWord)) get();
@@ -217,7 +217,7 @@ module mkStoreBuffer(StoreBufferIFC);
                     let result = (incoming_res matches tagged Valid .vv ? 
                                   incoming_res : (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res));
 
-                    dbg_print(Mem, $format("calc fwd: ", fshow(addr), " ", fshow(pending_store_res), " ", fshow(incoming_resp), " ", fshow(internal_store_res), fshow(forward_pending), fshow(incoming_writes_w)));
+                    //dbg_print(Mem, $format("calc fwd: ", fshow(addr), " ", fshow(pending_store_res), " ", fshow(incoming_resp), " ", fshow(internal_store_res), fshow(forward_pending), fshow(incoming_writes_w)));
 
                     return result;
                 endactionvalue

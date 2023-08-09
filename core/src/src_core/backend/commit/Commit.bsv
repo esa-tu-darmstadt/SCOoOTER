@@ -47,16 +47,16 @@ Array#(Reg#(Bool)) int_in_process_r <- mkCReg(2, False);
 
 Array#(Reg#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) next_pc_r <- mkCRegU(2);
 
-Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w <- mkWire();
+FIFO#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w <- mkBypassFIFO();
 RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirect_pc_w_exc <- mkRWire();
 
 Wire#(Bit#(XLEN)) tvec <- mkWire();
-FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause <- mkBypassFIFO();
+FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause <- mkPipelineFIFO();
 RWire#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) mcause_exc <- mkRWire();
 Wire#(Bit#(3)) int_in <- mkBypassWire();
 
 FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_rq_out <- mkPipelineFIFOF();
-FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), MIMO::LUInt#(ISSUEWIDTH))) branch_train <- mkBypassFIFO();
+FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), MIMO::LUInt#(ISSUEWIDTH))) branch_train <- mkPipelineFIFO();
 FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), MIMO::LUInt#(ISSUEWIDTH))) csr_rq_out <- mkPipelineFIFO();
 
 
@@ -74,7 +74,7 @@ endfunction
 rule redirect_on_no_interrupt (int_in == 0 || int_in_process_r[1]);
     if(redirect_pc_w_exc.wget() matches tagged Valid .v) begin
         epoch <= epoch + 1;
-        redirect_pc_w <= v;
+        redirect_pc_w.enq(v);
     end
     if(mcause_exc.wget() matches tagged Valid .v) begin
         mcause.enq(v);
@@ -96,13 +96,27 @@ endfunction
 rule redirect_on_interrupt (int_in != 0 && !int_in_process_r[1]);
     epoch <= epoch + 1;
     int_in_process_r[1] <= True;
-    redirect_pc_w <= tuple2(tvec, tpl_2(next_pc_r[1]));
+    redirect_pc_w.enq(tuple2(tvec, tpl_2(next_pc_r[1])));
     mcause.enq(tuple2({1'b1, fromInteger(cause_for_int(int_in))}, tpl_1(next_pc_r[1])));
 endrule
 
+rule deq_redirs;
+    redirect_pc_w.deq();
+endrule
+
+`ifdef LOG_PIPELINE
+    Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+    Reg#(File) out_log <- mkRegU();
+    rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+    rule open if (clk_ctr == 0);
+        File out_log_l <- $fopen("scoooter.log", "a");
+        out_log <= out_log_l;
+    endrule
+`endif
+
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
-method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
-    actionvalue
+method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
+    action
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
         Bool done = False;
@@ -114,10 +128,15 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
             UInt#(XLEN) wrong_pred_j_local = wrong_pred_j_r;
         `endif
 
+
         UInt#(issuewidth_log_t) count_committed = count;
 
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             if(instructions[i].epoch == epoch) begin
+
+                `ifdef LOG_PIPELINE
+                    if(fromInteger(i) < count && done) $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                `endif
 
                 // handle exceptions
                 if(fromInteger(i) < count &&& 
@@ -145,6 +164,10 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                    !done) begin
                     dbg_print(Commit, $format(fshow(instructions[i])));
                     temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r};
+
+                    `ifdef LOG_PIPELINE
+                        $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                    `endif
 
                     if(instructions[i].branch == True 
                         && fromInteger(i) < count && 
@@ -174,7 +197,12 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
                     `endif
                 end
 
-            end
+            end 
+            `ifdef LOG_PIPELINE
+                else if(fromInteger(i) < count) begin
+                    $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                end
+            `endif
 
             
         end
@@ -203,8 +231,7 @@ method ActionValue#(UInt#(issuewidth_log_t)) consume_instructions(Vector#(ISSUEW
             wrong_pred_j_r <= wrong_pred_j_local;
         `endif
 
-        return count;
-    endactionvalue
+    endaction
 endmethod
 
 interface GetS memory_writes;
@@ -215,7 +242,7 @@ endinterface
 interface Get csr_writes = toGet(csr_rq_out);
 
 method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
-    return redirect_pc_w;
+    return redirect_pc_w.first();
 endmethod
 
 method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;

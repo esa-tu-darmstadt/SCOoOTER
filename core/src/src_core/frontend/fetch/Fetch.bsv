@@ -19,6 +19,7 @@ import Vector :: *;
 import Debug::*;
 import ClientServer::*;
 import RAS::*;
+import TestFunctions::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -27,18 +28,33 @@ module mkFetch(FetchIFC) provisos(
         Mul#(XLEN, IFUINST, ifuwidth) //the width of the IFU axi must be as large as the size of a word times the issuewidth
 );
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        Reg#(File) out_log <- mkRegU();
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        rule init if (clk_ctr == 0);
+            File out_log_f <- $fopen("scoooter.log", "w");
+            $fflush();
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
     FIFO#(Bit#(XLEN)) request_mem_f <- mkBypassFIFO();
     FIFO#(Bit#(ifuwidth)) response_mem_f <- mkBypassFIFO();
 
     RASIfc ras <- mkRAS();
+
     //pc points to next instruction to load
     //pc is a CREG, port 2 is used for fetching the next instruction
     // port 1 is used to redirect the program counter
     //port 0 is used to advance the PC
     Reg#(Bit#(XLEN)) pc[3] <- mkCReg(3, fromInteger(valueof(RESETVEC)));
-    Reg#(UInt#(EPOCH_WIDTH)) epoch[2] <- mkCReg(2, 0);
-    FIFOF#(Bit#(XLEN)) inflight_pcs <- mkPipelineFIFOF();
-    FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkPipelineFIFOF();
+    Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
+    FIFOF#(Bit#(XLEN)) inflight_pcs <- mkSizedFIFOF(5);
+    FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkSizedFIFOF(8);
+    FIFOF#(UInt#(3)) inflight_local_epoch <- mkSizedFIFOF(8);
+    Reg#(UInt#(3)) local_epoch <- mkReg(0);
     //holds outbound Instruction and PC
     FIFOF#(Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)))) fetched_inst <- mkPipelineFIFOF();
     FIFOF#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFOF();
@@ -48,29 +64,32 @@ module mkFetch(FetchIFC) provisos(
     Vector#(IFUINST, Wire#(Prediction)) dir_resp_w_v <- replicateM(mkDWire(Prediction {history: ?, pred: False}));
     // wires for target prediction response and request
     FIFO#(Bit#(XLEN)) target_request_f <- mkBypassFIFO();
-    FIFOF#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) target_resp_f <- mkBypassFIFOF();
-
-    Reg#(Bit#(32)) c <- mkReg(0);
-    rule upd_reg;
-        c <= c+1;
-    endrule
+    FIFOF#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) target_resp_f <- mkSizedFIFOF(8);
 
     //Requests data from memory
     //Explicit condition: Fires if the previous read has been evaluated
     // Due to the PC FIFO
     rule requestRead;
         // addrs to AXI may be weird here
-        request_mem_f.enq(pc[2]);
-        inflight_pcs.enq(pc[2]);
-        inflight_epoch.enq(epoch[1]);
-        target_request_f.enq(pc[2]);
+        request_mem_f.enq(pc[0]);
+        inflight_pcs.enq(pc[0]);
+        inflight_epoch.enq(epoch);
+        target_request_f.enq(pc[0]);
+        inflight_local_epoch.enq(local_epoch);
+        if (ispwr2(valueOf(IFUINST)))
+            pc[0] <= (pc[0] & ~(fromInteger(valueOf(TMul#(4, IFUINST))-1))) + fromInteger(valueOf(TMul#(4, IFUINST)));
+        else begin
+            let overlap = (pc[0]>>2)%fromInteger(valueOf(IFUINST));
+            pc[0] <= pc[0]-(overlap<<2)+fromInteger(valueOf(TMul#(4, IFUINST)));
+        end
     endrule
 
     // if the epoch has changed, drop read data
-    rule dropReadResp (inflight_epoch.first() != epoch[1]);
+    rule dropReadResp (inflight_epoch.first() != epoch || inflight_local_epoch.first() != local_epoch);
         let r = response_mem_f.first(); response_mem_f.deq();
         inflight_pcs.deq();
         inflight_epoch.deq();
+        inflight_local_epoch.deq();
         dbg_print(Fetch, $format("drop read"));
         target_resp_f.deq();
     endrule
@@ -86,7 +105,8 @@ module mkFetch(FetchIFC) provisos(
     Wire#(Bit#(ifuwidth)) pass_incoming_w <- mkWire();
 
     // predict directions
-    rule get_dir_pred if (inflight_epoch.first() == epoch[1] &&
+    rule get_dir_pred if (inflight_epoch.first() == epoch &&
+                        inflight_local_epoch.first() == local_epoch &&
                         inflight_epoch.notEmpty() &&
                         target_resp_f.notEmpty() &&
                         inflight_pcs.notEmpty() &&
@@ -132,9 +152,10 @@ module mkFetch(FetchIFC) provisos(
 
     // Evaluates fetched instructions if there is enough space in the instruction window
     // TODO: make enqueued value dynamic
-    rule getReadResp (inflight_epoch.first() == epoch[1]);        
+    rule getReadResp (inflight_epoch.first() == epoch && inflight_local_epoch.first() == local_epoch);        
         target_resp_f.deq();
         inflight_epoch.deq();
+        inflight_local_epoch.deq();
 
         let dir_predictions = target_resp_f.first();
 
@@ -161,7 +182,6 @@ module mkFetch(FetchIFC) provisos(
                 end
                 // pass instructions on
                 instructions_v[i] = tuple6(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first(), cleaned_predictions[i], dir_resp_w_v[i].history, ras.ports[i].extra());
-                
             end
         end
 
@@ -171,20 +191,32 @@ module mkFetch(FetchIFC) provisos(
         // check how many instructions are correct path according to prediction
         let count_pred = Vector::findIndex(isValid, cleaned_predictions);
 
+        MIMO::LUInt#(IFUINST) amount;
         // set fetch amount and update PC
         if(count_pred matches tagged Valid .c &&& extend(c) < count_read) begin
-            pc[0] <= cleaned_predictions[c].Valid;
-            fetched_amount.enq(extend(c)+1);
+            pc[1] <= cleaned_predictions[c].Valid;
+            local_epoch <= local_epoch+1;
+            amount = extend(c)+1;
         end else begin
-            pc[0] <= acqpc + (pack(extend(count_read)) << 2);
-            fetched_amount.enq(count_read);
+            amount = count_read;
         end
+        fetched_amount.enq(amount);
+
+        `ifdef LOG_PIPELINE
+            for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
+                if(fromInteger(i) < amount) begin
+                    $fdisplay(out_log, "%d FETCH %x %x %d", clk_ctr, tpl_2(instructions_v[i]), tpl_1(instructions_v[i]), tpl_3(instructions_v[i]));
+                    $fflush(out_log);
+                end
+            end
+        `endif
+                
     endrule
 
     // redirect PC 
     Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirected <- mkWire();
     rule redirect_write_pc;
-        pc[1] <= tpl_1(redirected);
+        pc[2] <= tpl_1(redirected);
         ras.redirect(tpl_2(redirected));
     endrule
 
@@ -220,7 +252,7 @@ module mkFetch(FetchIFC) provisos(
     method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
         redirected <= in;
         dbg_print(Fetch, $format("Redirected: ", tpl_1(in)));
-        epoch[0] <= epoch[0]+1;
+        epoch <= epoch+1;
     endmethod
     
     // output instructions

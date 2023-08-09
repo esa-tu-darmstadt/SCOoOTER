@@ -7,8 +7,13 @@ package TestFunctions;
 import Types :: *;
 import Inst_Types :: *;
 import Vector::*;
+import Ehr::*;
 
 function a disassemble_creg(Integer num, Array#(a) creg);
+    return creg[num];
+endfunction
+
+function Reg#(a) disassemble_ehr(Integer num, Ehr#(n, a) creg);
     return creg[num];
 endfunction
 
@@ -72,6 +77,16 @@ function Bool part_of_rob_slice(Bool def, UInt#(TLog#(ROBDEPTH)) head, UInt#(TLo
     end else
         out = def;
     return out;
+endfunction
+
+function Bool ispwr2(Integer test);
+    Maybe#(Bool) ret = tagged Invalid;
+    while (!isValid(ret)) begin
+        if (test == 1) ret = tagged Valid True;
+        else if (test%2 != 0) ret = tagged Valid False;
+        test = test/2;
+    end
+    return ret.Valid;
 endfunction
 
 endpackage

@@ -28,12 +28,7 @@ BRANCH?=0
 # 1: build frontend, exec and backend separately
 # 2: build all modules separately
 SYNTH?=0
-ifeq ($(SYNTH), 1)
-	EXTRA_FLAGS+= -D SYNTH_SEPARATE_BLOCKS
-endif
-ifeq ($(SYNTH), 2)
-	EXTRA_FLAGS+= -D SYNTH_SEPARATE_BLOCKS -D SYNTH_SEPARATE
-endif
+LOG?=0
 
 # Add subdirectories
 EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
@@ -45,10 +40,19 @@ RUN_TEST=TestsMainTest
 endif
 
 # Default flags
-EXTRA_FLAGS= +RTS -K65535000 -RTS -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
+EXTRA_FLAGS= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
 EXTRA_FLAGS+=-show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
-EXTRA_FLAGS+=-D $(TB) -D BSV_NO_INITIAL_BLOCKS
+EXTRA_FLAGS+=-D $(TB) -D BSV_NO_INITIAL_BLOCKS +RTS -K65535000 -RTS 
 
+ifeq ($(SYNTH),1)
+	EXTRA_FLAGS+=-D SYNTH_SEPARATE_BLOCKS
+endif
+ifeq ($(SYNTH),2)
+	EXTRA_FLAGS+=-D SYNTH_SEPARATE_BLOCKS -D SYNTH_SEPARATE
+endif
+ifeq ($(LOG),1)
+	EXTRA_FLAGS+=-D LOG_PIPELINE
+endif
 ifeq ($(BRANCH),1)
 EXTRA_FLAGS+=-D EVA_BR
 endif

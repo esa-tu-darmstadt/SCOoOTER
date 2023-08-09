@@ -15,6 +15,11 @@ import Types::*;
 import Debug::*;
 import TestFunctions::*;
 import GetPut::*;
+import Ehr::*;
+import FIFOF::*;
+import FIFO::*;
+import WireFIFO::*;
+import SpecialFIFOs::*;
 
 // interface for the wrappers
 // the wrappers abstract the depth of the RS
@@ -100,56 +105,84 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),
     Log#(entries, entries_idx_t),
-    // types to test if depth is pwr2
-    Add#(1, depth_dec_t, entries),
-    Max#(1, depth_dec_t, depth_dec_pos_t),
-    Log#(depth_dec_pos_t, depth_test_t)
+    Add#(a__, entries_idx_t, entries_log_t)
 );
     // implement idx rollover
     function UInt#(size_logidx_t) increment_index(UInt#(size_logidx_t) new_idx);
         UInt#(size_logidx_t) output_idx;
         //if DEPTH is not a pwr of two, explicitly implement rollover
-        if( valueOf(entries_idx_t) == valueOf(depth_test_t) ) begin
-            output_idx = new_idx == fromInteger(valueOf(entries)-1) ? 0 : new_idx + 1;
+        if( !ispwr2(valueOf(entries)) ) begin
+            output_idx = (new_idx == fromInteger(valueOf(entries)-1) ? 0 : (new_idx + 1));
         // if depth is power of two, the index will roll over naturally
         end else output_idx = new_idx + 1;
         return output_idx;
     endfunction
 
     // wire to transport result bus
-    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkRegU() : mkBypassWire());
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_bypass <- mkBypassWire();
+    rule propagate_res_bus;
+        result_bus_vec <= result_bus_bypass;
+    endrule
 
     // internal storage
-    Vector#(entries, Array#(Reg#(Maybe#(Instruction)))) instruction_buffer_v <- replicateM(mkCReg(2, tagged Invalid));
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port0_v = Vector::map(disassemble_creg(0), instruction_buffer_v);
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port1_v = Vector::map(disassemble_creg(1), instruction_buffer_v);
+    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
     // head, tail and full pointers
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
     Reg#(Bool) full_r[2] <- mkCReg(2, False);
 
+    function UInt#(entries_log_t) empty_slots;
+        UInt#(entries_log_t) result;
+
+        //calculate from head and tail pointers
+        if (head_r > tail_r) result = extend(head_r) - extend(tail_r);
+        else if (tail_r > head_r) result = fromInteger(valueOf(entries)) - extend(tail_r) + extend(head_r);
+        // if both pointers are equal, must be full or empty
+        else if (full_r[0]) result = fromInteger(valueOf(entries));
+        else result = 0;
+
+        return fromInteger(valueOf(entries)) - result;
+    endfunction
+
+    rule print_innards;
+        let idx = tail_r;
+        Bool nodone = True;
+        for(Integer i = 0; i < valueOf(entries); i=i+1) 
+        if ((tail_r != head_r || full_r[0]) && nodone) begin
+            dbg_print(RS, $format(fshow(eut), " ", i, " ", fshow(instruction_buffer_v[idx])));
+            if (idx == head_r) nodone = False;            
+        end
+    endrule
+
     // evaluate result bus
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
-            if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
+            if(instruction_buffer_v[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
+
+                Bool change = False;
 
                 // loop pver result bus
                 for(Integer i = 0; i < valueOf(NUM_FU); i=i+1) begin
                     // update rs1
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs1 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs1 = tagged Operand res.result;
+                            change = True;
+                        end
                     // update rs2
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs2 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs2 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs2 = tagged Operand res.result;
+                            change = True;
+                        end
                 end
 
-                instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
+                if (change) instruction_buffer_v[j] <= tagged Valid current_instruction;
             end
         end
     endrule
@@ -161,14 +194,57 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         tail_r <= increment_index(tail_r);
     endrule
 
+    PulseWire has_enq <- mkPulseWire();
+
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
+    FIFOF#(Instruction) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
+
+    (* conflict_free="enqueue, listen_to_cdb" *)
+    rule enqueue;
+        instruction_buffer_v[head_r] <= tagged Valid inst_to_enqueue.first();
+        inst_to_enqueue.deq();
+        let new_head = increment_index(head_r);
+        head_r <= new_head;
+        if(tail_r == new_head) full_r[0] <= True;
+    endrule
+
+    Reg#(Bool) ready_r <- mkReg(True);
+    PulseWire will_insert_next <- mkPulseWire();
+    Wire#(Bool) will_insert_now <- mkBypassWire();
+    Wire#(UInt#(entries_log_t)) free_slots_w <- mkBypassWire();
+    rule insert_now; will_insert_now <= inst_to_enqueue.notEmpty(); endrule
+    rule empty_calc; free_slots_w <= empty_slots(); endrule
+        
+    rule calc_next_rdy;
+        let insert_currently = will_insert_now;
+        let insert_next = will_insert_next;
+
+        Integer cmp = insert_currently && insert_next && (valueOf(RS_LATCH_INPUT) == 1) ? 2 :
+                      insert_currently || insert_next ? 1 : 0;
+
+        ready_r <= free_slots_w > fromInteger(cmp);
+    endrule
+
     // dequeue an instruction if one is ready
     method ActionValue#(Instruction) get if (
             (head_r != tail_r || full_r[0]) && 
-            is_ready(instruction_buffer_port0_v[tail_r])
+            is_ready(instruction_buffer_v[tail_r])
         );
-        let inst = fromMaybe(?, instruction_buffer_port0_v[tail_r]);
+        let inst = fromMaybe(?, instruction_buffer_v[tail_r]);
         clear_full_flag_w.send();
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(inst)));
+        `ifdef LOG_PIPELINE
+            $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
+        `endif
         return inst;
     endmethod
 
@@ -176,18 +252,17 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     method ExecUnitTag unit_type = eut;
 
     // input the result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_bypass._write(bus_in);
 
     // input instructions to RS
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
-                instruction_buffer_port1_v[head_r] <= tagged Valid inst;
-                head_r <= increment_index(head_r);
-                if(tail_r == increment_index(head_r)) full_r[0] <= True;
+                will_insert_next.send();
+                inst_to_enqueue.enq(inst);
             endmethod
         endinterface
-        method Bool can_insert = !full_r[0];
+        method Bool can_insert = ready_r;
     endinterface
 endmodule
 
@@ -196,74 +271,113 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     // create index and count types
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),
-    Log#(entries, entries_idx_t)
+    Log#(entries, entries_idx_t),
+    Add#(a__, 1, entries_log_t)
 );
 
     // wire to distribute result bus
-    Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkReg(replicate(tagged Invalid)) : mkBypassWire());
 
     //create a buffer of Instructions
-    //Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
-    Vector#(entries, Array#(Reg#(Maybe#(Instruction)))) instruction_buffer_v <- replicateM(mkCReg(2, tagged Invalid));
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port0_v = Vector::map(disassemble_creg(0), instruction_buffer_v);
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_port1_v = Vector::map(disassemble_creg(1), instruction_buffer_v);
+    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
 
     // print contents for debugging
     rule print_innards;
         for(Integer i = 0; i < valueOf(entries); i=i+1) begin
-            dbg_print(RS, $format("ROB ", fshow(eut), " ", i, " ", fshow(instruction_buffer_port1_v[i])));
+            dbg_print(RS, $format(fshow(eut), " ", i, " ", fshow(instruction_buffer_v[i])));
         end
+    endrule
+
+    Wire#(Vector#(entries, Maybe#(Instruction))) instruction_buffer_preread <- mkBypassWire();
+    rule preread;
+        instruction_buffer_preread <= Vector::readVReg(instruction_buffer_v);
     endrule
 
     // evaluate result bus
     rule listen_to_cdb;
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
-            if(instruction_buffer_port0_v[j] matches tagged Valid .inst) begin
+            if(instruction_buffer_preread[j] matches tagged Valid .inst) begin
                 Instruction current_instruction = inst;
+                Bool chg = False;
 
                 // loop pver result bus
                 for(Integer i = 0; i < valueOf(NUM_FU); i=i+1) begin
                     // update rs1
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs1 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs1 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs1 = tagged Operand res.result;
+                            chg = True;
+                        end
                     // update rs2
                     if( result_bus_vec[i] matches tagged Valid .res &&&
                         current_instruction.rs2 matches tagged Tag .t &&& 
-                        t == res.tag)
-                        current_instruction.rs2 = tagged Operand res.result;
+                        t == res.tag) begin
+                            current_instruction.rs2 = tagged Operand res.result;
+                            chg = True;
+                        end
                 end
 
-                instruction_buffer_port0_v[j] <= tagged Valid current_instruction;
+                if(chg) instruction_buffer_v[j] <= tagged Valid current_instruction;
             end
         end
     endrule
 
     // insert instruction, wires will be written by method
-    Wire#(Instruction) inst_to_insert <- mkWire();
-    Wire#(UInt#(entries_idx_t)) inst_to_insert_idx <- mkWire();
-    rule insert_instruction;        
-        instruction_buffer_port1_v[inst_to_insert_idx] <= tagged Valid inst_to_insert;
+    FIFOF#(Instruction) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF();
+    rule insert_instruction;
+        let inst = inst_to_insert.first();
+        inst_to_insert.deq();
+        let inst_to_insert_idx = Vector::findElem(tagged Invalid, instruction_buffer_preread).Valid;
+        instruction_buffer_v[inst_to_insert_idx] <= tagged Valid inst;
         dbg_print(RS, $format("inserting inst: idx ", inst_to_insert_idx));
     endrule
 
     // dequeue an instruction if it was retrieved
     Wire#(UInt#(entries_idx_t)) clear_idx_w <- mkWire();
-    (* conflict_free = "insert_instruction, clear_instruction" *)
+    (* conflict_free = "listen_to_cdb, insert_instruction, clear_instruction" *)
     rule clear_instruction;
         dbg_print(RS, $format("clearing inst: idx ", fshow(clear_idx_w)));
-        instruction_buffer_port1_v[clear_idx_w] <= tagged Invalid;
+        instruction_buffer_v[clear_idx_w] <= tagged Invalid;
+    endrule
+
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+        endrule
+    `endif
+
+    Reg#(Bool) can_insert_buffer <- mkReg(True);
+    PulseWire will_insert_next <- mkPulseWire();
+    Wire#(Bool) will_insert_now <- mkBypassWire();
+    rule insert_now; will_insert_now <= inst_to_insert.notEmpty(); endrule
+    rule calculate_next_insert;
+
+        let free_slots = Vector::countElem(tagged Invalid, instruction_buffer_preread);
+        let insert_currently = will_insert_now;
+        let insert_next = will_insert_next;
+
+        Integer cmp = insert_currently && insert_next && (valueOf(RS_LATCH_INPUT) == 1) ? 2 :
+                      insert_currently || insert_next ? 1 : 0;
+
+        can_insert_buffer <= free_slots > fromInteger(cmp);
     endrule
 
     // method to request an instruction
-    Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_port0_v);
+    Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_v);
     method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
         let idx = fromMaybe(?, Vector::findIndex(is_ready, instruction_buffer_read_v));
         let inst = fromMaybe(?, instruction_buffer_read_v[idx]);
         clear_idx_w <= idx;
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(idx)));
+        `ifdef LOG_PIPELINE
+            $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
+        `endif
         return inst;
     endmethod
 
@@ -277,12 +391,12 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
-                inst_to_insert <= inst;
-                inst_to_insert_idx <= Vector::findElem(tagged Invalid, instruction_buffer_read_v).Valid;
+                inst_to_insert.enq(inst);
+                will_insert_next.send();
                 dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
-        method Bool can_insert = Vector::elem(tagged Invalid, instruction_buffer_read_v);
+        method Bool can_insert = can_insert_buffer;
     endinterface
 endmodule
 

@@ -30,7 +30,7 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
 );
 
     //AXI modules
-    AXI4_Master_Rd#(XLEN, XLEN, axi_idx_t, 0) axi_rd <- mkAXI4_Master_Rd(0, 0, False);
+    AXI4_Master_Rd#(XLEN, XLEN, axi_idx_t, 0) axi_rd <- mkAXI4_Master_Rd(0, 1, False);
     AXI4_Master_Wr#(XLEN, XLEN, axi_idx_t, 0) axi_wr <- mkAXI4_Master_Wr(0, 0, 0, False);
 
     //request buffers

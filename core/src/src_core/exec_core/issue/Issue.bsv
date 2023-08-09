@@ -49,6 +49,16 @@ module mkIssue(IssueIFC) provisos(
     Add#(__c, issuewidth_log_t, issue_amount_t)
 );
 
+`ifdef LOG_PIPELINE
+    Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+    rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+    Reg#(File) out_log <- mkRegU();
+    rule open if (clk_ctr == 0);
+        File out_log_l <- $fopen("scoooter.log", "a");
+        out_log <= out_log_l;
+    endrule
+`endif
+
 //wires for transport of incoming instructions
 Wire#(Vector#(ISSUEWIDTH, Instruction)) inst_in <- mkWire();
 Wire#(MIMO::LUInt#(ISSUEWIDTH)) inst_in_cnt <- mkWire();
@@ -268,6 +278,9 @@ rule assemble_instructions;
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
         if(fromInteger(i) < possible_issue_amount) begin
             instructions_rs[needed_rs_idx_w[i]] = tagged Valid instructions[i];
+            `ifdef LOG_PIPELINE
+                $fdisplay(out_log, "%d ISSUE %x %d %d", clk_ctr, instructions[i].pc, instructions[i].tag, instructions[i].epoch);
+            `endif
         end
     end
 
