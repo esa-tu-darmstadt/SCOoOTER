@@ -104,7 +104,8 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     // types to track fullness and index
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),
-    Log#(entries, entries_idx_t)
+    Log#(entries, entries_idx_t),
+    Add#(a__, entries_idx_t, entries_log_t)
 );
     // implement idx rollover
     function UInt#(size_logidx_t) increment_index(UInt#(size_logidx_t) new_idx);
@@ -130,6 +131,19 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
     Reg#(Bool) full_r[2] <- mkCReg(2, False);
+
+    function UInt#(entries_log_t) empty_slots;
+        UInt#(entries_log_t) result;
+
+        //calculate from head and tail pointers
+        if (head_r > tail_r) result = extend(head_r) - extend(tail_r);
+        else if (tail_r > head_r) result = fromInteger(valueOf(entries)) - extend(tail_r) + extend(head_r);
+        // if both pointers are equal, must be full or empty
+        else if (full_r[0]) result = fromInteger(valueOf(entries));
+        else result = 0;
+
+        return fromInteger(valueOf(entries)) - result;
+    endfunction
 
     rule print_innards;
         let idx = tail_r;
@@ -180,6 +194,8 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         tail_r <= increment_index(tail_r);
     endrule
 
+    PulseWire has_enq <- mkPulseWire();
+
     `ifdef LOG_PIPELINE
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
@@ -190,7 +206,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         endrule
     `endif
 
-    FIFO#(Instruction) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFO() : mkWireFIFO());
+    FIFOF#(Instruction) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
 
     (* conflict_free="enqueue, listen_to_cdb" *)
     rule enqueue;
@@ -199,6 +215,23 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         let new_head = increment_index(head_r);
         head_r <= new_head;
         if(tail_r == new_head) full_r[0] <= True;
+    endrule
+
+    Reg#(Bool) ready_r <- mkReg(True);
+    PulseWire will_insert_next <- mkPulseWire();
+    Wire#(Bool) will_insert_now <- mkBypassWire();
+    Wire#(UInt#(entries_log_t)) free_slots_w <- mkBypassWire();
+    rule insert_now; will_insert_now <= inst_to_enqueue.notEmpty(); endrule
+    rule empty_calc; free_slots_w <= empty_slots(); endrule
+        
+    rule calc_next_rdy;
+        let insert_currently = will_insert_now;
+        let insert_next = will_insert_next;
+
+        Integer cmp = insert_currently && insert_next && (valueOf(RS_LATCH_INPUT) == 1) ? 2 :
+                      insert_currently || insert_next ? 1 : 0;
+
+        ready_r <= free_slots_w > fromInteger(cmp);
     endrule
 
     // dequeue an instruction if one is ready
@@ -225,10 +258,11 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(Instruction inst);
+                will_insert_next.send();
                 inst_to_enqueue.enq(inst);
             endmethod
         endinterface
-        method Bool can_insert = !(valueOf(RS_LATCH_INPUT) == 1 ? full_r[1] : full_r[0]);
+        method Bool can_insert = ready_r;
     endinterface
 endmodule
 
@@ -237,7 +271,8 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     // create index and count types
     Add#(entries, 1, entries_pad_t),
     Log#(entries_pad_t, entries_log_t),
-    Log#(entries, entries_idx_t)
+    Log#(entries, entries_idx_t),
+    Add#(a__, 1, entries_log_t)
 );
 
     // wire to distribute result bus
@@ -317,6 +352,22 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         endrule
     `endif
 
+    Reg#(Bool) can_insert_buffer <- mkReg(True);
+    PulseWire will_insert_next <- mkPulseWire();
+    Wire#(Bool) will_insert_now <- mkBypassWire();
+    rule insert_now; will_insert_now <= inst_to_insert.notEmpty(); endrule
+    rule calculate_next_insert;
+
+        let free_slots = Vector::countElem(tagged Invalid, instruction_buffer_preread);
+        let insert_currently = will_insert_now;
+        let insert_next = will_insert_next;
+
+        Integer cmp = insert_currently && insert_next && (valueOf(RS_LATCH_INPUT) == 1) ? 2 :
+                      insert_currently || insert_next ? 1 : 0;
+
+        can_insert_buffer <= free_slots > fromInteger(cmp);
+    endrule
+
     // method to request an instruction
     Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_v);
     method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
@@ -341,10 +392,11 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         interface Put instruction;
             method Action put(Instruction inst);
                 inst_to_insert.enq(inst);
+                will_insert_next.send();
                 dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
-        method Bool can_insert = (Vector::countElem(tagged Invalid, Vector::readVReg(instruction_buffer_v)) > (inst_to_insert.notEmpty() && (valueOf(RS_LATCH_INPUT) == 1) ? 1 : 0) );
+        method Bool can_insert = can_insert_buffer;
     endinterface
 endmodule
 
