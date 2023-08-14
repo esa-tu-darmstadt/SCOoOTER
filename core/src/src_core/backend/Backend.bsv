@@ -22,13 +22,13 @@ import BuildVector::*;
 
 // connections to external world
 interface BackendIFC;
-    method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
+    method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
     interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
     method Bool csr_busy();
     interface Client#(MemWr, void) write;
-    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
+    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
-    interface Server#(Bit#(12), Maybe#(Bit#(XLEN))) csr_read;
+    interface Server#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     method Action int_flags(Vector#(3, Bool) int_mask);
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
@@ -100,7 +100,7 @@ module mkBackend(BackendIFC) provisos (
     endrule
 
     // methods to external world
-    method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) result_bus);
+    method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) result_bus);
         rob.result_bus(result_bus);
     endmethod
     interface Get train = commit.train;

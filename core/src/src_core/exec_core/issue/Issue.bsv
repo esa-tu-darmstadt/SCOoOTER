@@ -83,7 +83,7 @@ Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) gathered_operands <- mkWire();
 Vector#(TMul#(2, ISSUEWIDTH), RWire#(UInt#(size_logidx_t))) cross_dependant_operands <- replicateM(mkRWire());
 Wire#(UInt#(issuewidth_log_t)) possible_issue_amount <- mkWire();
 Wire#(Vector#(ISSUEWIDTH, UInt#(rs_count_log_t))) needed_rs_idx_w <- mkWire();
-Wire#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) req_addrs <- mkWire();
+Wire#(Vector#(TMul#(2, ISSUEWIDTH), RegRead)) req_addrs <- mkWire();
 
 // helper function to extract destination RADDR from an instruction
 function RADDR inst_to_raddr(Instruction inst) = (inst.rd);
@@ -96,11 +96,13 @@ function RADDR inst_to_raddr(Instruction inst) = (inst.rd);
 rule gather_operands;
     let instructions = inst_in;
 
-    Vector#(TMul#(2, ISSUEWIDTH), RADDR) request_addrs;
+    Vector#(TMul#(2, ISSUEWIDTH), RegRead) request_addrs;
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-        request_addrs[2*i] = inst_in[i].rs1.Raddr;
-        request_addrs[2*i+1] = inst_in[i].rs2.Raddr;
+        request_addrs[2*i].addr = inst_in[i].rs1.Raddr;
+        request_addrs[2*i+1].addr = inst_in[i].rs2.Raddr;
+        request_addrs[2*i].thread_id = inst_in[i].thread_id;
+        request_addrs[2*i+1].thread_id = inst_in[i].thread_id;
     end
 
     req_addrs <= request_addrs;
@@ -123,11 +125,13 @@ rule resolve_cross_dependencies;
             // extract rd and epoch of inst to compare
             let rd_addr = inst_in[j-1].rd;
             let epoch = inst_in[j-1].epoch;
+            let thread_id = inst_in[j-1].thread_id;
             //check rs1
             if( rd_addr != 0 &&&
                 inst_in[i].rs1 matches tagged Raddr .rs1_addr &&&
                 rd_addr == rs1_addr &&& !found_rs1 &&&
-                inst_in[i].epoch == epoch)
+                inst_in[i].epoch == epoch && 
+                inst_in[i].thread_id == thread_id)
                 begin
                     cross_dependant_operands[2*i].wset(rob_entry_idx_v[j-1]);
                     found_rs1 = True;
@@ -136,7 +140,8 @@ rule resolve_cross_dependencies;
             if( rd_addr != 0 &&&
                 inst_in[i].rs2 matches tagged Raddr .rs2_addr &&&
                 rd_addr == rs2_addr &&& !found_rs2 &&&
-                inst_in[i].epoch == epoch)
+                inst_in[i].epoch == epoch &&
+                inst_in[i].thread_id == thread_id)
                 begin
                     cross_dependant_operands[2*i+1].wset(rob_entry_idx_v[j-1]);
                     found_rs2 = True;
@@ -212,7 +217,8 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         br : (inst.opc == BRANCH),
         history : inst.history,
         ras: inst.ras,
-        ret: (inst.funct == RET)
+        ret: (inst.funct == RET),
+        thread_id: inst.thread_id
     };
 endfunction
 
@@ -229,7 +235,7 @@ Wire#(RegReservations) tag_res <- mkWire();
 
 // set tags in the speculative register file
 function RegReservation inst_to_register_reservation(Instruction ins, UInt#(size_logidx_t) idx) 
-    = RegReservation { addr : ins.rd, tag: idx, epoch: ins.epoch };
+    = RegReservation { addr : ins.rd, tag: idx, epoch: ins.epoch, thread_id: ins.thread_id };
 rule set_regfile_tags;
     Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_register_reservation), Vector::zip(inst_in, rob_entry_idx_v));
     tag_res <= RegReservations {reservations: reservations, count: possible_issue_amount};
@@ -288,8 +294,6 @@ rule assemble_instructions;
     dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
 endrule
 
-function UInt#(EPOCH_WIDTH) inst_to_epoch(Instruction inst) = inst.epoch;
-
 // return issue bus
 method Vector#(NUM_RS, Maybe#(Instruction)) get_issue() = instructions_rs_v;
 // inputs from ROB
@@ -312,7 +316,7 @@ endinterface
 // read registers
 interface Client read_registers;
     interface Get request;
-        method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) get();
+        method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RegRead)) get();
             actionvalue
                 return req_addrs;
             endactionvalue

@@ -292,7 +292,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
         insts_passing.deq();
         return tpl_1(insts_passing.first());
     endmethod
-    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
+    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
         let results = tpl_1(res_bus);
         ResultWrite mem_wr = isValid(tpl_2(res_bus)) ? tagged Mem tpl_2(res_bus).Valid : tagged None;
         ResultWrite csr_wr = isValid(tpl_3(res_bus)) ? tagged Csr tpl_3(res_bus).Valid : tagged None;

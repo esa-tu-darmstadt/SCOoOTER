@@ -34,7 +34,11 @@ typedef union tagged {
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkRegFileEvo(RegFileEvoIFC);
+module mkRegFileEvo(RegFileEvoIFC) provisos (
+    Log#(NUM_THREADS, thread_idx_t),
+    Log#(32, reg_addr_t),
+    Add#(thread_idx_t, reg_addr_t, treg_addr_t)
+);
 
     // wire for distributing the result bus
     Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
@@ -42,49 +46,58 @@ module mkRegFileEvo(RegFileEvoIFC);
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
 
     //register storage
-    Vector#(31, Ehr#(3, EvoEntry)) registers <- replicateM(mkEhr(tagged Invalid));
+    Vector#(NUM_THREADS, Vector#(31, Ehr#(3, EvoEntry))) registers <- replicateM(replicateM(mkEhr(tagged Invalid)));
     //derived Reg ifaces from CReg
-    Vector#(31, Reg#(EvoEntry)) registers_port0 = Vector::map(disassemble_ehr(0), registers);
-    Vector#(31, Reg#(EvoEntry)) registers_port1 = Vector::map(disassemble_ehr(1), registers);
-    Vector#(31, Reg#(EvoEntry)) registers_port2 = Vector::map(disassemble_ehr(2), registers);
+    Vector#(NUM_THREADS, Vector#(31, Reg#(EvoEntry))) registers_port0 = Vector::map(compose(Vector::map, disassemble_ehr)(0), registers);
+    Vector#(NUM_THREADS, Vector#(31, Reg#(EvoEntry))) registers_port1 = Vector::map(compose(Vector::map, disassemble_ehr)(1), registers);
+    Vector#(NUM_THREADS, Vector#(31, Reg#(EvoEntry))) registers_port2 = Vector::map(compose(Vector::map, disassemble_ehr)(2), registers);
 
     //local epoch counter
-    Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
+    Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch <- replicateM(mkReg(0));
 
     //helper function: tests if a result matches a given tag
     function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(ResultLoopback) res)
         = (isValid(res) && res.Valid.tag == current_tag);
     //evaluate result bus
     rule result_bus_r;
-        Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port0);
 
-        // for each register, test if it holds a tag and if so,
-        // test if the current result bus provides said tag
-        for(Integer i = 0; i < 31; i=i+1) begin
-            let current_entry = local_entries[i];
+        for(Integer n = 0; n < valueOf(NUM_THREADS); n=n+1) begin
 
-            if(current_entry matches tagged Tag .current_tag) begin // reg is tagged
-                let result = Vector::find(test_result(current_tag), result_bus_vec); // find result matching tag
-                if(result matches tagged Valid .found_result) begin // if result exists, update value
-                    local_entries[i] = tagged Value found_result.Valid.result;
-                    dbg_print(RegEvo, $format("Setting reg ", i+1, found_result.Valid.result));
+            Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port0[n]);
+
+            // for each register, test if it holds a tag and if so,
+            // test if the current result bus provides said tag
+            for(Integer i = 0; i < 31; i=i+1) begin
+                let current_entry = local_entries[i];
+
+                if(current_entry matches tagged Tag .current_tag) begin // reg is tagged
+                    let result = Vector::find(test_result(current_tag), result_bus_vec); // find result matching tag
+                    if(result matches tagged Valid .found_result) begin // if result exists, update value
+                        local_entries[i] = tagged Value found_result.Valid.result;
+                        dbg_print(RegEvo, $format("Setting reg ", i+1, found_result.Valid.result));
+                    end
                 end
             end
-        end
 
-        Vector::writeVReg(registers_port0, local_entries);
+            Vector::writeVReg(registers_port0[n], local_entries);
+
+        end
     endrule
 
     // print the contents 
     rule print_debug;
         for(Integer i = 0; i < 31; i=i+1)
-            dbg_print(RegEvo, $format(i+1, ": ", fshow(registers_port1[i])));
+            dbg_print(RegEvo, $format(i+1, ": ", fshow(registers_port1[0][i])));
     endrule
 
     //inform about misprediction
     method Action flush();
-        Vector::writeVReg(registers_port2, replicate(tagged Invalid));
-        epoch <= epoch+1;
+        Bit#(NUM_THREADS) flag = 1;
+        for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) 
+        if(flag[i]==1) begin
+            Vector::writeVReg(registers_port2[i], replicate(tagged Invalid));
+            epoch[i] <= epoch[i]+1;
+        end
     endmethod
 
     // read the result bus
@@ -96,12 +109,13 @@ module mkRegFileEvo(RegFileEvoIFC);
     interface Server read_registers;
     
         interface Put request;
-            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RADDR) req);
+            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RegRead) req);
                 Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response;
 
                 for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
-                    let reg_addr = req[i];
-                    let entry = registers_port1[reg_addr-1];
+                    let reg_addr = req[i].addr;
+                    let thread_id = req[i].thread_id;
+                    let entry = registers_port1[thread_id][reg_addr-1];
 
                     // if we store a value, return it, otherwise return a Tag.
                     // if we have neither, return None
@@ -131,23 +145,25 @@ module mkRegFileEvo(RegFileEvoIFC);
     interface Put reserve_registers;
         method Action put(RegReservations in);
             action
-                Vector#(31, EvoEntry) local_entries = Vector::readVReg(registers_port1);
+                Vector#(NUM_THREADS, Vector#(31, EvoEntry)) local_entries = Vector::map(Vector::readVReg, registers_port1);
             
                 //for every request from issue logic
                 for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                    if(in.reservations[i].epoch == epoch) begin
+                    let thread_id = in.reservations[i].thread_id;
+                    if(in.reservations[i].epoch == epoch[thread_id]) begin
                         let reg_addr = in.reservations[i].addr;
                         //if the instruction and register is valid
                         if(fromInteger(i) < in.count && reg_addr != 0) begin
                             //store the tag to the regfile
                             let tag = in.reservations[i].tag;
-                            local_entries[reg_addr-1] = tagged Tag tag;
+                            local_entries[thread_id][reg_addr-1] = tagged Tag tag;
                             dbg_print(RegEvo, $format("Setting tag: ", reg_addr, tag));
                         end
                     end
                 end
 
-                Vector::writeVReg(registers_port1, local_entries);
+                for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+                    Vector::writeVReg(registers_port1[i], local_entries[i]);
             endaction
         endmethod
     endinterface

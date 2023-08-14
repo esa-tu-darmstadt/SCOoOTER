@@ -21,7 +21,7 @@ module mkRegFile(RegFileIFC) provisos (
 
     // stateful registers
     // we do not need reg0, as this is hardwired to 0
-    Vector#(31, Ehr#(issuewidth_pad_t, Bit#(XLEN))) regs <- replicateM(mkEhr(?));
+    Vector#(NUM_THREADS, Vector#(31, Ehr#(issuewidth_pad_t, Bit#(XLEN)))) regs <- replicateM(replicateM(mkEhr(?)));
 
     // buffer for read requests
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) register_responses_w <- mkWire();
@@ -29,7 +29,7 @@ module mkRegFile(RegFileIFC) provisos (
     // print the whole register file for debugging
     rule print_debug;
         for(Integer i = 0; i < 31; i=i+1)
-            dbg_print(Regs, $format(i+1, ": ", regs[i][0]));
+            dbg_print(Regs, $format(i+1, ": ", regs[0][i][0]));
     endrule
 
     //writing to registers
@@ -38,7 +38,7 @@ module mkRegFile(RegFileIFC) provisos (
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
                 // if the request is valid, write to the file
                 if(requests[i] matches tagged Valid .req &&& req.addr != 0) begin
-                    regs[req.addr - 1][i] <= req.data;
+                    regs[req.thread_id][req.addr - 1][i] <= req.data;
                 end
             end
         endaction
@@ -48,12 +48,13 @@ module mkRegFile(RegFileIFC) provisos (
     // server for register reading
     interface Server read_registers;
         interface Put request;
-            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RADDR) req);
+            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RegRead) req);
                 Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN)) response;
 
                 for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
-                    let reg_addr = req[i];
-                    response[i] = regs[reg_addr-1][0];
+                    let reg_addr = req[i].addr;
+                    let thread_id = req[i].thread_id;
+                    response[i] = regs[thread_id][reg_addr-1][0];
                 end
 
                 register_responses_w <= response;

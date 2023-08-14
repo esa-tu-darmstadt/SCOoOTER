@@ -100,7 +100,7 @@ interface IssueIFC;
     interface PutSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
 
     //connection to regfile_evo
-    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
+    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
     interface Get#(RegReservations) reserve_registers;
 
     (* always_ready, always_enabled *)
@@ -113,9 +113,6 @@ interface IssueIFC;
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
 
     method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
-
-
-    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_committed;
 endinterface
 
 interface ReservationStationPutIFC;
@@ -140,9 +137,9 @@ endinterface
 
 interface CsrIFC;
     interface FunctionalUnitIFC fu;
-    interface Client#(Bit#(12), Maybe#(Bit#(XLEN))) csr_read;
+    interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
     method Action block(Bool b);
-    method Maybe#(CsrWrite) write;
+    method Maybe#(CsrWriteResult) write;
 endinterface
 
 interface MemoryUnitIFC;
@@ -168,7 +165,7 @@ interface RobIFC;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
-    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus);
+    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
 
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     method Bool csr_busy();
@@ -198,11 +195,11 @@ interface RegFileIFC;
     //write of architectural registers from commit stage
     method Action write(Vector#(ISSUEWIDTH, Maybe#(RegWrite)) requests);
     //output of current arch registers, used in mispredict
-    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
+    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
 endinterface
 
 interface RegFileEvoIFC;
-    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
+    interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
     interface Put#(RegReservations) reserve_registers;
 
     //inform about misprediction
@@ -231,7 +228,7 @@ endinterface
 
 interface CsrFileIFC;
     interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) writes;
-    interface Server#(Bit#(12), Maybe#(Bit#(XLEN))) read;
+    interface Server#(CsrRead, Maybe#(Bit#(XLEN))) read;
     method Tuple2#(Bit#(XLEN), Bit#(XLEN)) trap_vectors();
     method Action write_int_data(Bit#(XLEN) cause, Bit#(XLEN) pc);
     method Bit#(3) ext_interrupt_mask();

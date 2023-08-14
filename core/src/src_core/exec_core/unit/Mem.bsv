@@ -371,11 +371,8 @@ rule collect_result_mispredict if(stage3.first().mispredicted);
     out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag});
 endrule
 
-(* conflict_free = "check_rob_response, collect_result_read, collect_result_mispredict,flush_invalid_axi_rq, flush_invalid_fwds" *)
-
-
 // generate output (and define in which urgency results shall be propagated)
-(* descending_urgency="calculate_store, collect_result_mispredict, collect_result_read, collect_result_read_bypass, flush_invalid_axi_rq" *)
+(* preempts="calculate_store, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
 rule propagate_result;
     out.deq();
     let res = out.first();

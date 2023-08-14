@@ -61,7 +61,7 @@ FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), MIMO::LUInt#(ISSUEWIDTH))) 
 
 
 function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch &&& re.write matches tagged Mem .v ? tagged Valid v : tagged Invalid; 
-function Maybe#(CsrWrite) rob_entry_to_csr_write(RobEntry re) = re.epoch == epoch &&& re.write matches tagged Csr .v ? tagged Valid v : tagged Invalid; 
+function Maybe#(CsrWrite) rob_entry_to_csr_write(RobEntry re) = re.epoch == epoch &&& re.write matches tagged Csr .v ? tagged Valid CsrWrite {addr: v.addr, data: v.data, thread_id: re.thread_id} : tagged Invalid; 
 
 
 function Maybe#(TrainPrediction) rob_entry_to_train(RobEntry re);
@@ -163,7 +163,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                    instructions[i].result matches tagged Result .r &&& 
                    !done) begin
                     dbg_print(Commit, $format(fshow(instructions[i])));
-                    temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r};
+                    temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r, thread_id: instructions[i].thread_id};
 
                     `ifdef LOG_PIPELINE
                         $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);

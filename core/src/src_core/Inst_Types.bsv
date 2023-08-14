@@ -137,6 +137,7 @@ typedef struct {
 
     Bit#(RAS_EXTRA) ras;
 
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
 // operand of an instruction
@@ -193,6 +194,9 @@ typedef struct {
     // save history for predictors
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
+
+    // multithreading
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } Instruction deriving(Bits, Eq, FShow);
 
 instance DefaultValue#(Instruction);
@@ -229,8 +233,9 @@ typedef struct {
 typedef union tagged { // writes to mem or csr
         MemWr Mem;
         void None;
-        CsrWrite Csr;
+        CsrWriteResult Csr;
 } ResultWrite deriving(Bits, FShow);
+
 typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
     Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
@@ -262,7 +267,7 @@ typedef struct {
         MemWr Mem;
         void Pending_mem;
         void None;
-        CsrWrite Csr;
+        CsrWriteResult Csr;
     } write;
     // identify if the instruction is branching and if it is br or jal
     Bool branch;
@@ -271,26 +276,47 @@ typedef struct {
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
     Bool ret; // instruction is branch return
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } RobEntry deriving(Bits, FShow);
 
 // write to a register
 typedef struct {
     RADDR addr;
     Bit#(XLEN) data;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } RegWrite deriving(Bits, FShow);
+
+typedef struct {
+    RADDR addr;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
+} RegRead deriving(Bits, FShow);
 
 // write to a csr
 typedef struct {
     Bit#(12) addr;
     Bit#(XLEN) data;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } CsrWrite deriving(Bits, FShow);
+
+// write to a csr
+typedef struct {
+    Bit#(12) addr;
+    Bit#(XLEN) data;
+} CsrWriteResult deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(12) addr;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
+} CsrRead deriving(Bits, FShow);
 
 // reserve tags for a register
 typedef struct {
     RADDR addr;
     UInt#(TLog#(ROBDEPTH)) tag;
     UInt#(EPOCH_WIDTH) epoch;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } RegReservation deriving(Bits, FShow);
+
 typedef struct {
     Vector#(ISSUEWIDTH, RegReservation) reservations;
     UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
@@ -312,6 +338,7 @@ typedef struct {
     Bit#(32) next_pc;
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } FetchedInstruction deriving(Bits, FShow);
 
 // output from fetch stage
