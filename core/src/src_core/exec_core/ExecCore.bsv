@@ -39,7 +39,7 @@ interface ExecCoreIFC;
 
     // mispredict signal
     (* always_ready *)
-    method Action flush();
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
     
     // read architectural registers
     interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_committed;
@@ -173,9 +173,9 @@ module mkExecCore(ExecCoreIFC);
 
     interface Client check_rob = mem.check_rob;
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
-    method Action flush();
-        mem.flush();
-        regfile_evo.flush();
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
+        mem.flush(in);
+        regfile_evo.flush(in);
     endmethod
     method Action csr_busy(Bool b) = csr.block(b);
     interface Client check_store_buffer = mem.check_store_buffer();

@@ -91,10 +91,9 @@ module mkRegFileEvo(RegFileEvoIFC) provisos (
     endrule
 
     //inform about misprediction
-    method Action flush();
-        Bit#(NUM_THREADS) flag = 1;
+    method Action flush(Vector#(NUM_THREADS, Bool) flags);
         for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) 
-        if(flag[i]==1) begin
+        if(flags[i]) begin
             Vector::writeVReg(registers_port2[i], replicate(tagged Invalid));
             epoch[i] <= epoch[i]+1;
         end

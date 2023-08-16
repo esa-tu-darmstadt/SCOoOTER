@@ -48,7 +48,7 @@ interface Top;
     (* always_ready, always_enabled *)
     method Action ext_int(Vector#(NUM_THREADS, Bool) b);
     (* always_ready, always_enabled *)
-    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
+    method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
@@ -78,7 +78,8 @@ interface FetchIFC;
     // to IMEM
     interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read;
     // mispredict signal
-    method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
+    (* always_ready, always_enabled *)
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
     // output
     interface GetS#(FetchResponse) instructions;
 
@@ -147,7 +148,7 @@ interface MemoryUnitIFC;
     interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) request;
-    method Action flush();
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
     method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
     method Action store_queue_empty(Bool b);
     method Maybe#(MemWr) write;
@@ -174,7 +175,7 @@ endinterface
 interface CommitIFC;
     method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
-    method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
+    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     interface GetS#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_writes;
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
@@ -203,7 +204,7 @@ interface RegFileEvoIFC;
     interface Put#(RegReservations) reserve_registers;
 
     //inform about misprediction
-    method Action flush();
+    method Action flush(Vector#(NUM_THREADS, Bool) flags);
     (* always_ready, always_enabled *)
     method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in);
 endinterface
@@ -233,7 +234,7 @@ interface CsrFileIFC;
     method Action write_int_data(Vector#(NUM_THREADS, Maybe#(TrapDescription)) in);
     method Vector#(NUM_THREADS, Bit#(3)) ext_interrupt_mask();
     (* always_ready, always_enabled *)
-    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
+    method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
 endinterface
 
 endpackage

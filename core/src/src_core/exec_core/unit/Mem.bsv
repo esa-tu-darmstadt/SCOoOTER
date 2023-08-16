@@ -13,6 +13,7 @@ import RWire::*;
 import Debug::*;
 import ClientServer::*;
 import GetPut::*;
+import Vector::*;
 
 // struct for access width
 typedef enum {
@@ -40,6 +41,7 @@ typedef struct {
     Bool aq;
     Bool rl;
     Bool mispredicted;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } LoadPipe deriving(Bits, FShow);
 
 `ifdef SYNTH_SEPARATE
@@ -62,7 +64,7 @@ RWire#(MemWr) out_wr_valid <- mkRWire();
 
 // local epoch for tossing wrong-path instructions
 // this reduces bus pressure 
-Reg#(UInt#(EPOCH_WIDTH)) epoch_r <- mkReg(0);
+Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch_r <- replicateM(mkReg(0));
 
 // ROB head ID
 Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
@@ -150,7 +152,7 @@ function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
     WORD: (mask != 0);
 endcase;
 
-rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r && !aq_r);
+rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id] && !aq_r);
 
     // get instruction, do not deq here as we do this only on success for ROB request
     let inst = in.first();
@@ -184,7 +186,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
         amo_modifier: inst.rs2.Operand,
         aq: inst.aq,
         rl: inst.rl,
-        mispredicted: False
+        mispredicted: False,
+        thread_id: inst.thread_id
     };
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
 endrule
@@ -192,7 +195,7 @@ endrule
 // check ROB response, if the instruction is clear, commence execution
 // otherwise do not dequeue it and try again next cycle
 Wire#(UInt#(XLEN)) request_sb <- mkWire();
-rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r));
+rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id]));
     let internal_state = stage1_internal;
     let rob_resp = response_ROB;
     if(!rob_resp) begin
@@ -205,7 +208,7 @@ rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) &
 endrule
 
 // toss instructions with wrong epoch
-rule flush_invalid_loads if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch != epoch_r);
+rule flush_invalid_loads if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch != epoch_r[in.first().thread_id]);
     let inst = in.first(); in.deq();
     stage1.enq(LoadPipe { tag: inst.tag, mispredicted: True});
 endrule
@@ -219,7 +222,7 @@ FIFO#(Tuple2#(LoadPipe, Maybe#(MaskedWord))) stage2 <- mkPipelineFIFO();
 
 // raise request to store buffer
 // get response from store buffer
-rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r && !stage1.first().mispredicted);
+rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r[stage1.first().thread_id] && !stage1.first().mispredicted);
     let struct_internal = stage1.first();
     let response = response_sb;
     // if the response matches our load/store mask, move into next stage
@@ -241,7 +244,7 @@ rule check_fwd_path_resp  if (stage1.first().epoch == epoch_r && !stage1.first()
 endrule
 
 // remove wrong-epoch instructions from pipeline
-rule flush_invalid_fwds if (stage1.first().epoch != epoch_r || stage1.first().mispredicted);
+rule flush_invalid_fwds if (stage1.first().epoch != epoch_r[stage1.first().thread_id] || stage1.first().mispredicted);
     let internal_struct = stage1.first(); stage1.deq();
     if(internal_struct.aq) aq_r <= False;
     internal_struct.mispredicted = True;
@@ -254,7 +257,7 @@ endrule
 // output to next stage
 FIFO#(LoadPipe) stage3 <- mkPipelineFIFO();
 
-rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r && !tpl_1(stage2.first()).mispredicted);
+rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r[tpl_1(stage2.first()).thread_id] && !tpl_1(stage2.first()).mispredicted);
     let struct_internal = tpl_1(stage2.first());
     let fwd = tpl_2(stage2.first());
 
@@ -287,7 +290,7 @@ rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r && !tpl_1(
 endrule
 
 // remove wrong-epoch instructions
-rule flush_invalid_axi_rq if (tpl_1(stage2.first()).epoch != epoch_r || tpl_1(stage2.first()).mispredicted);
+rule flush_invalid_axi_rq if (tpl_1(stage2.first()).epoch != epoch_r[tpl_1(stage2.first()).thread_id] || tpl_1(stage2.first()).mispredicted);
     let internal_struct = tpl_1(stage2.first()); stage2.deq();
     if(internal_struct.aq) aq_r <= False;
     internal_struct.mispredicted = True;
@@ -430,7 +433,10 @@ endinterface
 method Maybe#(MemWr) write = out_wr_valid.wget();
 
 // epoch handling
-method Action flush() = epoch_r._write(epoch_r + 1);
+method Action flush(Vector#(NUM_THREADS, Bool) flags);
+    for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+        if(flags[i]) epoch_r[i] <= epoch_r[i] + 1;
+endmethod
 
 // input current rob ID
 method Action current_rob_id(UInt#(rob_idx_t) idx) = rob_head._write(idx);

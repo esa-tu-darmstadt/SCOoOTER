@@ -82,7 +82,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     endrule
 
     rule commit_to_fetch;
-        ec.flush();
+        ec.flush(Vector::map(isValid, be.redirect_pc()));
         fe.redirect(be.redirect_pc());
     endrule
 
@@ -118,7 +118,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     interface read_d = ec.read;
     interface read_i = fe.read_inst;
 
-    method Action hart_id(Bit#(TLog#(NUM_CPU)) in) = be.hart_id(in);
+    method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = be.hart_id(in);
 
 
 

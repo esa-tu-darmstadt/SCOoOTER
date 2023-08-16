@@ -1,17 +1,17 @@
 package Config;
 
-typedef 1 IFUINST;
-typedef 3 ISSUEWIDTH;
+typedef 4 IFUINST;
+typedef 2 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
-typedef 'h10000 BRAMSIZE;
+typedef 'h40000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
-typedef 8 ROBDEPTH;
+typedef 4 ROBDEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)
-typedef 32 INST_WINDOW;
+typedef 4 INST_WINDOW;
 
 // 0: single cycle
 // 1: multi cycle
@@ -24,18 +24,18 @@ typedef 1 NUM_MULDIV;
 typedef 1 NUM_BR;
 
 // rs depths
-typedef 3 RS_DEPTH_ALU;
-typedef 3 RS_DEPTH_MEM;
+typedef 2 RS_DEPTH_ALU;
+typedef 2 RS_DEPTH_MEM;
 typedef 2 RS_DEPTH_CSR;
 typedef 2 RS_DEPTH_MULDIV;
 typedef 2 RS_DEPTH_BR;
 
 // result bus buffering
-typedef 1 RS_LATCH_BUS;
-typedef 1 DECODE_LATCH_OUTPUT;
-typedef 1 ROB_LATCH_OUTPUT;
+typedef 0 RS_LATCH_BUS;
+typedef 0 DECODE_LATCH_OUTPUT;
+typedef 0 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
-typedef 1 RS_LATCH_INPUT;
+typedef 0 RS_LATCH_INPUT;
 
 // prediction strategy
 // 0: always untaken
@@ -50,9 +50,10 @@ typedef 0 BITS_BHR;
 typedef 1  USE_RAS;
 typedef 1 RAS_SAVE_HEAD;
 typedef 1 RAS_SAVE_FIRST;
-typedef 16 RASDEPTH;
+typedef 4 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
 
-typedef 1 NUM_CPU;
+typedef 2 NUM_CPU;
+typedef 2 NUM_THREADS;
 endpackage

@@ -50,11 +50,25 @@ Vector#(NUM_THREADS, Array#(Reg#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))))) next_pc
 
 Vector#(NUM_THREADS, FIFO#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc_w <- replicateM(mkBypassFIFO());
 Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc_w_exc <- replicateM(mkRWire());
+Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc_w_out <- replicateM(mkRWire());
+
+for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
+rule fwd_redir;
+    redirect_pc_w_out[i].wset(redirect_pc_w[i].first());
+    redirect_pc_w[i].deq();
+endrule
 
 Vector#(NUM_THREADS, Wire#(Bit#(XLEN))) tvec <- replicateM(mkBypassWire());
 Vector#(NUM_THREADS, FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN)))) mcause <- replicateM(mkPipelineFIFO());
 Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(XLEN), Bit#(XLEN)))) mcause_exc <- replicateM(mkRWire());
 Vector#(NUM_THREADS, RWire#(TrapDescription)) mcause_out <- replicateM(mkRWire());
+
+for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
+rule fwd_mcause;
+    let mcause_loc = mcause[i].first();
+    mcause_out[i].wset(TrapDescription {cause: tpl_1(mcause_loc), pc: tpl_2(mcause_loc)});
+    mcause[i].deq();
+endrule
 
 function Maybe#(a) read_rwire(RWire#(a) r) = r.wget();
 
@@ -101,18 +115,13 @@ function Integer cause_for_int(Bit#(3) flags);
 
 endfunction
 
-for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) begin // per thread
+for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
     rule redirect_on_interrupt (int_in[i] != 0 && !int_in_process_r[i][1]);
         epoch[i] <= epoch[i] + 1;
         int_in_process_r[i][1] <= True;
         redirect_pc_w[i].enq(tuple2(tvec[i], tpl_2(next_pc_r[i][1])));
         mcause[i].enq(tuple2({1'b1, fromInteger(cause_for_int(int_in[i]))}, tpl_1(next_pc_r[i][1])));
     endrule
-
-    rule deq_redirs;
-        redirect_pc_w[i].deq();
-    endrule
-end
 
 `ifdef LOG_PIPELINE
     Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
@@ -258,8 +267,8 @@ endinterface
 
 interface Get csr_writes = toGet(csr_rq_out);
 
-method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
-    return redirect_pc_w[0].first();
+method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
+    return Vector::map(read_rwire, redirect_pc_w_out);
 endmethod
 
 method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;

@@ -124,7 +124,7 @@ module mkCSRFile(CsrFileIFC) provisos (
             end
     endmethod
 
-    method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
+    method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
         for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
             mhartid[i][valueOf(ISSUEWIDTH)] <= extend(in) + fromInteger(i);
     endmethod

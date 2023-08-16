@@ -24,7 +24,7 @@ module mkDave(DaveIFC);
         mkConnection(mem_arbiter.reads[i], cores[i].read_d);
         mkConnection(mem_arbiter.writes[i], cores[i].write_d);
         rule propagate_hartid;
-            cores[i].hart_id(fromInteger(i));
+            cores[i].hart_id(fromInteger(i*valueOf(NUM_THREADS)));
         endrule
     end
 

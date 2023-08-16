@@ -233,11 +233,12 @@ module mkFetch(FetchIFC) provisos(
     endrule
 
     // redirect PC 
-    Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirected <- mkWire();
-    rule redirect_write_pc;
-        pc[0][2] <= tpl_1(redirected);
-        ras[0].redirect(tpl_2(redirected));
-    endrule
+    Vector#(NUM_THREADS, Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirected <- replicateM(mkWire());
+    for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+        rule redirect_write_pc;
+            pc[i][2] <= tpl_1(redirected[i]);
+            ras[i].redirect(tpl_2(redirected[i]));
+        endrule
 
     // interface for direction prediction requests
     Vector#(IFUINST, Client#(Tuple2#(Bit#(XLEN), Bool), Prediction)) pred_ifc = ?;
@@ -264,10 +265,12 @@ module mkFetch(FetchIFC) provisos(
     endinterface
 
     // redirect the fetch stage
-    method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
-        redirected <= in;
-        dbg_print(Fetch, $format("Redirected: ", tpl_1(in)));
-        epoch[0] <= epoch[0]+1;
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+        for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) if (in[i] matches tagged Valid .v) begin
+            redirected[i] <= v;
+            dbg_print(Fetch, $format("Redirected: ", tpl_1(v)));
+            epoch[i] <= epoch[i]+1;
+        end
     endmethod
     
     // output instructions
