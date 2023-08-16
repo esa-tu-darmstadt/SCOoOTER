@@ -67,9 +67,9 @@ package TestbenchProgram;
         let dut <- mkDave();
 
         rule interrupt;
-            dut.ext_int(count_r%'h3000 == 0 && count_r%'h6000 != 0 && count_r%'h8000 != 0);
-            dut.timer_int(count_r%'h6000 == 0 && count_r%'h8000 != 0);
-            dut.sw_int(count_r%'h8000 == 0);
+            dut.ext_int(count_r%'h3000 == 0 && count_r%'h6000 != 0 && count_r%'h8000 != 0 ? unpack({1'b1, 0}): unpack(0));
+            dut.timer_int(count_r%'h6000 == 0 && count_r%'h8000 != 0 ? unpack({1'b1, 0}): unpack(0));
+            dut.sw_int(count_r%'h8000 == 0 ? unpack({1'b1, 0}): unpack(0));
         endrule
 
         // INSTRUCTION MEMORY

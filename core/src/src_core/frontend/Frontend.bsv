@@ -25,7 +25,7 @@ interface FrontendIFC;
     interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read_inst;
     method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
     interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
-    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 endinterface
 
 `ifdef SYNTH_SEPARATE_BLOCKS
@@ -59,7 +59,7 @@ module mkFrontend(FrontendIFC);
 
     // connect outside training stimuli
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             btb.train.put(in);
             dir_pred.train.put(in);
         endmethod

@@ -81,10 +81,10 @@ module mkCSRFile(CsrFileIFC) provisos (
 
     // write implementation - disambiguated by EHRs for multi-issue
     interface Put writes;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1)))) requests);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)) requests);
             action
                 for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                    if(tpl_1(requests)[i] matches tagged Valid .req &&& fromInteger(i) < tpl_2(requests)) begin
+                    if(requests[i] matches tagged Valid .req) begin
                         let ehr_maybe = get_csr_wr(req.addr, req.thread_id);
                         if (ehr_maybe matches tagged Valid .r) begin
                             r[i] <= req.data;
@@ -97,22 +97,36 @@ module mkCSRFile(CsrFileIFC) provisos (
     endinterface
 
     // output current trap vector and return address to commit
-    method Tuple2#(Bit#(XLEN), Bit#(XLEN)) trap_vectors() = tuple2(mtvec[0][0], mepc[0][0]);
+    method Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) trap_vectors(); 
+        Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) out;
+        for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+            out[i] = tuple2(mtvec[i][0], mepc[i][0]);
+        return out;
+    endmethod
     
     // output current interrupt bits to commit
-    method Bit#(3) ext_interrupt_mask() = {mie[0][0][3], mie[0][0][7], mie[0][0][11]};
+    method Vector#(NUM_THREADS, Bit#(3)) ext_interrupt_mask();
+        Vector#(NUM_THREADS, Bit#(3)) out;
+        for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+            out[i] = {mie[i][0][3], mie[i][0][7], mie[i][0][11]};
+        return out;
+    endmethod
 
     // input from commit if trap was taken - update related registers
-    method Action write_int_data(Bit#(XLEN) cause, Bit#(XLEN) pc);
-        mcause[0][valueOf(ISSUEWIDTH)] <= cause;
-        mepc[0][valueOf(ISSUEWIDTH)] <= pc;
-        // we do not provide MTVAL feature, therefore it is set to 0
-        // we still need this reg to avoid fault loops
-        mtval[0][valueOf(ISSUEWIDTH)] <= 0;
+    method Action write_int_data(Vector#(NUM_THREADS, Maybe#(TrapDescription)) in);
+        for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+            if (in[i] matches tagged Valid .v) begin
+                mcause[i][valueOf(ISSUEWIDTH)] <= v.cause;
+                mepc[i][valueOf(ISSUEWIDTH)] <= v.pc;
+                // we do not provide MTVAL feature, therefore it is set to 0
+                // we still need this reg to avoid fault loops
+                mtval[i][valueOf(ISSUEWIDTH)] <= 0;
+            end
     endmethod
 
     method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
-        mhartid[0][valueOf(ISSUEWIDTH)] <= extend(in);
+        for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+            mhartid[i][valueOf(ISSUEWIDTH)] <= extend(in) + fromInteger(i);
     endmethod
 
 

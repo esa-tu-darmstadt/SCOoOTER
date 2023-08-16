@@ -23,14 +23,14 @@ import BuildVector::*;
 // connections to external world
 interface BackendIFC;
     method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
-    interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
     method Bool csr_busy();
     interface Client#(MemWr, void) write;
     interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
-    method Action int_flags(Vector#(3, Bool) int_mask);
+    method Action int_flags(Vector#(NUM_THREADS, Vector#(3, Bool)) int_mask);
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
@@ -85,11 +85,11 @@ module mkBackend(BackendIFC) provisos (
     // interrupt handling
     rule trap_vec;
         let v = csrf.trap_vectors();
-        uncurry(commit.trap_vectors)(v);
+        commit.trap_vectors(v);
     endrule
     rule trap_cause;
         let v <- commit.write_int_data();
-        uncurry(csrf.write_int_data)(v);
+        csrf.write_int_data(v);
     endrule
 
     // pass instructions from ROB to commit
@@ -112,11 +112,16 @@ module mkBackend(BackendIFC) provisos (
     interface Server check_pending_memory = rob.check_pending_memory;
     interface Server forward = store_buf.forward;
     interface Server csr_read = csrf.read;
-    method Action int_flags(Vector#(3, Bool) int_mask);
-        Bit#(3) in_mask = {pack(int_mask[2]), pack(int_mask[1]), pack(int_mask[0])};
-        let in_mask_set = csrf.ext_interrupt_mask() & in_mask();
-        commit.ext_interrupt_mask(in_mask_set);
+
+    method Action int_flags(Vector#(NUM_THREADS, Vector#(3, Bool)) int_mask);
+        Vector#(NUM_THREADS, Bit#(3)) out;
+        for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) begin
+            Bit#(3) in_mask = {pack(int_mask[i][2]), pack(int_mask[i][1]), pack(int_mask[i][0])};
+            out[i] = csrf.ext_interrupt_mask()[i] & in_mask();
+        end
+        commit.ext_interrupt_mask(out);
     endmethod
+
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc() = commit.redirect_pc;
     method UInt#(TLog#(ROBDEPTH)) current_idx = rob.current_idx();
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();

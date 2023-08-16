@@ -47,7 +47,7 @@ module mkGskewed(PredIfc) provisos (
     function Bit#(BITS_PHT) hash3(Bit#(XLEN) addr, Bit#(BITS_BHR) hist) = hash_fwd( truncate(addr>>2) )^hash_bwd({hist,0})^{hist,0};
 
     // train signal inputs
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t))) trains <- mkPipelineFIFO();
+    FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) trains <- mkPipelineFIFO();
     // check if a train signal occurred due to misprediction
     function Bool check_if_misprediction(Maybe#(TrainPrediction) in) = (isValid(in) && in.Valid.miss);
 
@@ -56,11 +56,10 @@ module mkGskewed(PredIfc) provisos (
         let in = trains.first();
 
         // restore BHR in case of misprediction
-        let misp_idx = Vector::findIndex(check_if_misprediction, tpl_1(in));
-        if(misp_idx matches tagged Valid .v &&& extend(v) < tpl_2(in)) begin
-            let misp = tpl_1(in)[v].Valid;
+        let misp = Vector::find(check_if_misprediction, in);
+        if(misp matches tagged Valid .v) begin
             // update BHR with correct value
-            bhr[0] <= misp.branch ? truncate({misp.history, pack(misp.taken)}) : misp.history;
+            bhr[0] <= v.Valid.branch ? truncate({v.Valid.history, pack(v.Valid.taken)}) : v.Valid.history;
         end
     endrule
 
@@ -68,7 +67,7 @@ module mkGskewed(PredIfc) provisos (
     rule train_predictors;
         let in = trains.first();
         
-            if(tpl_1(in)[i] matches tagged Valid .train &&& fromInteger(i) < tpl_2(in) &&& train.branch) begin
+            if(in[i] matches tagged Valid .train &&& train.branch) begin
 
                 let idx1 = hash1(train.pc, train.history);
                 let idx2 = hash2(train.pc, train.history);
@@ -176,7 +175,7 @@ module mkGskewed(PredIfc) provisos (
 
     // input for training data
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t)) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             trains.enq(in);
         endmethod
     endinterface

@@ -361,6 +361,7 @@ typedef struct {
     Bit#(BITS_BHR) history; // history from BHR
     Bool miss; // was the predictor wrong?
     Bool branch; // was this a br or jal?
+    UInt#(TLog#(NUM_THREADS)) thread_id;
 } TrainPrediction deriving(Bits, FShow);
 
 // direction predictor response
@@ -368,5 +369,11 @@ typedef struct{
     Bool pred;
     Bit#(BITS_BHR) history;
 } Prediction deriving(Bits, FShow);
+
+// Trap description
+typedef struct{
+    Bit#(XLEN) cause;
+    Bit#(XLEN) pc;
+} TrapDescription deriving(Bits, FShow);
 
 endpackage

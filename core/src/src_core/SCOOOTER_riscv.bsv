@@ -97,15 +97,15 @@ module mkSCOOOTER_riscv(Top) provisos(
         uncurry(be.reserve)(req);
     endrule
 
-    Vector#(3, Wire#(Bool)) int_mask <- replicateM(mkBypassWire());
+    Vector#(NUM_THREADS, Vector#(3, Wire#(Bool))) int_mask <- replicateM(replicateM(mkBypassWire()));
     rule push_int;
-        be.int_flags(Vector::readVReg(int_mask));
+        be.int_flags(Vector::map(Vector::readVReg,int_mask));
     endrule
 
     // interrupts
-    method Action sw_int(Bool b) = int_mask[2]._write(b);
-    method Action timer_int(Bool b) = int_mask[1]._write(b);
-    method Action ext_int(Bool b) = int_mask[0]._write(b);
+    method Action sw_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][2]._write(b[i]); endmethod
+    method Action timer_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][1]._write(b[i]); endmethod
+    method Action ext_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][0]._write(b[i]); endmethod
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br = be.correct_pred_br;

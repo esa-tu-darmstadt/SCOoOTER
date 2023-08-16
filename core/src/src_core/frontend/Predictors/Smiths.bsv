@@ -42,20 +42,20 @@ module mkSmiths(PredIfc) provisos (
     // check if a train entry matches an index
     function Bool matches_idx(Bit#(BITS_PHT) test_idx, Maybe#(TrainPrediction) train) = (train matches tagged Valid .tv &&& pc_to_pht_idx(tv.pc) == test_idx ? True : False);
     // incoming training signals
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t))) trains <- mkPipelineFIFO();
+    FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) trains <- mkPipelineFIFO();
 
     // train the predictor
     for(Integer i = 0; i < valueOf(entries_t); i = i+1) begin
     rule elapse_train;
         let in = trains.first();
-                let found_idx = Vector::findIndex(matches_idx(fromInteger(i)), tpl_1(in));
-                if(found_idx matches tagged Valid .idx &&& extend(idx) < tpl_2(in)) begin
-                    if (tpl_1(in)[idx].Valid.taken) begin
-                        if (pht[i] != 'b11) pht[i] <= pht[i] + 1;
-                    end else begin
-                        if (pht[i] != 'b00) pht[i] <= pht[i] - 1;
-                    end
-                end
+        let found_idx = Vector::findIndex(matches_idx(fromInteger(i)), in);
+        if(found_idx matches tagged Valid .idx) begin
+            if (in[idx].Valid.taken) begin
+                if (pht[i] != 'b11) pht[i] <= pht[i] + 1;
+            end else begin
+                if (pht[i] != 'b00) pht[i] <= pht[i] - 1;
+            end
+        end
     endrule
     end
 

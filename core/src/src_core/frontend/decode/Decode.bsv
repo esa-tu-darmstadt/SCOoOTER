@@ -360,7 +360,8 @@ module mkDecode(DecodeIFC) provisos (
         method Action put(FetchResponse inst_from_decode) if (decoded_inst_m.enqReadyN(fromInteger(valueOf(IFUINST))));
             if (!clear_buffer) begin
                 let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
-                decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
+                // HACK
+                if(decoded_vec[0].thread_id == 0) decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
                 `ifdef LOG_PIPELINE
                     for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count)
                         $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);

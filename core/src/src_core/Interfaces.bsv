@@ -20,11 +20,11 @@ interface DaveIFC;
     interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_w;
 
     (* always_ready, always_enabled *)
-    method Action sw_int(Bool b);
+    method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
     (* always_ready, always_enabled *)
-    method Action timer_int(Bool b);
+    method Action timer_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
     (* always_ready, always_enabled *)
-    method Action ext_int(Bool b);
+    method Action ext_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
@@ -42,11 +42,11 @@ interface Top;
     interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read_i;
 
     (* always_ready, always_enabled *)
-    method Action sw_int(Bool b);
+    method Action sw_int(Vector#(NUM_THREADS, Bool) b);
     (* always_ready, always_enabled *)
-    method Action timer_int(Bool b);
+    method Action timer_int(Vector#(NUM_THREADS, Bool) b);
     (* always_ready, always_enabled *)
-    method Action ext_int(Bool b);
+    method Action ext_int(Vector#(NUM_THREADS, Bool) b);
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
 
@@ -175,13 +175,13 @@ interface CommitIFC;
     method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) redirect_pc();
-    interface GetS#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
-    interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) csr_writes;
-    interface Get#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface GetS#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
+    interface Get#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_writes;
+    interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 
-    method Action trap_vectors(Bit#(XLEN) tv, Bit#(XLEN) ret);
-    method ActionValue#(Tuple2#(Bit#(XLEN), Bit#(XLEN))) write_int_data();
-    method Action ext_interrupt_mask(Bit#(3) in);
+    method Action trap_vectors(Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) vecs);
+    method ActionValue#(Vector#(NUM_THREADS, Maybe#(TrapDescription))) write_int_data();
+    method Action ext_interrupt_mask(Vector#(NUM_THREADS, Bit#(3)) in);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
@@ -209,7 +209,7 @@ interface RegFileEvoIFC;
 endinterface
 
 interface StoreBufferIFC;
-    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) memory_writes;
+    interface Put#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
     method Bool deq_memory_writes();
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     interface Client#(MemWr, void) write;
@@ -217,21 +217,21 @@ interface StoreBufferIFC;
 endinterface
 
 interface BTBIfc;
-    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
     interface Server#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict;
 endinterface
 
 interface PredIfc;
-    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) train;
+    interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
     interface Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN),Bool), Prediction)) predict_direction;
 endinterface
 
 interface CsrFileIFC;
-    interface Put#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) writes;
+    interface Put#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) writes;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) read;
-    method Tuple2#(Bit#(XLEN), Bit#(XLEN)) trap_vectors();
-    method Action write_int_data(Bit#(XLEN) cause, Bit#(XLEN) pc);
-    method Bit#(3) ext_interrupt_mask();
+    method Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) trap_vectors();
+    method Action write_int_data(Vector#(NUM_THREADS, Maybe#(TrapDescription)) in);
+    method Vector#(NUM_THREADS, Bit#(3)) ext_interrupt_mask();
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(NUM_CPU)) in);
 endinterface

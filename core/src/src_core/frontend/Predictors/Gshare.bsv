@@ -38,7 +38,7 @@ module mkGshare(PredIfc) provisos (
     // test wether a prediction matches a certain index
     function Bool matches_idx(Bit#(BITS_PHT) test_idx, Maybe#(TrainPrediction) train) = (train matches tagged Valid .tv &&& pc_to_pht_idx(tv.pc, tv.history) == test_idx ? True : False);
     // train signal inputs
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t))) trains <- mkPipelineFIFO();
+    FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) trains <- mkPipelineFIFO();
     // check if a train signal occurred due to misprediction
     function Bool check_if_misprediction(Maybe#(TrainPrediction) in) = (isValid(in) && in.Valid.miss);
 
@@ -47,25 +47,24 @@ module mkGshare(PredIfc) provisos (
         let in = trains.first();
 
         // restore BHR in case of misprediction
-        let misp_idx = Vector::findIndex(check_if_misprediction, tpl_1(in));
-        if(misp_idx matches tagged Valid .v &&& extend(v) < tpl_2(in)) begin
-            let misp = tpl_1(in)[v].Valid;
+        let misp = Vector::find(check_if_misprediction, in);
+        if(misp matches tagged Valid .v) begin
             // update BHR with correct value
-            bhr[0] <= misp.branch ? truncate({misp.history, pack(misp.taken)}) : misp.history;
+            bhr[0] <= v.Valid.branch ? truncate({v.Valid.history, pack(v.Valid.taken)}) : v.Valid.history;
         end
     endrule
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
     rule train_predictors;
         let in = trains.first();
-            if(tpl_1(in)[i] matches tagged Valid .train &&& fromInteger(i) < tpl_2(in) &&& train.branch) begin
+            if(in[i] matches tagged Valid .train &&& train.branch) begin
                 let idx = pc_to_pht_idx(train.pc, train.history);
                 if (train.taken) begin
                     if (pht[idx][i] != 'b11) pht[idx][i] <= pht[idx][i] + 1;
-                    dbg_print(PRED, $format("Training+: %h %b", i, pht[idx][i], fshow(tpl_1(in)[i])));
+                    dbg_print(PRED, $format("Training+: %h %b", i, pht[idx][i], fshow(in[i])));
                 end else begin
                     if (pht[idx][i] != 'b00) pht[idx][i] <= pht[idx][i] - 1;
-                    dbg_print(PRED, $format("Training-: %h %b", i, pht[idx][i], fshow(tpl_1(in)[i])));
+                    dbg_print(PRED, $format("Training-: %h %b", i, pht[idx][i], fshow(in[i])));
                 end
             end
     endrule
@@ -147,7 +146,7 @@ module mkGshare(PredIfc) provisos (
 
     // input for training data
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t)) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             trains.enq(in);
         endmethod
     endinterface

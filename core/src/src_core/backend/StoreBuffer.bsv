@@ -131,29 +131,21 @@ module mkStoreBuffer(StoreBufferIFC);
     // FIFO to hold outgoing write requests until they are completed (important for fwd)
     FIFOF#(MemWr) pending_buf <- mkPipelineFIFOF();
     // wire for incoming data
-    Wire#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(MemWr)), UInt#(TLog#(TAdd#(ISSUEWIDTH,1))))) incoming_writes_w <- mkWire();
+    Wire#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) incoming_writes_w <- mkWire();
     PulseWire dequeue_incoming_w <- mkPulseWire();
 
     // flatten incloming buffer such that entries are consecutive
     rule flatten_incoming;
-        let writes_in = tpl_1(incoming_writes_w);
-        let cnt_in = tpl_2(incoming_writes_w);
-
-        // remove entries beyond count
-        Vector#(ISSUEWIDTH, Maybe#(MemWr)) cleaned_maybes;
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            cleaned_maybes[i] = fromInteger(i) < cnt_in ? writes_in[i] : tagged Invalid;
-        end
 
         // remove empty slots between requests
         Vector#(ISSUEWIDTH, Maybe#(MemWr)) flattened_maybes = ?;
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            flattened_maybes[i] = find_nth_valid(i, writes_in);
+            flattened_maybes[i] = find_nth_valid(i, incoming_writes_w);
         end
 
         // count number of elements
         Vector#(ISSUEWIDTH, MemWr) flattened = Vector::map(fromMaybe(?), flattened_maybes);
-        let count = Vector::countIf(isValid, cleaned_maybes);
+        let count = Vector::countIf(isValid, incoming_writes_w);
 
         // display for debugging
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
@@ -201,13 +193,8 @@ module mkStoreBuffer(StoreBufferIFC);
                         tagged Invalid);
 
                     // check incoming buffer
-                    // remove entries beyond count (could also be wired from flatten rule)
-                    Vector#(ISSUEWIDTH, Maybe#(MemWr)) cleaned_maybes;
-                    for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                        cleaned_maybes[i] = fromInteger(i) < tpl_2(incoming_writes_w) ? tpl_1(incoming_writes_w)[i] : tagged Invalid;
-                    end
                     // extract matching data
-                    Maybe#(Maybe#(MemWr)) incoming_resp = Vector::find(find_addr(addr), Vector::reverse(cleaned_maybes));
+                    Maybe#(Maybe#(MemWr)) incoming_resp = Vector::find(find_addr(addr), Vector::reverse(incoming_writes_w));
                     Maybe#(MaskedWord) incoming_res = isValid(incoming_resp) ? 
                         tagged Valid mw_from_memory_write(incoming_resp.Valid.Valid) : 
                         tagged Invalid;
@@ -216,8 +203,6 @@ module mkStoreBuffer(StoreBufferIFC);
                     // incoming buffer is highest priority
                     let result = (incoming_res matches tagged Valid .vv ? 
                                   incoming_res : (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res));
-
-                    //dbg_print(Mem, $format("calc fwd: ", fshow(addr), " ", fshow(pending_store_res), " ", fshow(incoming_resp), " ", fshow(internal_store_res), fshow(forward_pending), fshow(incoming_writes_w)));
 
                     return result;
                 endactionvalue
