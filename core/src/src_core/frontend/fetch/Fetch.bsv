@@ -68,12 +68,12 @@ module mkFetch(FetchIFC) provisos(
     FIFO#(Bit#(XLEN)) target_request_f <- mkBypassFIFO();
     FIFOF#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) target_resp_f <- mkSizedFIFOF(8);
 
-    Reg#(UInt#(thread_id_t)) current_thread <- mkReg(0);
+    Reg#(UInt#(thread_id_t)) current_thread_r <- mkReg(0);
     rule advance_thread;
         if (ispwr2(valueOf(NUM_THREADS)))
-            current_thread <= current_thread+1;
+            current_thread_r <= current_thread_r+1;
         else
-            current_thread <= (current_thread == fromInteger(valueOf(NUM_THREADS)-1) ? 0 : (current_thread+1));
+            current_thread_r <= (current_thread_r == fromInteger(valueOf(NUM_THREADS)-1) ? 0 : (current_thread_r+1));
     endrule
 
     //Requests data from memory
@@ -81,17 +81,17 @@ module mkFetch(FetchIFC) provisos(
     // Due to the PC FIFO
     rule requestRead;
         // addrs to AXI may be weird here
-        request_mem_f.enq(pc[current_thread][0]);
-        inflight_pcs.enq(pc[current_thread][0]);
-        inflight_epoch.enq(epoch[current_thread]);
-        target_request_f.enq(pc[current_thread][0]);
-        inflight_local_epoch.enq(local_epoch[current_thread]);
-        inflight_thread.enq(current_thread);
+        request_mem_f.enq(pc[current_thread_r][0]);
+        inflight_pcs.enq(pc[current_thread_r][0]);
+        inflight_epoch.enq(epoch[current_thread_r]);
+        target_request_f.enq(pc[current_thread_r][0]);
+        inflight_local_epoch.enq(local_epoch[current_thread_r]);
+        inflight_thread.enq(current_thread_r);
         if (ispwr2(valueOf(IFUINST)))
-            pc[current_thread][0] <= (pc[current_thread][0] & ~(fromInteger(valueOf(TMul#(4, IFUINST))-1))) + fromInteger(valueOf(TMul#(4, IFUINST)));
+            pc[current_thread_r][0] <= (pc[current_thread_r][0] & ~(fromInteger(valueOf(TMul#(4, IFUINST))-1))) + fromInteger(valueOf(TMul#(4, IFUINST)));
         else begin
-            let overlap = (pc[current_thread][0]>>2)%fromInteger(valueOf(IFUINST));
-            pc[current_thread][0] <= pc[current_thread][0]-(overlap<<2)+fromInteger(valueOf(TMul#(4, IFUINST)));
+            let overlap = (pc[current_thread_r][0]>>2)%fromInteger(valueOf(IFUINST));
+            pc[current_thread_r][0] <= pc[current_thread_r][0]-(overlap<<2)+fromInteger(valueOf(TMul#(4, IFUINST)));
         end
     endrule
 
@@ -290,6 +290,8 @@ module mkFetch(FetchIFC) provisos(
         interface Get request = toGet(request_mem_f);
         interface Put response = toPut(response_mem_f);
     endinterface
+
+    method UInt#(TLog#(NUM_THREADS)) current_thread() = current_thread_r._read();
 endmodule
 
 endpackage

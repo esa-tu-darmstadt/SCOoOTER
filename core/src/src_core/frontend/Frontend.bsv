@@ -57,6 +57,10 @@ module mkFrontend(FrontendIFC);
     end
     mkConnection(ifu.predict_target, btb.predict);
 
+    rule propagate_thread_id;
+        dir_pred.current_thread(ifu.current_thread());
+    endrule
+
     // connect outside training stimuli
     interface Put train;
         method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);

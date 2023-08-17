@@ -85,6 +85,9 @@ interface FetchIFC;
 
     interface Vector#(IFUINST, Client#(Tuple2#(Bit#(XLEN), Bool), Prediction)) predict_direction;
     interface Client#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict_target;
+
+    (* always_ready, always_enabled *)
+    method UInt#(TLog#(NUM_THREADS)) current_thread();
 endinterface
 
 interface DecodeIFC;
@@ -225,6 +228,8 @@ endinterface
 interface PredIfc;
     interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
     interface Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN),Bool), Prediction)) predict_direction;
+    (* always_ready, always_enabled *)
+    method Action current_thread(UInt#(TLog#(NUM_THREADS)) thread_id);
 endinterface
 
 interface CsrFileIFC;
