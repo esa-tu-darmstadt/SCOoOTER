@@ -25,17 +25,19 @@ module mkGskewed(PredIfc) provisos (
     Add#(0, TExp#(BITS_PHT), entries_t),
     // create types for instruction amount tracking
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
-    Log#(issuewidth_pad_t, issuewidth_log_t)
+    Log#(issuewidth_pad_t, issuewidth_log_t),
     // we want to XOR the history with the upper part of the PC
     // as the lower PC bits offer more entropy
+    Log#(NUM_THREADS, thread_id_t)
 );
     // internal storage
     Vector#(entries_t, Ehr#(ISSUEWIDTH, UInt#(2))) pht1 <- replicateM(mkEhr(0));
     Vector#(entries_t, Ehr#(ISSUEWIDTH, UInt#(2))) pht2 <- replicateM(mkEhr(0));
     Vector#(entries_t, Ehr#(ISSUEWIDTH, UInt#(2))) pht3 <- replicateM(mkEhr(0));
     // branch history register
-    Array#(Reg#(Bit#(BITS_BHR))) bhr <- mkCReg(2, 0);
+    Vector#(NUM_THREADS, Array#(Reg#(Bit#(BITS_BHR)))) bhr <- replicateM(mkCReg(2, 0));
 
+    Wire#(UInt#(thread_id_t)) thread_id_w <- mkBypassWire();
     
     // hashing function for GSKEWED combination functions
     function Bit#(BITS_PHT) hash_fwd(Bit#(BITS_PHT) val) = {val[0]^val[valueOf(BITS_PHT)-1], truncate(val >> 1)};
@@ -47,20 +49,21 @@ module mkGskewed(PredIfc) provisos (
     function Bit#(BITS_PHT) hash3(Bit#(XLEN) addr, Bit#(BITS_BHR) hist) = hash_fwd( truncate(addr>>2) )^hash_bwd({hist,0})^{hist,0};
 
     // train signal inputs
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t))) trains <- mkPipelineFIFO();
+    FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) trains <- mkPipelineFIFO();
     // check if a train signal occurred due to misprediction
-    function Bool check_if_misprediction(Maybe#(TrainPrediction) in) = (isValid(in) && in.Valid.miss);
+    function Bool check_if_misprediction(UInt#(thread_id_t) tid, Maybe#(TrainPrediction) in) = (isValid(in) && in.Valid.miss && in.Valid.thread_id == tid);
 
     // use training inputs to adjust the counter table
     rule restore_bhr;
         let in = trains.first();
 
-        // restore BHR in case of misprediction
-        let misp_idx = Vector::findIndex(check_if_misprediction, tpl_1(in));
-        if(misp_idx matches tagged Valid .v &&& extend(v) < tpl_2(in)) begin
-            let misp = tpl_1(in)[v].Valid;
-            // update BHR with correct value
-            bhr[0] <= misp.branch ? truncate({misp.history, pack(misp.taken)}) : misp.history;
+        for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) begin
+            // restore BHR in case of misprediction
+            let misp = Vector::find(check_if_misprediction(fromInteger(i)), in);
+            if(misp matches tagged Valid .v) begin
+                // update BHR with correct value
+                bhr[i][0] <= v.Valid.branch ? truncate({v.Valid.history, pack(v.Valid.taken)}) : v.Valid.history;
+            end
         end
     endrule
 
@@ -68,7 +71,7 @@ module mkGskewed(PredIfc) provisos (
     rule train_predictors;
         let in = trains.first();
         
-            if(tpl_1(in)[i] matches tagged Valid .train &&& fromInteger(i) < tpl_2(in) &&& train.branch) begin
+            if(in[i] matches tagged Valid .train &&& train.branch) begin
 
                 let idx1 = hash1(train.pc, train.history);
                 let idx2 = hash2(train.pc, train.history);
@@ -100,10 +103,10 @@ module mkGskewed(PredIfc) provisos (
     Ehr#(TAdd#(2, IFUINST), Bit#(BITS_BHR)) predicted_bhrs <- mkEhr(0);
     Ehr#(TAdd#(1, IFUINST), Bool) predicted_results <- mkEhr(False);
 
-    // update the global BHR with the post-prediction state
+        // update the global BHR with the post-prediction state
     rule canonicalize_bhr;
         if (predicted_count[valueOf(IFUINST)] > 0) begin
-            bhr[1] <= truncate({bhr[1] << predicted_count[valueOf(IFUINST)]-1, pack(predicted_results[valueOf(IFUINST)])});
+            bhr[thread_id_w][1] <= truncate({bhr[thread_id_w][1] << predicted_count[valueOf(IFUINST)]-1, pack(predicted_results[valueOf(IFUINST)])});
         end
         predicted_results[valueOf(IFUINST)] <= False;
         predicted_count[valueOf(IFUINST)] <= 0;
@@ -111,7 +114,7 @@ module mkGskewed(PredIfc) provisos (
 
     // write the current BHR to the predictively evolving BHR
     rule init_bhr_tracking;
-        predicted_bhrs[0] <= bhr[1];
+        predicted_bhrs[0] <= bhr[thread_id_w][1];
     endrule
 
     // prediction happens here
@@ -121,7 +124,7 @@ module mkGskewed(PredIfc) provisos (
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         rule generate_prediction;
             // all previous predictions must be untaken for this one to matter
-            Bit#(BITS_BHR) history = bhr[1] << predicted_count[i];
+            Bit#(BITS_BHR) history = bhr[thread_id_w][1] << predicted_count[i];
             // check PHT for prediction
             let idx1 = hash1(tpl_1(reqs[i]), history);
             let idx2 = hash2(tpl_1(reqs[i]), history);
@@ -176,10 +179,12 @@ module mkGskewed(PredIfc) provisos (
 
     // input for training data
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t)) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             trains.enq(in);
         endmethod
     endinterface
+
+    method Action current_thread(UInt#(thread_id_t) thread_id) = thread_id_w._write(thread_id);
 
 endmodule
 

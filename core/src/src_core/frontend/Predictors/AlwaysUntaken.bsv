@@ -40,7 +40,7 @@ module mkAlwaysUntaken(PredIfc) provisos (
     interface predict_direction = pred_ifc;
 
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t)) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
         endmethod
     endinterface
 

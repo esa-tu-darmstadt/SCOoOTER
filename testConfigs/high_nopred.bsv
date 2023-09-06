@@ -54,4 +54,5 @@ typedef 16 RASDEPTH;
 typedef 8 STORE_BUF_DEPTH;
 
 typedef 1 NUM_CPU;
+typedef 1 NUM_THREADS;
 endpackage

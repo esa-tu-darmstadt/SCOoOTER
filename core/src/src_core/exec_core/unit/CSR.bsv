@@ -60,11 +60,11 @@ RWire#(Result) out_valid <- mkRWire();
 Reg#(Bool) inflight_r <- mkReg(False);
 
 // outgoing csr write
-FIFO#(CsrWrite) out_wr <- mkFIFO();
-RWire#(CsrWrite) out_wr_valid <- mkRWire();
+FIFO#(CsrWriteResult) out_wr <- mkFIFO();
+RWire#(CsrWriteResult) out_wr_valid <- mkRWire();
 
 // req and resp wires for CSR reading
-FIFO#(Bit#(12)) csr_req <- mkBypassFIFO();
+FIFO#(CsrRead) csr_req <- mkBypassFIFO();
 FIFO#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassFIFO();
 // Buffer between stages
 FIFO#(Internal_struct) stage1 <- mkFIFO();
@@ -87,7 +87,7 @@ rule get_request if (!blocked && !inflight_r);
     if(inst.funct != RET &&
        inst.funct != ECALL &&
        inst.funct != EBREAK
-       ) csr_req.enq(csr_addr);
+       ) csr_req.enq(CsrRead {addr: csr_addr, thread_id: inst.thread_id});
 
     //operand
     let op = case (inst.funct)
@@ -136,7 +136,7 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
             new_pc : tagged Invalid,
             tag : internal.tag
         };
-        out_wr.enq(CsrWrite {addr: internal.addr, data: out});
+        out_wr.enq(CsrWriteResult {addr: internal.addr, data: out});
     end else // if no read was returned, the CSR does not exist
         res = Result {
             result : tagged Except INVALID_INST,
@@ -194,7 +194,7 @@ endinterface
 method Action block(Bool b) = blocked._write(b);
 
 // write req. handling
-method Maybe#(CsrWrite) write = out_wr_valid.wget();
+method Maybe#(CsrWriteResult) write = out_wr_valid.wget();
 
 endmodule
 

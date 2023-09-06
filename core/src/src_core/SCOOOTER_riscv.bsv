@@ -82,7 +82,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     endrule
 
     rule commit_to_fetch;
-        ec.flush();
+        ec.flush(Vector::map(isValid, be.redirect_pc()));
         fe.redirect(be.redirect_pc());
     endrule
 
@@ -97,15 +97,15 @@ module mkSCOOOTER_riscv(Top) provisos(
         uncurry(be.reserve)(req);
     endrule
 
-    Vector#(3, Wire#(Bool)) int_mask <- replicateM(mkBypassWire());
+    Vector#(NUM_THREADS, Vector#(3, Wire#(Bool))) int_mask <- replicateM(replicateM(mkBypassWire()));
     rule push_int;
-        be.int_flags(Vector::readVReg(int_mask));
+        be.int_flags(Vector::map(Vector::readVReg,int_mask));
     endrule
 
     // interrupts
-    method Action sw_int(Bool b) = int_mask[2]._write(b);
-    method Action timer_int(Bool b) = int_mask[1]._write(b);
-    method Action ext_int(Bool b) = int_mask[0]._write(b);
+    method Action sw_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][2]._write(b[i]); endmethod
+    method Action timer_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][1]._write(b[i]); endmethod
+    method Action ext_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][0]._write(b[i]); endmethod
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br = be.correct_pred_br;
@@ -118,7 +118,7 @@ module mkSCOOOTER_riscv(Top) provisos(
     interface read_d = ec.read;
     interface read_i = fe.read_inst;
 
-    method Action hart_id(Bit#(TLog#(NUM_CPU)) in) = be.hart_id(in);
+    method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = be.hart_id(in);
 
 
 

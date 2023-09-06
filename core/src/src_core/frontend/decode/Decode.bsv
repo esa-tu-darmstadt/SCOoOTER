@@ -71,7 +71,7 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),
@@ -94,7 +94,9 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EP
         predicted_pc : predicted_pc,
         history : history,
 
-        ras: ras
+        ras: ras,
+
+        thread_id: thread_id
     };
 
 endfunction
@@ -312,12 +314,14 @@ function Instruction decode(InstructionPredecode inst);
         predicted_pc : inst.predicted_pc,
         history : inst.history,
 
-        ras: inst.ras
+        ras: inst.ras,
+
+        thread_id: inst.thread_id
     };
 endfunction
 
 function InstructionPredecode predecode_instruction_struct(FetchedInstruction in);
-    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras);
+    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras, in.thread_id);
 endfunction
 
 `ifdef SYNTH_SEPARATE

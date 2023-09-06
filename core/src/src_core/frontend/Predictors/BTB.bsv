@@ -64,14 +64,13 @@ module mkBTB(BTBIfc) provisos (
     // train the predictor
     // if a branch was evaluated to be taken, store target
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t)) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             Vector#(entries_t, Bit#(XLEN)) local_targets = Vector::readVReg(targets);
             Vector#(entries_t, Bit#(bits_tag_t)) local_tags = Vector::readVReg(tags);
 
         
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
-                if (fromInteger(i) < tpl_2(in)) begin
-                    let train = tpl_1(in)[i];
+                    let train = in[i];
                     if (train matches tagged Valid .tv &&& tv.taken) begin
                         Bit#(inst_addr_t) aligned_addr = truncate(tv.pc>>2);
                         Bit#(BITS_BTB) idx = truncate(aligned_addr);
@@ -80,7 +79,6 @@ module mkBTB(BTBIfc) provisos (
                         local_targets[idx] = tv.target;
                         local_tags[idx] = tag;
                     end
-                end
             end
 
             Vector::writeVReg(targets, local_targets);

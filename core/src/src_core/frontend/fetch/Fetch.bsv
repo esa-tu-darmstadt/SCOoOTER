@@ -25,7 +25,8 @@ import TestFunctions::*;
     (* synthesize *)
 `endif
 module mkFetch(FetchIFC) provisos(
-        Mul#(XLEN, IFUINST, ifuwidth) //the width of the IFU axi must be as large as the size of a word times the issuewidth
+        Mul#(XLEN, IFUINST, ifuwidth), //the width of the IFU axi must be as large as the size of a word times the issuewidth
+        Log#(NUM_THREADS, thread_id_t)
 );
 
     `ifdef LOG_PIPELINE
@@ -43,20 +44,21 @@ module mkFetch(FetchIFC) provisos(
     FIFO#(Bit#(XLEN)) request_mem_f <- mkBypassFIFO();
     FIFO#(Bit#(ifuwidth)) response_mem_f <- mkBypassFIFO();
 
-    RASIfc ras <- mkRAS();
+    Vector#(NUM_THREADS, RASIfc) ras <- replicateM(mkRAS());
 
     //pc points to next instruction to load
     //pc is a CREG, port 2 is used for fetching the next instruction
     // port 1 is used to redirect the program counter
     //port 0 is used to advance the PC
-    Reg#(Bit#(XLEN)) pc[3] <- mkCReg(3, fromInteger(valueof(RESETVEC)));
-    Reg#(UInt#(EPOCH_WIDTH)) epoch <- mkReg(0);
-    FIFOF#(Bit#(XLEN)) inflight_pcs <- mkSizedFIFOF(5);
+    Vector#(NUM_THREADS, Array#(Reg#(Bit#(XLEN)))) pc <- replicateM(mkCReg(3, fromInteger(valueof(RESETVEC))));
+    Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch <- replicateM(mkReg(0));
+    FIFOF#(Bit#(XLEN)) inflight_pcs <- mkSizedFIFOF(8);
     FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkSizedFIFOF(8);
     FIFOF#(UInt#(3)) inflight_local_epoch <- mkSizedFIFOF(8);
-    Reg#(UInt#(3)) local_epoch <- mkReg(0);
+    FIFOF#(UInt#(thread_id_t)) inflight_thread <- mkSizedFIFOF(8);
+    Vector#(NUM_THREADS, Reg#(UInt#(3))) local_epoch <- replicateM(mkReg(0));
     //holds outbound Instruction and PC
-    FIFOF#(Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)))) fetched_inst <- mkPipelineFIFOF();
+    FIFOF#(Vector#(IFUINST, FetchedInstruction)) fetched_inst <- mkPipelineFIFOF();
     FIFOF#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFOF();
 
     // wires for direction prediction response and request
@@ -66,29 +68,39 @@ module mkFetch(FetchIFC) provisos(
     FIFO#(Bit#(XLEN)) target_request_f <- mkBypassFIFO();
     FIFOF#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) target_resp_f <- mkSizedFIFOF(8);
 
+    Reg#(UInt#(thread_id_t)) current_thread_r <- mkReg(0);
+    rule advance_thread;
+        if (ispwr2(valueOf(NUM_THREADS)))
+            current_thread_r <= current_thread_r+1;
+        else
+            current_thread_r <= (current_thread_r == fromInteger(valueOf(NUM_THREADS)-1) ? 0 : (current_thread_r+1));
+    endrule
+
     //Requests data from memory
     //Explicit condition: Fires if the previous read has been evaluated
     // Due to the PC FIFO
     rule requestRead;
         // addrs to AXI may be weird here
-        request_mem_f.enq(pc[0]);
-        inflight_pcs.enq(pc[0]);
-        inflight_epoch.enq(epoch);
-        target_request_f.enq(pc[0]);
-        inflight_local_epoch.enq(local_epoch);
+        request_mem_f.enq(pc[current_thread_r][0]);
+        inflight_pcs.enq(pc[current_thread_r][0]);
+        inflight_epoch.enq(epoch[current_thread_r]);
+        target_request_f.enq(pc[current_thread_r][0]);
+        inflight_local_epoch.enq(local_epoch[current_thread_r]);
+        inflight_thread.enq(current_thread_r);
         if (ispwr2(valueOf(IFUINST)))
-            pc[0] <= (pc[0] & ~(fromInteger(valueOf(TMul#(4, IFUINST))-1))) + fromInteger(valueOf(TMul#(4, IFUINST)));
+            pc[current_thread_r][0] <= (pc[current_thread_r][0] & ~(fromInteger(valueOf(TMul#(4, IFUINST))-1))) + fromInteger(valueOf(TMul#(4, IFUINST)));
         else begin
-            let overlap = (pc[0]>>2)%fromInteger(valueOf(IFUINST));
-            pc[0] <= pc[0]-(overlap<<2)+fromInteger(valueOf(TMul#(4, IFUINST)));
+            let overlap = (pc[current_thread_r][0]>>2)%fromInteger(valueOf(IFUINST));
+            pc[current_thread_r][0] <= pc[current_thread_r][0]-(overlap<<2)+fromInteger(valueOf(TMul#(4, IFUINST)));
         end
     endrule
 
     // if the epoch has changed, drop read data
-    rule dropReadResp (inflight_epoch.first() != epoch || inflight_local_epoch.first() != local_epoch);
+    rule dropReadResp (inflight_epoch.first() != epoch[inflight_thread.first()] || inflight_local_epoch.first() != local_epoch[inflight_thread.first()]);
         let r = response_mem_f.first(); response_mem_f.deq();
         inflight_pcs.deq();
         inflight_epoch.deq();
+        inflight_thread.deq();
         inflight_local_epoch.deq();
         dbg_print(Fetch, $format("drop read"));
         target_resp_f.deq();
@@ -105,9 +117,8 @@ module mkFetch(FetchIFC) provisos(
     Wire#(Bit#(ifuwidth)) pass_incoming_w <- mkWire();
 
     // predict directions
-    rule get_dir_pred if (inflight_epoch.first() == epoch &&
-                        inflight_local_epoch.first() == local_epoch &&
-                        inflight_epoch.notEmpty() &&
+    rule get_dir_pred if (inflight_epoch.first() == epoch[inflight_thread.first()] &&
+                        inflight_local_epoch.first() == local_epoch[inflight_thread.first()] &&
                         target_resp_f.notEmpty() &&
                         inflight_pcs.notEmpty() &&
                         fetched_inst.notFull() &&
@@ -152,16 +163,17 @@ module mkFetch(FetchIFC) provisos(
 
     // Evaluates fetched instructions if there is enough space in the instruction window
     // TODO: make enqueued value dynamic
-    rule getReadResp (inflight_epoch.first() == epoch && inflight_local_epoch.first() == local_epoch);        
+    rule getReadResp (inflight_epoch.first() == epoch[inflight_thread.first()] && inflight_local_epoch.first() == local_epoch[inflight_thread.first()]);        
         target_resp_f.deq();
         inflight_epoch.deq();
         inflight_local_epoch.deq();
+        inflight_thread.deq();
 
         let dir_predictions = target_resp_f.first();
 
         let acqpc = inflight_pcs.first(); inflight_pcs.deq();
 
-        Vector#(IFUINST, Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA))) instructions_v = newVector; // temporary inst storage
+        Vector#(IFUINST, FetchedInstruction) instructions_v = newVector; // temporary inst storage
         
         Bit#(XLEN) startpoint = (acqpc>>2)%fromInteger(valueOf(IFUINST))*32; // pos of first useful instruction
 
@@ -175,13 +187,20 @@ module mkFetch(FetchIFC) provisos(
                 // RAS prediction
                 if(valueOf(USE_RAS) == 1) begin
                     if(iword[6:0] == 7'b1100111 || iword[6:0] == 7'b1101111) begin
-                        let res <- ras.ports[i].push_pop(check_push(iword) ? tagged Valid (acqpc + (fromInteger(i+1)*4)) : tagged Invalid, check_pop(iword));
+                        let res <- ras[inflight_thread.first()].ports[i].push_pop(check_push(iword) ? tagged Valid (acqpc + (fromInteger(i+1)*4)) : tagged Invalid, check_pop(iword));
                         if (isValid(res)) cleaned_predictions[i] = res;
                         else cleaned_predictions[i] = target_resp_f.first()[i];
                     end
                 end
                 // pass instructions on
-                instructions_v[i] = tuple6(iword, acqpc + (fromInteger(i)*4), inflight_epoch.first(), cleaned_predictions[i], dir_resp_w_v[i].history, ras.ports[i].extra());
+                instructions_v[i] = FetchedInstruction { 
+                    instruction: iword,
+                    pc: acqpc + (fromInteger(i)*4),
+                    epoch: inflight_epoch.first(),
+                    next_pc: isValid(cleaned_predictions[i]) ? cleaned_predictions[i].Valid : (acqpc + (fromInteger(i)*4) + 4),
+                    history: dir_resp_w_v[i].history,
+                    ras: ras[inflight_thread.first()].ports[i].extra(),
+                    thread_id: inflight_thread.first()};
             end
         end
 
@@ -194,8 +213,8 @@ module mkFetch(FetchIFC) provisos(
         MIMO::LUInt#(IFUINST) amount;
         // set fetch amount and update PC
         if(count_pred matches tagged Valid .c &&& extend(c) < count_read) begin
-            pc[1] <= cleaned_predictions[c].Valid;
-            local_epoch <= local_epoch+1;
+            pc[inflight_thread.first()][1] <= cleaned_predictions[c].Valid;
+            local_epoch[inflight_thread.first()] <= local_epoch[inflight_thread.first()]+1;
             amount = extend(c)+1;
         end else begin
             amount = count_read;
@@ -214,15 +233,12 @@ module mkFetch(FetchIFC) provisos(
     endrule
 
     // redirect PC 
-    Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) redirected <- mkWire();
-    rule redirect_write_pc;
-        pc[2] <= tpl_1(redirected);
-        ras.redirect(tpl_2(redirected));
-    endrule
-
-    // build fetch response package
-    function FetchedInstruction build_fetch_resp(Tuple6#(Bit#(32), Bit#(32), UInt#(EPOCH_WIDTH), Maybe#(Bit#(XLEN)), Bit#(BITS_BHR), Bit#(RAS_EXTRA)) in)
-        = FetchedInstruction {instruction: tpl_1(in), pc: tpl_2(in), epoch: tpl_3(in), next_pc: fromMaybe(tpl_2(in)+4, tpl_4(in)), history: tpl_5(in), ras: tpl_6(in)};
+    Vector#(NUM_THREADS, Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirected <- replicateM(mkWire());
+    for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+        rule redirect_write_pc;
+            pc[i][2] <= tpl_1(redirected[i]);
+            ras[i].redirect(tpl_2(redirected[i]));
+        endrule
 
     // interface for direction prediction requests
     Vector#(IFUINST, Client#(Tuple2#(Bit#(XLEN), Bool), Prediction)) pred_ifc = ?;
@@ -249,17 +265,19 @@ module mkFetch(FetchIFC) provisos(
     endinterface
 
     // redirect the fetch stage
-    method Action redirect(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)) in);
-        redirected <= in;
-        dbg_print(Fetch, $format("Redirected: ", tpl_1(in)));
-        epoch <= epoch+1;
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+        for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) if (in[i] matches tagged Valid .v) begin
+            redirected[i] <= v;
+            dbg_print(Fetch, $format("Redirected: ", tpl_1(v)));
+            epoch[i] <= epoch[i]+1;
+        end
     endmethod
     
     // output instructions
     interface GetS instructions;
         method FetchResponse first();
             let inst_vector = fetched_inst.first();
-            let fetched_inst = Vector::map(build_fetch_resp, inst_vector);
+            let fetched_inst = inst_vector;
             return FetchResponse {count: fetched_amount.first(), instructions: fetched_inst};
         endmethod
         method Action deq();
@@ -272,6 +290,8 @@ module mkFetch(FetchIFC) provisos(
         interface Get request = toGet(request_mem_f);
         interface Put response = toPut(response_mem_f);
     endinterface
+
+    method UInt#(TLog#(NUM_THREADS)) current_thread() = current_thread_r._read();
 endmodule
 
 endpackage

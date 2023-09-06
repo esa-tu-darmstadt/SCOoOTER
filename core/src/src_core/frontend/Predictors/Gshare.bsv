@@ -24,48 +24,52 @@ module mkGshare(PredIfc) provisos (
     Add#(0, TExp#(BITS_PHT), entries_t),
     // create types for instruction amount tracking
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
-    Log#(issuewidth_pad_t, issuewidth_log_t)
+    Log#(issuewidth_pad_t, issuewidth_log_t),
     // we want to XOR the history with the upper part of the PC
     // as the lower PC bits offer more entropy
+    Log#(NUM_THREADS, thread_id_t)
 );
     // internal storage
     Vector#(entries_t, Ehr#(ISSUEWIDTH, UInt#(2))) pht <- replicateM(mkEhr(0));
     // branch history register
-    Array#(Reg#(Bit#(BITS_BHR))) bhr <- mkCReg(2, 0);
+    Vector#(NUM_THREADS, Array#(Reg#(Bit#(BITS_BHR)))) bhr <- replicateM(mkCReg(2, 0));
+
+    Wire#(UInt#(thread_id_t)) thread_id_w <- mkBypassWire();
 
     // function to combine PC and history into the PHT index
     function Bit#(BITS_PHT) pc_to_pht_idx(Bit#(XLEN) pc, Bit#(BITS_BHR) history) = truncate(pc>>2)^{history, 0};
     // test wether a prediction matches a certain index
     function Bool matches_idx(Bit#(BITS_PHT) test_idx, Maybe#(TrainPrediction) train) = (train matches tagged Valid .tv &&& pc_to_pht_idx(tv.pc, tv.history) == test_idx ? True : False);
     // train signal inputs
-    FIFO#(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t))) trains <- mkPipelineFIFO();
+    FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) trains <- mkPipelineFIFO();
     // check if a train signal occurred due to misprediction
-    function Bool check_if_misprediction(Maybe#(TrainPrediction) in) = (isValid(in) && in.Valid.miss);
+    function Bool check_if_misprediction(UInt#(thread_id_t) tid, Maybe#(TrainPrediction) in) = (isValid(in) && in.Valid.miss && in.Valid.thread_id == tid);
 
     // use training inputs to adjust the counter table
     rule restore_bhr;
         let in = trains.first();
 
-        // restore BHR in case of misprediction
-        let misp_idx = Vector::findIndex(check_if_misprediction, tpl_1(in));
-        if(misp_idx matches tagged Valid .v &&& extend(v) < tpl_2(in)) begin
-            let misp = tpl_1(in)[v].Valid;
-            // update BHR with correct value
-            bhr[0] <= misp.branch ? truncate({misp.history, pack(misp.taken)}) : misp.history;
+        for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) begin
+            // restore BHR in case of misprediction
+            let misp = Vector::find(check_if_misprediction(fromInteger(i)), in);
+            if(misp matches tagged Valid .v) begin
+                // update BHR with correct value
+                bhr[i][0] <= v.Valid.branch ? truncate({v.Valid.history, pack(v.Valid.taken)}) : v.Valid.history;
+            end
         end
     endrule
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
     rule train_predictors;
         let in = trains.first();
-            if(tpl_1(in)[i] matches tagged Valid .train &&& fromInteger(i) < tpl_2(in) &&& train.branch) begin
+            if(in[i] matches tagged Valid .train &&& train.branch) begin
                 let idx = pc_to_pht_idx(train.pc, train.history);
                 if (train.taken) begin
                     if (pht[idx][i] != 'b11) pht[idx][i] <= pht[idx][i] + 1;
-                    dbg_print(PRED, $format("Training+: %h %b", i, pht[idx][i], fshow(tpl_1(in)[i])));
+                    dbg_print(PRED, $format("Training+: %h %b", i, pht[idx][i], fshow(in[i])));
                 end else begin
                     if (pht[idx][i] != 'b00) pht[idx][i] <= pht[idx][i] - 1;
-                    dbg_print(PRED, $format("Training-: %h %b", i, pht[idx][i], fshow(tpl_1(in)[i])));
+                    dbg_print(PRED, $format("Training-: %h %b", i, pht[idx][i], fshow(in[i])));
                 end
             end
     endrule
@@ -83,7 +87,7 @@ module mkGshare(PredIfc) provisos (
     // update the global BHR with the post-prediction state
     rule canonicalize_bhr;
         if (predicted_count[valueOf(IFUINST)] > 0) begin
-            bhr[1] <= truncate({bhr[1] << predicted_count[valueOf(IFUINST)]-1, pack(predicted_results[valueOf(IFUINST)])});
+            bhr[thread_id_w][1] <= truncate({bhr[thread_id_w][1] << predicted_count[valueOf(IFUINST)]-1, pack(predicted_results[valueOf(IFUINST)])});
         end
         predicted_results[valueOf(IFUINST)] <= False;
         predicted_count[valueOf(IFUINST)] <= 0;
@@ -91,7 +95,7 @@ module mkGshare(PredIfc) provisos (
 
     // write the current BHR to the predictively evolving BHR
     rule init_bhr_tracking;
-        predicted_bhrs[0] <= bhr[1];
+        predicted_bhrs[0] <= bhr[thread_id_w][1];
     endrule
 
     // prediction happens here
@@ -101,7 +105,7 @@ module mkGshare(PredIfc) provisos (
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         rule generate_prediction;
             // all previous predictions must be untaken for this one to matter
-            Bit#(BITS_BHR) history = bhr[1] << predicted_count[i];
+            Bit#(BITS_BHR) history = bhr[thread_id_w][1] << predicted_count[i];
             // check PHT for prediction
             Bool taken = (pht[pc_to_pht_idx(tpl_1(reqs[i]), history)][0] >= 2'b10) && tpl_2(reqs[i]);
             predicted_bhrs[i+1] <= history;
@@ -147,10 +151,12 @@ module mkGshare(PredIfc) provisos (
 
     // input for training data
     interface Put train;
-        method Action put(Tuple2#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)), UInt#(issuewidth_log_t)) in);
+        method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             trains.enq(in);
         endmethod
     endinterface
+
+    method Action current_thread(UInt#(thread_id_t) thread_id) = thread_id_w._write(thread_id);
 
 endmodule
 

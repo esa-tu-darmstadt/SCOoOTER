@@ -39,10 +39,10 @@ interface ExecCoreIFC;
 
     // mispredict signal
     (* always_ready *)
-    method Action flush();
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
     
     // read architectural registers
-    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RADDR), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_committed;
+    interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_committed;
 
     // memory handling
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
@@ -51,12 +51,12 @@ interface ExecCoreIFC;
     method Action store_queue_empty(Bool b);
 
     // csr handling
-    interface Client#(Bit#(12), Maybe#(Bit#(XLEN))) csr_read;
+    interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
     (* always_ready, always_enabled *)
     method Action csr_busy(Bool b);
 
     // result bus output
-    method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus;
+    method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus;
 endinterface
 
 `ifdef SYNTH_SEPARATE_BLOCKS
@@ -83,7 +83,7 @@ module mkExecCore(ExecCoreIFC);
     let result_bus_vec = Vector::map(get_result, fu_vec);
     // generate the result bus with memory and CSR writes
     Maybe#(MemWr) mem_wr = isValid(mem.write()) ? tagged Valid mem.write.Valid : tagged Invalid;
-    Maybe#(CsrWrite) csr_wr = isValid(csr.write()) ? tagged Valid csr.write.Valid : tagged Invalid;
+    Maybe#(CsrWriteResult) csr_wr = isValid(csr.write()) ? tagged Valid csr.write.Valid : tagged Invalid;
     let full_result_bus_vec = tuple3(result_bus_vec, mem_wr, csr_wr);
 
     // generate the ReservationStations
@@ -146,7 +146,7 @@ module mkExecCore(ExecCoreIFC);
     // combine speculative register file info with arch regs
     interface Client read_committed;
         interface Get request;
-            method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RADDR)) get();
+            method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RegRead)) get();
                 actionvalue
                     let req <- issue.read_registers.request.get();
                     regfile_evo.read_registers.request.put(req);
@@ -173,14 +173,14 @@ module mkExecCore(ExecCoreIFC);
 
     interface Client check_rob = mem.check_rob;
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
-    method Action flush();
-        mem.flush();
-        regfile_evo.flush();
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
+        mem.flush(in);
+        regfile_evo.flush(in);
     endmethod
     method Action csr_busy(Bool b) = csr.block(b);
     interface Client check_store_buffer = mem.check_store_buffer();
     interface Client read = mem.request();
-    method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWrite)) res_bus = full_result_bus_vec;
+    method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus = full_result_bus_vec;
     interface Client csr_read = csr.csr_read;
     method Action store_queue_empty(Bool b) = mem.store_queue_empty(b);
 endmodule

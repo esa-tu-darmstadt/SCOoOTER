@@ -2,21 +2,21 @@
 #include "../print.h"
 #include "../csr.h"
 
-volatile uint_xlen_t mutex = 0;
-uint_xlen_t cnt = 0;
-
 volatile int arr[] = {65, 47, 362, 455, 868, 22, 5, 6, 33, 1, 9, 5, 77, 14, 4, 978};
 volatile int amount = 16;
 
+volatile int cnt = 0;
+volatile int hartid_max = 0;
+volatile int arrived = 0;
+
 int main() {
-	volatile int cnt = 0;
-	volatile int hartid_max = 0;
-	volatile int arrived = 0;
 	
 	__asm__ volatile ("amomax.w.aq    x0, %0, (%1)"  
 		                          : /* output: register %0 */
 		                          : "r" (csr_read_mhartid())  /* input : register */
 		                          , "r" ( &hartid_max ));
+	
+	for(register int i = 0; i < 100; i++);
 	
 	register int i = 0;
 	while((i*(hartid_max+1)+csr_read_mhartid()) < amount) {
