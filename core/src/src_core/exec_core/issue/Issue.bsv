@@ -219,6 +219,12 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         ras: inst.ras,
         ret: (inst.funct == RET),
         thread_id: inst.thread_id
+
+        //RVFI
+        `ifdef RVFI
+            , iword: inst.iword,
+              opc: inst.opc
+        `endif
     };
 endfunction
 

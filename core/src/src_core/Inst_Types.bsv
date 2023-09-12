@@ -138,6 +138,10 @@ typedef struct {
     Bit#(RAS_EXTRA) ras;
 
     UInt#(TLog#(NUM_THREADS)) thread_id;
+
+    `ifdef RVFI
+        Bit#(XLEN) iword;
+    `endif
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
 // operand of an instruction
@@ -197,6 +201,10 @@ typedef struct {
 
     // multithreading
     UInt#(TLog#(NUM_THREADS)) thread_id;
+
+    `ifdef RVFI
+        Bit#(XLEN) iword;
+    `endif
 } Instruction deriving(Bits, Eq, FShow);
 
 instance DefaultValue#(Instruction);
@@ -226,6 +234,10 @@ typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
     Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
     ResultOrExcept result;
+
+    `ifdef RVFI
+        UInt#(XLEN) mem_addr;
+    `endif
 } Result deriving(Bits, FShow);
 
 // Entire result struct also containing CSR and mem operations
@@ -241,6 +253,10 @@ typedef struct {
     Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
     ResultOrExcept result;
     ResultWrite write;
+
+    `ifdef RVFI
+        UInt#(XLEN) mem_addr;
+    `endif
 } FullResult deriving(Bits, FShow);
 
 // reservationStation result bus
@@ -277,6 +293,12 @@ typedef struct {
     Bit#(RAS_EXTRA) ras;
     Bool ret; // instruction is branch return
     UInt#(TLog#(NUM_THREADS)) thread_id;
+
+    `ifdef RVFI
+        Bit#(XLEN) iword;
+        UInt#(XLEN) mem_addr;
+        OpCode opc;
+    `endif
 } RobEntry deriving(Bits, FShow);
 
 // write to a register
@@ -365,15 +387,83 @@ typedef struct {
 } TrainPrediction deriving(Bits, FShow);
 
 // direction predictor response
-typedef struct{
+typedef struct {
     Bool pred;
     Bit#(BITS_BHR) history;
 } Prediction deriving(Bits, FShow);
 
 // Trap description
-typedef struct{
+typedef struct {
     Bit#(XLEN) cause;
     Bit#(XLEN) pc;
 } TrapDescription deriving(Bits, FShow);
+
+// core-v-verif defines
+typedef struct {
+    Bit#(XLEN) rmask;
+    Bit#(XLEN) wmask;
+    Bit#(XLEN) rdata;
+    Bit#(XLEN) wdata;
+} RVFICSR deriving(Bits, FShow);
+
+typedef struct {
+    Bool valid; // valid?
+    UInt#(XLEN) order; // monotonically increasing
+    Bit#(XLEN) insn; // instruction word
+    Bool intr; // first trap flag?
+    Bool trap; // causes exception
+    Bool dbg; // first debug handler inst
+    Bit#(2) mode; //execution mode - always M for SCOoOTER
+    Bit#(XLEN) pc_rdata; // current PC
+    Bit#(XLEN) pc_wdata; // next PC, not taking traps into account
+    Bit#(5) rd1_addr;
+    Bit#(XLEN) rd1_wdata;
+
+    // not used according to rvfi-rv-dv-docu
+    UInt#(XLEN) mem_addr;
+
+
+    //NOT IMPLEMENTED
+
+    Bool halt; // last inst before halt
+    Bool ixl; // XL priv mode - dunno if Bool
+    Bit#(5) rs1_addr;
+    Bit#(5) rs2_addr;
+    Bit#(XLEN) rs1_rdata;
+    Bit#(XLEN) rs2_rdata;
+    
+    Bit#(XLEN) mem_rmask;
+    Bit#(XLEN) mem_wmask;
+    Bit#(XLEN) mem_rdata;
+    Bit#(XLEN) mem_wdata;
+
+    //CSRs
+    RVFICSR mcause;
+    RVFICSR mie;
+    RVFICSR mtvec;
+    RVFICSR mepc;
+    RVFICSR mstatus;
+    RVFICSR mscratch;
+    RVFICSR mtval;
+    RVFICSR mhartid;
+
+    //own signals
+    UInt#(TLog#(NUM_THREADS)) thread_id;
+} RVFIBus deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(XLEN) mcause;
+    Bit#(XLEN) mie;
+    Bit#(XLEN) mtvec;
+    Bit#(XLEN) mepc;
+    Bit#(XLEN) mstatus;
+    Bit#(XLEN) mscratch;
+    Bit#(XLEN) mtval;
+    Bit#(XLEN) mhartid;
+} CSRBundle deriving(Bits);
+
+typedef struct {
+
+} Inst deriving(Bits);
 
 endpackage

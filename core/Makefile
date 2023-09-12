@@ -29,6 +29,7 @@ BRANCH?=0
 # 2: build all modules separately
 SYNTH?=0
 LOG?=0
+RVFI?=0
 
 # Add subdirectories
 EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
@@ -55,7 +56,10 @@ ifeq ($(LOG),1)
 	EXTRA_FLAGS+=-D LOG_PIPELINE
 endif
 ifeq ($(BRANCH),1)
-EXTRA_FLAGS+=-D EVA_BR
+	EXTRA_FLAGS+=-D EVA_BR
+endif
+ifeq ($(RVFI),1)
+	EXTRA_FLAGS+=-D RVFI
 endif
 
 ###

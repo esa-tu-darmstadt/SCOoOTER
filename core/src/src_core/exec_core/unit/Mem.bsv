@@ -340,6 +340,11 @@ rule collect_result_read_bypass if(!stage3.first().amo &&& stage3.first().result
         result.result = tagged Except MISALIGNED_LOAD;
     end
 
+    //RVFI
+    `ifdef RVFI
+        result.mem_addr = internal_struct.addr;
+    `endif
+
     dbg_print(Mem, $format("read (byp):  ", fshow(result)));
     out.enq(result);
 endrule
@@ -364,6 +369,11 @@ rule collect_result_read if(stage3.first().result matches tagged None &&& !stage
 
     dbg_print(Mem, $format("read (axi):  ", fshow(result)));
 
+    //RVFI
+    `ifdef RVFI
+        result.mem_addr = internal_struct.addr;
+    `endif
+
     out.enq(result);
 endrule
 
@@ -371,7 +381,16 @@ rule collect_result_mispredict if(stage3.first().mispredicted);
     stage3.deq();
     let internal_struct = stage3.first();
     if(internal_struct.aq) aq_r <= False;
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag});
+
+    //RVFI
+    out.enq(Result {
+        result : tagged Result 0,
+        new_pc : tagged Invalid,
+        tag : internal_struct.tag
+        `ifdef RVFI 
+            , mem_addr: internal_struct.addr
+        `endif
+    });
 endrule
 
 // generate output (and define in which urgency results shall be propagated)

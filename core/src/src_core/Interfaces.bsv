@@ -193,6 +193,11 @@ interface CommitIFC;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
     `endif
+
+    `ifdef RVFI
+        (* always_ready,always_enabled *)
+        method Vector#(ISSUEWIDTH, RVFIBus) rvfi_out;
+    `endif
 endinterface
 
 interface RegFileIFC;

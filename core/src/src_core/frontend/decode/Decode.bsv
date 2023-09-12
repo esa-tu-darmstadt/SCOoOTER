@@ -96,7 +96,12 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EP
 
         ras: ras,
 
-        thread_id: thread_id
+        thread_id : thread_id
+
+        `ifdef RVFI
+            // RVFI
+            , iword : inst
+        `endif
     };
 
 endfunction
@@ -317,6 +322,11 @@ function Instruction decode(InstructionPredecode inst);
         ras: inst.ras,
 
         thread_id: inst.thread_id
+
+        // RVFI
+        `ifdef RVFI
+            , iword : inst.iword
+        `endif
     };
 endfunction
 
