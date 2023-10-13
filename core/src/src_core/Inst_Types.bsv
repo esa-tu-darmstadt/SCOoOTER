@@ -396,6 +396,7 @@ typedef struct {
 typedef struct {
     Bit#(XLEN) cause;
     Bit#(XLEN) pc;
+    Bit#(XLEN) val;
 } TrapDescription deriving(Bits, FShow);
 
 // core-v-verif defines

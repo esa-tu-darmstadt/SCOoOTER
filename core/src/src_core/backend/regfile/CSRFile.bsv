@@ -25,21 +25,24 @@ module mkCSRFile(CsrFileIFC) provisos (
     // one port per issue slot and one extra port for updates from hw
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mcause <- replicateM(mkEhr(0));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mie <- replicateM(mkEhr(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) misa <- replicateM(mkEhr( { 2'h1, 'b1000100000001 } )); //upper two bits: 32 Bit XLEN, lower bits: ISA ext in alphabetic
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtvec <- replicateM(mkEhr(0));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mepc <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mstatus <- replicateM(mkEhr(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mstatus <- replicateM(mkEhr( (3<<11)|(1<<7) ));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mscratch <- replicateM(mkEhr(0));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtval <- replicateM(mkEhr(0));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mhartid <- replicateM(mkEhr(?));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) dummy_csr <- replicateM(mkEhr(0));
 
     // buffer for read responses
-    FIFO#(Maybe#(Bit#(XLEN))) read_resp <- mkPipelineFIFO();
+    Reg#(Maybe#(Bit#(XLEN))) read_resp <- mkRegU();
 
     // select correct CSR via index for rd and wr
     // return Invalid if not available
     function Maybe#(Ehr#(issuewidth_pad_t, Bit#(XLEN))) get_csr_rd(Bit#(12) addr, UInt#(thread_idx_t) thread_id);
         return case (addr)
             'h342: tagged Valid mcause[thread_id];
+            'h301: tagged Valid misa[thread_id];
             'h304: tagged Valid mie[thread_id];
             'h305: tagged Valid mtvec[thread_id];
             'h341: tagged Valid mepc[thread_id];
@@ -47,6 +50,7 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h300: tagged Valid mstatus[thread_id];
             'h343: tagged Valid mtval[thread_id];
             'hf14: tagged Valid mhartid[thread_id];
+            'h3b0, 'h3ae: tagged Valid dummy_csr[thread_id];
             default: tagged Invalid;
         endcase;
     endfunction
@@ -58,6 +62,8 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h300: tagged Valid mstatus[thread_id];
             'h340: tagged Valid mscratch[thread_id];
             'h343: tagged Valid mtval[thread_id];
+            'h342: tagged Valid mcause[thread_id];
+            'h3b0, 'h3ae: tagged Valid dummy_csr[thread_id];
             default: tagged Invalid;
         endcase;
     endfunction
@@ -70,13 +76,17 @@ module mkCSRFile(CsrFileIFC) provisos (
                 // trap if it does not
                 let ehr_maybe = get_csr_rd(req.addr, req.thread_id);
                 if (ehr_maybe matches tagged Valid .r) begin
-                    read_resp.enq(tagged Valid r[valueOf(ISSUEWIDTH)]);
+                    read_resp <= (tagged Valid r[valueOf(ISSUEWIDTH)]);
                     dbg_print(CSRFile, $format("reading %x from %x", r[valueOf(ISSUEWIDTH)], req.addr));
                 end else
-                    read_resp.enq(tagged Invalid);
+                    read_resp <= (tagged Invalid);
             endmethod
         endinterface
-        interface Get response = toGet(read_resp);
+        interface Get response;
+            method ActionValue#(Maybe#(Bit#(XLEN))) get();
+                return read_resp;
+            endmethod
+        endinterface
     endinterface
 
     // write implementation - disambiguated by EHRs for multi-issue
@@ -87,7 +97,12 @@ module mkCSRFile(CsrFileIFC) provisos (
                     if(requests[i] matches tagged Valid .req) begin
                         let ehr_maybe = get_csr_wr(req.addr, req.thread_id);
                         if (ehr_maybe matches tagged Valid .r) begin
-                            r[i] <= req.data;
+                            Bit#(XLEN) wr_data = req.data;
+                            if (req.addr == 'h300) begin
+                                let current_mstatus = r[i];
+                                wr_data = {1'b0, req.data[30:23], 0, 2'b11, req.data[10:9], 1'b0, /*current_mstatus[7]*/ 1'b1, req.data[6], 2'b0, req.data[3:2], 2'b00};
+                            end
+                            r[i] <= wr_data;
                             dbg_print(CSRFile, $format("writing %x to %x", req.data, req.addr));
                         end
                     end
@@ -120,7 +135,14 @@ module mkCSRFile(CsrFileIFC) provisos (
                 mepc[i][valueOf(ISSUEWIDTH)] <= v.pc;
                 // we do not provide MTVAL feature, therefore it is set to 0
                 // we still need this reg to avoid fault loops
-                mtval[i][valueOf(ISSUEWIDTH)] <= 0;
+                if (unpack(truncate(v.cause)) == MISALIGNED_LOAD || unpack(truncate(v.cause)) == AMO_ST_MISALIGNED) mtval[i][valueOf(ISSUEWIDTH)] <= v.val;
+
+                let mstatus_loc = mstatus[i][valueOf(ISSUEWIDTH)];
+                // save old interrupt ena
+                mstatus_loc[7] = mstatus_loc[3];
+                mstatus_loc[3] = 0;
+                mstatus_loc[12:11] = 3;
+                mstatus[i][valueOf(ISSUEWIDTH)] <= mstatus_loc;
             end
     endmethod
 

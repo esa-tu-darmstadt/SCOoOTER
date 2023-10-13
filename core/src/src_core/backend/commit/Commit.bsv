@@ -60,14 +60,14 @@ rule fwd_redir;
 endrule
 
 Vector#(NUM_THREADS, Wire#(Bit#(XLEN))) tvec <- replicateM(mkBypassWire());
-Vector#(NUM_THREADS, FIFO#(Tuple2#(Bit#(XLEN), Bit#(XLEN)))) mcause <- replicateM(mkPipelineFIFO());
-Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(XLEN), Bit#(XLEN)))) mcause_exc <- replicateM(mkRWire());
+Vector#(NUM_THREADS, FIFO#(Tuple3#(Bit#(XLEN), Bit#(XLEN), Bit#(XLEN)))) mcause <- replicateM(mkPipelineFIFO());
+Vector#(NUM_THREADS, RWire#(Tuple3#(Bit#(XLEN), Bit#(XLEN), Bit#(XLEN)))) mcause_exc <- replicateM(mkRWire());
 Vector#(NUM_THREADS, RWire#(TrapDescription)) mcause_out <- replicateM(mkRWire());
 
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
 rule fwd_mcause;
     let mcause_loc = mcause[i].first();
-    mcause_out[i].wset(TrapDescription {cause: tpl_1(mcause_loc), pc: tpl_2(mcause_loc)});
+    mcause_out[i].wset(TrapDescription {cause: tpl_1(mcause_loc), pc: tpl_2(mcause_loc), val: tpl_3(mcause_loc)});
     mcause[i].deq();
 endrule
 
@@ -118,7 +118,7 @@ endfunction
 
 //RVFI:
 `ifdef RVFI
-    Vector#(ISSUEWIDTH, Wire#(RVFIBus)) rvfi <- replicateM(mkDWire(RVFIBus {valid : False}));
+    Vector#(ISSUEWIDTH, Wire#(RVFIBus)) rvfi <- replicateM(mkDWire(unpack(0)));
     Vector#(NUM_THREADS, Ehr#(ISSUEWIDTH, UInt#(XLEN))) count_insts <- replicateM(mkEhr(0));
     Ehr#(TAdd#(ISSUEWIDTH, 1), Bool) first_trap <- mkEhr(False);
 `endif
@@ -128,7 +128,7 @@ for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
         epoch[i] <= epoch[i] + 1;
         int_in_process_r[i][1] <= True;
         redirect_pc_w[i].enq(tuple2(tvec[i], tpl_2(next_pc_r[i][1])));
-        mcause[i].enq(tuple2({1'b1, fromInteger(cause_for_int(int_in[i]))}, tpl_1(next_pc_r[i][1])));
+        mcause[i].enq(tuple3({1'b1, fromInteger(cause_for_int(int_in[i]))}, tpl_1(next_pc_r[i][1]), 0));
         `ifdef RVFI
             first_trap[valueOf(ISSUEWIDTH)] <= False;
         `endif
@@ -175,15 +175,57 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                 `endif
 
                 if(!done[inst_thread_id]) begin
-                    committed_mask[i] = 1; // set instruction to committed
-
                     // handle exceptions
                     if(instructions[i].result matches tagged Except .e) begin
                         instructions[i].next_pc = tvec[inst_thread_id];
                         instructions[i].pred_pc = ~tvec[inst_thread_id]; // force redirect
                         Bit#(31) except_code = extend(pack(e));
-                        mcause_exc[inst_thread_id].wset(tuple2( {1'b0, except_code} , instructions[i].pc));
-                    end
+                        `ifdef RVFI
+                            mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, pack(instructions[i].mem_addr)));
+                        `elsif
+                            mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, 32'hdeadbeef));
+                        `endif
+                        dbg_print(Commit, $format("EXCEPT: ", fshow(instructions[i])));
+
+                        if (e == ECALL_M) begin
+                            `ifdef RVFI
+                                // generate RVFI frame
+                                RVFIBus rvfi_i = unpack(0);
+                                rvfi_i.valid = True;
+                                rvfi_i.order = count_insts[instructions[i].thread_id][i];
+                                rvfi_i.intr = first_trap[i];
+                                rvfi_i.trap = (instructions[i].result matches tagged Except .e ? True : False);
+                                rvfi_i.dbg = False;
+                                rvfi_i.mode = 3;
+                                rvfi_i.pc_rdata = instructions[i].pc;
+                                rvfi_i.pc_wdata = instructions[i].next_pc;
+                                rvfi_i.rd1_addr = 0;
+                                rvfi_i.insn = instructions[i].iword;
+                                rvfi_i.thread_id = instructions[i].thread_id;
+
+                                //mem info - alignment may be wrong since RVFI does not monitor this
+                                if(instructions[i].opc == LOAD) begin
+                                    rvfi_i.mem_rmask = 'hffffffff;
+                                    rvfi_i.mem_addr = instructions[i].mem_addr;
+                                end
+                                if(instructions[i].opc == STORE) begin
+                                    Bit#(XLEN) wmask = 0;
+                                    for(Integer j = 0; j<valueOf(XLEN); j=j+1)
+                                        wmask[j] = instructions[i].write.Mem.store_mask[j/8];
+                                    rvfi_i.mem_wmask = wmask;
+                                    rvfi_i.mem_wdata = instructions[i].write.Mem.data;
+                                    rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
+                                end
+
+                                rvfi[i] <= rvfi_i;
+
+                                first_trap[i] <= False;
+                                count_insts[instructions[i].thread_id][i] <= count_insts[instructions[i].thread_id][i]+1;
+                            `endif
+                        end
+
+                    end else
+                        committed_mask[i] = 1; // set instruction to committed
 
                     // handle returns
                     if(instructions[i].result matches tagged Result .r &&& 
@@ -197,6 +239,42 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                     if(instructions[i].result matches tagged Result .r) begin
                         dbg_print(Commit, $format(fshow(instructions[i])));
                         temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r, thread_id: inst_thread_id};
+
+                        `ifdef RVFI
+                            // generate RVFI frame
+                            RVFIBus rvfi_i = unpack(0);
+                            rvfi_i.valid = True;
+                            rvfi_i.order = count_insts[instructions[i].thread_id][i];
+                            rvfi_i.intr = first_trap[i];
+                            rvfi_i.trap = (instructions[i].result matches tagged Except .e ? True : False);
+                            rvfi_i.dbg = False;
+                            rvfi_i.mode = 3;
+                            rvfi_i.pc_rdata = instructions[i].pc;
+                            rvfi_i.pc_wdata = instructions[i].next_pc;
+                            rvfi_i.rd1_addr = instructions[i].destination;
+                            if (rvfi_i.rd1_addr != 0 &&& instructions[i].result matches tagged Result .r) rvfi_i.rd1_wdata = r;
+                            rvfi_i.insn = instructions[i].iword;
+                            rvfi_i.thread_id = instructions[i].thread_id;
+
+                            //mem info - alignment may be wrong since RVFI does not monitor this
+                            if(instructions[i].opc == LOAD) begin
+                                rvfi_i.mem_rmask = 'hffffffff;
+                                rvfi_i.mem_addr = instructions[i].mem_addr;
+                            end
+                            if(instructions[i].opc == STORE) begin
+                                Bit#(XLEN) wmask = 0;
+                                for(Integer j = 0; j<valueOf(XLEN); j=j+1)
+                                    wmask[j] = instructions[i].write.Mem.store_mask[j/8];
+                                rvfi_i.mem_wmask = wmask;
+                                rvfi_i.mem_wdata = instructions[i].write.Mem.data;
+                                rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
+                            end
+
+                            rvfi[i] <= rvfi_i;
+
+                            first_trap[i] <= False;
+                            count_insts[instructions[i].thread_id][i] <= count_insts[instructions[i].thread_id][i]+1;
+                        `endif
 
                         `ifdef LOG_PIPELINE
                             $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
@@ -231,39 +309,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                     //update next_pc
                     next_pc_local[inst_thread_id] = tuple2(instructions[i].next_pc, instructions[i].ras);
 
-                    `ifdef RVFI
-                        // generate RVFI frame
-                        RVFIBus rvfi_i = unpack(0);
-                        rvfi_i.valid = True;
-                        rvfi_i.order = count_insts[instructions[i].thread_id][i];
-                        rvfi_i.intr = first_trap[i];
-                        rvfi_i.trap = (instructions[i].result matches tagged Except .e ? True : False);
-                        rvfi_i.dbg = False;
-                        rvfi_i.mode = 0;
-                        rvfi_i.pc_rdata = instructions[i].pc;
-                        rvfi_i.pc_wdata = instructions[i].next_pc;
-                        rvfi_i.rd1_addr = instructions[i].destination;
-                        rvfi_i.insn = instructions[i].iword;
-
-                        //mem info - alignment may be wrong since RVFI does not monitor this
-                        if(instructions[i].opc == LOAD) begin
-                            rvfi_i.mem_rmask = 'hffffffff;
-                            rvfi_i.mem_addr = instructions[i].mem_addr;
-                        end
-                        if(instructions[i].opc == STORE) begin
-                            Bit#(XLEN) wmask = 0;
-                            for(Integer j = 0; j<valueOf(XLEN); j=j+1)
-                                wmask[j] = instructions[i].write.Mem.store_mask[j/8];
-                            rvfi_i.mem_wmask = wmask;
-                            rvfi_i.mem_wdata = instructions[i].write.Mem.data;
-                            rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
-                        end
-
-                        rvfi[i] <= rvfi_i;
-
-                        first_trap[i] <= False;
-                        count_insts[instructions[i].thread_id][i] <= count_insts[instructions[i].thread_id][i]+1;
-                    `endif
                 end
             end 
             `ifdef LOG_PIPELINE

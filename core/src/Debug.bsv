@@ -30,7 +30,7 @@ typedef enum {
 } DbgTag deriving(Eq, FShow);
 
 // List of currently allowed prints
-List#(DbgTag) current_tags = list(Commit);
+List#(DbgTag) current_tags = list(Commit, CSRFile);
 
 //  Function for printing text with a yellow label
 function Action dbg_print(DbgTag tag, Fmt text);
@@ -39,6 +39,11 @@ function Action dbg_print(DbgTag tag, Fmt text);
             if(elem(tag, current_tags))
                 $display($format("%c[33m",27), "[", fshow(tag), "]: ", $format("%c[0m",27), text);
         `endif
+        `ifdef COREV_TB
+            if(elem(tag, current_tags))
+                $display($format("%c[33m",27), "[", fshow(tag), "]: ", $format("%c[0m",27), text);
+        `endif
+        $fflush();
     endaction
 endfunction
 

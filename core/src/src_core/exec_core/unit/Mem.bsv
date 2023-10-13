@@ -74,6 +74,11 @@ Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 Reg#(Bool) aq_r <- mkReg(False);
 Wire#(Bool) store_queue_empty_w <- mkBypassWire();
 
+function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
+    BYTE: False;
+    HALF: (mask[0] != 0);
+    WORD: (mask != 0);
+endcase;
 
 // STORE HANDLING
 
@@ -104,10 +109,22 @@ rule calculate_store if (in.first().opc == STORE && !aq_r);
         B: (1 << pack(final_addr)[1:0]);
     endcase;
 
+    Width width = case (inst.funct)
+        W: WORD;
+        H: HALF;
+        B: BYTE;
+    endcase;
+
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
     
     // produce result
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag });
+    let local_result = Result {result : ((check_misalign(truncate(pack(final_addr)), width)) ? tagged Except AMO_ST_MISALIGNED : tagged Result 0) , new_pc : tagged Invalid, tag : inst.tag 
+        `ifdef RVFI 
+            , mem_addr: final_addr
+        `endif
+        };
+    if (inst.exception matches tagged Valid .e) local_result.result = tagged Except e;
+    out.enq(local_result);
     out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
 endrule
 
@@ -145,12 +162,6 @@ Wire#(UInt#(TLog#(ROBDEPTH))) request_ROB <- mkWire();
 Wire#(Bool) response_ROB <- mkWire();
 //output to next stage
 FIFO#(LoadPipe) stage1 <- mkPipelineFIFO();
-
-function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
-    BYTE: False;
-    HALF: (mask[0] != 0);
-    WORD: (mask != 0);
-endcase;
 
 rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id] && !aq_r);
 

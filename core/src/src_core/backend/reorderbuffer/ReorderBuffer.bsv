@@ -235,6 +235,10 @@ module mkReorderBuffer_in(RobIFC) provisos (
                         tagged Except .e : tagged Except e;
                     endcase;
 
+                    `ifdef RVFI
+                        current_entry.mem_addr = unpacked_result.mem_addr;
+                    `endif
+
                     // generate the next pc field from the result
                     current_entry.next_pc = case (unpacked_result.new_pc) matches
                         tagged Valid .v : v;

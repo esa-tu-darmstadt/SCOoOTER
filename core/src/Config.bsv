@@ -1,17 +1,17 @@
 package Config;
 
-typedef 4 IFUINST;
-typedef 2 ISSUEWIDTH;
+typedef 1 IFUINST;
+typedef 1 ISSUEWIDTH;
 
-typedef 0 RESETVEC;
-typedef 'h40000 BRAMSIZE;
+typedef 'h2000  RESETVEC;
+typedef 'h320000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
-typedef 4 ROBDEPTH;
+typedef 1 ROBDEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)
-typedef 4 INST_WINDOW;
+typedef 1 INST_WINDOW;
 
 // 0: single cycle
 // 1: multi cycle

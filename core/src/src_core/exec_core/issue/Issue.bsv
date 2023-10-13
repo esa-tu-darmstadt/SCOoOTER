@@ -208,7 +208,7 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
     return RobEntry {
         pc : inst.pc,
         destination : inst.rd,
-        result : (tagged Tag idx),
+        result : ((tagged Tag idx)),
         pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
         next_pc : ?,

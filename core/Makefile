@@ -30,6 +30,7 @@ BRANCH?=0
 SYNTH?=0
 LOG?=0
 RVFI?=0
+TOHOST?=0
 
 # Add subdirectories
 EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
@@ -42,9 +43,9 @@ endif
 
 # Default flags
 EXTRA_FLAGS= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
-EXTRA_FLAGS+=-show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
-EXTRA_FLAGS+=-D $(TB) -D BSV_NO_INITIAL_BLOCKS +RTS -K1G -RTS -D BSV_ASYNC_RESET
-EXTRA_FLAGS+=-verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" "
+EXTRA_FLAGS+= -show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
+EXTRA_FLAGS+= -D $(TB) -D BSV_NO_INITIAL_BLOCKS +RTS -K1G -RTS -D BSV_ASYNC_RESET -D TOHOST=$(TOHOST)
+EXTRA_FLAGS+= -verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" "
 
 ifeq ($(SYNTH),1)
 	EXTRA_FLAGS+=-D SYNTH_SEPARATE_BLOCKS
