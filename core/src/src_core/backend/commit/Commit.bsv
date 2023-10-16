@@ -182,7 +182,8 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                         Bit#(31) except_code = extend(pack(e));
                         `ifdef RVFI
                             mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, pack(instructions[i].mem_addr)));
-                        `elsif
+                        `endif
+                        `ifndef RVFI
                             mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, 32'hdeadbeef));
                         `endif
                         dbg_print(Commit, $format("EXCEPT: ", fshow(instructions[i])));
