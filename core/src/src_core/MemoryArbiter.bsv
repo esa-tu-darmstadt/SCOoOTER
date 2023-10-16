@@ -94,7 +94,6 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
 
             if(amo_op == LR) begin
                 link_lrsc <= tagged Valid in.addr;
-                $display("SET LR: ", fshow(in.addr));
             end
                     
             if(amo_op != SC) begin
@@ -120,7 +119,6 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
             
             end else begin // SC handling
 
-                $display("GET LR: ", fshow(link_lrsc), " ", fshow(in.addr));
                 // calculate failure
                 if(link_lrsc matches tagged Valid .v &&& v == in.addr) begin
                     mem_rd_resp_f_v[in.cpu_id].enq(0);
