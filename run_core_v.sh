@@ -17,6 +17,8 @@ export DV_TARGET=cv32a6_imac_sv0
 test_scripts=(dv-riscv-tests dv-riscv-arch-test dv-riscv-compliance dv-riscv-csr-access-test dv-generated-tests benchmark coremark)
 mkdir -p core-v-logs
 
+source ./scoooter/regress/install-spike.sh
+
 for script in ${test_scripts[@]}
 do
 	rm -rf scoooter/sim/out* &> /dev/null
