@@ -6,7 +6,6 @@ cd tools/core-v-verif
 export PROJECT_ROOT=$(pwd)
 export ROOT_PROJECT=$(pwd)
 
-export RISCV=/opt/riscv/
 export RISCV_PREFIX=$RISCV/bin/riscv64-unknown-elf-
 export RISCV_OBJCOPY=$RISCV/bin/riscv64-unknown-elf-objcopy
 export RISCV_GCC=$RISCV/bin/riscv64-unknown-elf-gcc
