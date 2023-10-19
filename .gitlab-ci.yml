@@ -298,7 +298,7 @@ run_corev_simple:
     - pushd tools/core-v-verif/bin
     - pip3 install install -r requirements.txt
     - popd
-    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
+    - cp testConfigs/simple_smiths_cv.bsv core/src/Config.bsv
     - export RISCV=/opt/riscv/
     - source ./run_core_v.sh
   artifacts:
@@ -315,7 +315,7 @@ run_corev_medium:
     - pushd tools/core-v-verif/bin
     - pip3 install install -r requirements.txt
     - popd
-    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
+    - cp testConfigs/medium_gshare_cv.bsv core/src/Config.bsv
     - export RISCV=/opt/riscv/
     - source ./run_core_v.sh
   artifacts:
@@ -332,7 +332,7 @@ run_corev_high:
     - pushd tools/core-v-verif/bin
     - pip3 install install -r requirements.txt
     - popd
-    - cp testConfigs/high_gskewed.bsv core/src/Config.bsv
+    - cp testConfigs/high_gskewed_cv.bsv core/src/Config.bsv
     - export RISCV=/opt/riscv/ 
     - source ./run_core_v.sh
   artifacts:
