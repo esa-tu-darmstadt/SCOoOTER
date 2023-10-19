@@ -18,8 +18,8 @@ package Testbench;
         `endif
 
         `ifdef CUSTOM_TB
-            let testCustom <- mkTestProgram("../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-add" + "_" + select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
-		        "../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-add" + "-data_32.bsv", 
+            let testCustom <- mkTestProgram("../../testPrograms/priv/bsv_hex/misalign-bgeu-01" + "_" + select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
+		        "../../testPrograms/priv/bsv_hex/misalign-bgeu-01" + "-data_32.bsv", 
                 "custom", 
                 'hffffffff, 
                 'hffffffff);

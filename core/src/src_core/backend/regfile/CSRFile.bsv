@@ -32,7 +32,6 @@ module mkCSRFile(CsrFileIFC) provisos (
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mscratch <- replicateM(mkEhr(0));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtval <- replicateM(mkEhr(0));
     Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mhartid <- replicateM(mkEhr(?));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) dummy_csr <- replicateM(mkEhr(0));
 
     // buffer for read responses
     Reg#(Maybe#(Bit#(XLEN))) read_resp <- mkRegU();
@@ -50,7 +49,6 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h300: tagged Valid mstatus[thread_id];
             'h343: tagged Valid mtval[thread_id];
             'hf14: tagged Valid mhartid[thread_id];
-            'h3b0, 'h3ae: tagged Valid dummy_csr[thread_id];
             default: tagged Invalid;
         endcase;
     endfunction
@@ -63,7 +61,6 @@ module mkCSRFile(CsrFileIFC) provisos (
             'h340: tagged Valid mscratch[thread_id];
             'h343: tagged Valid mtval[thread_id];
             'h342: tagged Valid mcause[thread_id];
-            'h3b0, 'h3ae: tagged Valid dummy_csr[thread_id];
             default: tagged Invalid;
         endcase;
     endfunction

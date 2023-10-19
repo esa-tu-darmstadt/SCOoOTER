@@ -289,11 +289,11 @@ endfunction
 // Create a instruction struct with required fields
 function Instruction decode(InstructionPredecode inst);
     return Instruction {
-        eut: get_exec_unit(inst),
+        eut: (getFunct(inst) == INVALID ? ALU : get_exec_unit(inst)),
 
         pc : inst.pc,
         //general opcode
-        opc : inst.opc,
+        opc : (getFunct(inst) == INVALID ? OP : inst.opc),
 
         //function fields for R-type instructions, garbage for other inst
         funct : getFunct(inst),

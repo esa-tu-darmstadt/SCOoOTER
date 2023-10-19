@@ -293,11 +293,12 @@ rule assemble_instructions;
             `ifdef LOG_PIPELINE
                 $fdisplay(out_log, "%d ISSUE %x %d %d", clk_ctr, instructions[i].pc, instructions[i].tag, instructions[i].epoch);
             `endif
+            dbg_print(Issue, $format("Issuing ", fshow(instructions[i])));
         end
     end
 
     instructions_rs_v <= instructions_rs;
-    dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
+    //dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
 endrule
 
 // return issue bus
