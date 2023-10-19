@@ -299,6 +299,7 @@ run_corev_simple:
   artifacts:
     paths:
       - tools/core-v-verif/core-v-logs
+    when: always
 
     
 run_corev_medium:
@@ -310,6 +311,7 @@ run_corev_medium:
   artifacts:
     paths:
       - tools/core-v-verif/core-v-logs
+    when: always
 
     
 run_corev_high:
@@ -321,4 +323,5 @@ run_corev_high:
   artifacts:
     paths:
       - tools/core-v-verif/core-v-logs
+    when: always
 
