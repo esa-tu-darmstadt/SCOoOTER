@@ -8,7 +8,7 @@
 # Original Author: Jean-Roch COULON - Thales
 
 # Customise this to a fast local disk
-export ROOT_PROJECT=$(readlink -f $(dirname "${BASH_SOURCE[0]}")/)
+# export ROOT_PROJECT=$(readlink -f $(dirname "${BASH_SOURCE[0]}")/)
 export TOP="$ROOT_PROJECT/tools"
 
 # where to install the tools
@@ -55,7 +55,7 @@ if [ "$VERILATOR_INSTALL_DIR" != "NO" ]; then
   export CPLUS_INCLUDE_PATH="$VERILATOR_INSTALL_DIR/share/verilator/include:$CPLUS_INCLUDE_PATH"
 
   echo "Verilator version:"
-  verilator --version || { echo "Error: Verilator not in \$PATH." ; return ; }
+#  verilator --version || { echo "Error: Verilator not in \$PATH." ; return ; }
 else
   echo "Skipping Verilator setup on user's request (\$VERILATOR_INSTALL_DIR = \"NO\")."
 fi

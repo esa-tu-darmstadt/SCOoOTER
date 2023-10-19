@@ -949,8 +949,8 @@ def main():
     logging.info("GCC Version : %s" % (gcc_version))
     spike_version=get_env_var("SPIKE_ROOT")
     logging.info("Spike Version : %s" % (spike_version))
-    verilator_version=run_cmd("verilator --version")
-    logging.info("Verilator Version : %s" % (verilator_version))
+    #verilator_version=run_cmd("verilator --version")
+    #logging.info("Verilator Version : %s" % (verilator_version))
     # create file handler which logs even debug messages13.1.1
     fh = logging.FileHandler('logfile.log')
     fh.setLevel(logging.DEBUG)

@@ -1,7 +1,7 @@
-cd tools/core-v-verif
-
 . /opt/cad/mentor/2020-21/scripts/QUESTA-CORE-PRIME_2020.4_RHELx86.sh
 export QUESTA_HOME=/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/
+
+cd tools/core-v-verif
 
 export PROJECT_ROOT=$(pwd)
 export ROOT_PROJECT=$(pwd)
