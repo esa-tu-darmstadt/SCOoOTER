@@ -6,12 +6,11 @@ variables:
 
 stages:
   - deps
+  - corev
   - build
   - isa
   - priv
   - multi
-  - embench (smiths)
-  - embench (gshare)
   - embench (gskewed)
   - embench (no predictor)
 
@@ -159,63 +158,63 @@ run_privTb_high:
     - make TB=PRIV_TB
     - popd
 
-run_embenchTb_smiths_simple:
-  stage: embench (smiths)
-  timeout: 2d
-  script:
-    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB BRANCH=1
-    - popd
+#run_embenchTb_smiths_simple:
+#  stage: embench (smiths)
+#  timeout: 2d
+#  script:
+#    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
+#    - pushd core
+#    - make TB=EMBENCH_TB BRANCH=1
+#    - popd
     
-run_embenchTb_smiths_medium:
-  stage: embench (smiths)
-  timeout: 2d
-  allow_failure: true
-  script:
-    - cp testConfigs/medium_smiths.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB BRANCH=1
-    - popd
+#run_embenchTb_smiths_medium:
+#  stage: embench (smiths)
+#  timeout: 2d
+#  allow_failure: true
+#  script:
+#    - cp testConfigs/medium_smiths.bsv core/src/Config.bsv
+#    - pushd core
+#    - make TB=EMBENCH_TB BRANCH=1
+#    - popd
     
-run_embenchTb_smiths_high:
-  stage: embench (smiths)
-  timeout: 2d
-  allow_failure: true
-  script:
-    - cp testConfigs/high_smiths.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB BRANCH=1
-    - popd
+#run_embenchTb_smiths_high:
+#  stage: embench (smiths)
+#  timeout: 2d
+#  allow_failure: true
+#  script:
+#    - cp testConfigs/high_smiths.bsv core/src/Config.bsv
+#    - pushd core
+#    - make TB=EMBENCH_TB BRANCH=1
+#    - popd
 
-run_embenchTb_gshare_simple:
-  stage: embench (gshare)
-  timeout: 2d
-  script:
-    - cp testConfigs/simple_gshare.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB BRANCH=1
-    - popd
+#run_embenchTb_gshare_simple:
+#  stage: embench (gshare)
+#  timeout: 2d
+#  script:
+#    - cp testConfigs/simple_gshare.bsv core/src/Config.bsv
+#    - pushd core
+#    - make TB=EMBENCH_TB BRANCH=1
+#    - popd
     
-run_embenchTb_gshare_medium:
-  stage: embench (gshare)
-  timeout: 2d
-  allow_failure: true
-  script:
-    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB BRANCH=1
-    - popd
+#run_embenchTb_gshare_medium:
+#  stage: embench (gshare)
+#  timeout: 2d
+#  allow_failure: true
+#  script:
+#    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
+#    - pushd core
+#    - make TB=EMBENCH_TB BRANCH=1
+#    - popd
     
-run_embenchTb_gshare_high:
-  stage: embench (gshare)
-  timeout: 2d
-  allow_failure: true
-  script:
-    - cp testConfigs/high_gshare.bsv core/src/Config.bsv
-    - pushd core
-    - make TB=EMBENCH_TB BRANCH=1
-    - popd
+#run_embenchTb_gshare_high:
+#  stage: embench (gshare)
+#  timeout: 2d
+#  allow_failure: true
+#  script:
+#    - cp testConfigs/high_gshare.bsv core/src/Config.bsv
+#    - pushd core
+#    - make TB=EMBENCH_TB BRANCH=1
+#    - popd
 
 run_embenchTb_none_simple:
   stage: embench (no predictor)
@@ -290,3 +289,36 @@ run_lrsc_stress_multicore:
     - pushd core
     - make TB=LRSC_TB
     - popd
+
+run_corev_simple:
+  stage: corev
+  timeout: 2d
+  script:
+    - cp testConfigs/simple_smiths.bsv core/src/Config.bsv
+    - source ./run_core_v.sh
+  artifacts:
+    paths:
+      - tools/core-v-verif/core-v-logs
+
+    
+run_corev_medium:
+  stage: corev
+  timeout: 2d
+  script:
+    - cp testConfigs/medium_gshare.bsv core/src/Config.bsv
+    - source ./run_core_v.sh
+  artifacts:
+    paths:
+      - tools/core-v-verif/core-v-logs
+
+    
+run_corev_high:
+  stage: corev
+  timeout: 2d
+  script:
+    - cp testConfigs/high_gskewed.bsv core/src/Config.bsv
+    - source ./run_core_v.sh
+  artifacts:
+    paths:
+      - tools/core-v-verif/core-v-logs
+

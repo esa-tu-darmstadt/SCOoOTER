@@ -1,14 +1,14 @@
 cd tools/core-v-verif
 setopt +o nomatch
 
-test_scripts=(dv-generated-tests dv-riscv-csr-access-test benchmark coremark dhrystone dv-riscv-arch-test dv-riscv-compliance dv-riscv-tests)
+test_scripts=(dv-riscv-tests dv-riscv-arch-test dv-riscv-compliance dv-riscv-csr-access-test dv-generated-tests benchmark coremark)
 mkdir -p core_v_logs
 
 for script in ${test_scripts[@]}
 do
 	rm -rf scoooter/sim/out* &> /dev/null
 	printf "$script "
-	list_num=99 source ./scoooter/regress/$script.sh 2>&1 | tee >(grep -q "\[FAILED\]") > core_v_logs/$script.log
+	list_num=99 source ./scoooter/regress/$script.sh 2>&1 | tee >(grep -q "\[FAILED\]") >(grep -q -i "error") > core_v_logs/$script.log
 	
 	if [ $? -eq 0 ] 
 	then 

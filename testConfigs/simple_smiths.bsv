@@ -40,7 +40,7 @@ typedef 0 RS_LATCH_INPUT;
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 2 BRANCHPRED;
+typedef 1 BRANCHPRED;
 
 typedef 4 BITS_BTB;
 typedef 4 BITS_PHT;
