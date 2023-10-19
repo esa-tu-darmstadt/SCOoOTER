@@ -32,7 +32,7 @@ module mkRVFITracer(RVFITraceIFC);
 
     method Action rvfi_in(Vector#(ISSUEWIDTH, RVFIBus) rvfi);
 
-        for(Integer i = 0; i<valueOf(NUM_THREADS);i=i+1) begin
+        for(Integer i = 0; i<valueOf(ISSUEWIDTH);i=i+1) begin
             if(rvfi[i].valid) begin
                 Bit#(32) pc_long = zeroExtend(rvfi[i].pc_rdata);
                 let log = out_log[rvfi[i].thread_id]; 
