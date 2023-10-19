@@ -1,5 +1,4 @@
 cd tools/core-v-verif
-setopt +o nomatch
 
 test_scripts=(dv-riscv-tests dv-riscv-arch-test dv-riscv-compliance dv-riscv-csr-access-test dv-generated-tests benchmark coremark)
 mkdir -p core_v_logs
