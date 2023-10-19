@@ -205,7 +205,7 @@ void state_t::reset(processor_t* const proc, reg_t max_isa)
     csrmap[CSR_MSTATUS] = std::make_shared<rv32_low_csr_t>(proc, CSR_MSTATUS, mstatus);
     mstatush = std::make_shared<rv32_high_csr_t>(proc, CSR_MSTATUSH, mstatus);
   } else {
-    //csrmap[CSR_MSTATUS] = mstatus;
+    csrmap[CSR_MSTATUS] = mstatus;
   }
   csrmap[CSR_MEPC] = mepc = std::make_shared<epc_csr_t>(proc, CSR_MEPC);
   csrmap[CSR_MTVAL] = mtval = std::make_shared<basic_csr_t>(proc, CSR_MTVAL, 0);
@@ -271,7 +271,7 @@ void state_t::reset(processor_t* const proc, reg_t max_isa)
   if (proc->extension_enabled_const(EXT_SSCOFPMF))
     std::make_shared<scountovf_csr_t>(proc, CSR_SCOUNTOVF);
   csrmap[CSR_MIE] = mie = std::make_shared<mie_csr_t>(proc, CSR_MIE);
-  csrmap[CSR_MIP] = mip = std::make_shared<mip_csr_t>(proc, CSR_MIP);
+  /*csrmap[CSR_MIP] = */mip = std::make_shared<mip_csr_t>(proc, CSR_MIP);
   auto sip_sie_accr = std::make_shared<generic_int_accessor_t>(
     this,
     ~MIP_HS_MASK,  // read_mask
