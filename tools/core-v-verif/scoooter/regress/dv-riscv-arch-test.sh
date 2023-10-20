@@ -18,6 +18,9 @@ source ./scoooter/regress/install-scoooter.sh
 source ./scoooter/regress/install-riscv-dv.sh
 source ./scoooter/regress/install-riscv-arch-test.sh
 
+mkdir -p $ROOT_PROJECT/scoooter/tests/riscv-arch-test/riscv-target
+cp $ROOT_PROJECT/vendor/riscv/riscv-isa-sim/arch_test_target/spike $ROOT_PROJECT/scoooter/tests/riscv-arch-test/riscv-target -r
+
 if ! [ -n "$DV_TARGET" ]; then
   DV_TARGET=cv64a6_imafdc_sv39
 fi
