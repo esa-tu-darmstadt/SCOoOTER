@@ -294,10 +294,12 @@ run_corev_simple:
   stage: corev
   timeout: 2d
   script:
-    - yum install -y dtc python3 python3-pip
+    - yum install -y dtc python3 python3-pip libXft
     - pushd tools/core-v-verif/bin
     - pip3 install install -r requirements.txt
     - popd
+    - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
+    - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor
     - cp testConfigs/simple_smiths_cv.bsv core/src/Config.bsv
     - export RISCV=/opt/riscv/
     - source ./run_core_v.sh
@@ -311,10 +313,12 @@ run_corev_medium:
   stage: corev
   timeout: 2d
   script:
-    - yum install -y dtc python3 python3-pip
+    - yum install -y dtc python3 python3-pip libXft
     - pushd tools/core-v-verif/bin
     - pip3 install install -r requirements.txt
     - popd
+    - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
+    - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor
     - cp testConfigs/medium_gshare_cv.bsv core/src/Config.bsv
     - export RISCV=/opt/riscv/
     - source ./run_core_v.sh
@@ -328,10 +332,12 @@ run_corev_high:
   stage: corev
   timeout: 2d
   script:
-    - yum install -y dtc python3 python3-pip
+    - yum install -y dtc python3 python3-pip libXft
     - pushd tools/core-v-verif/bin
     - pip3 install install -r requirements.txt
     - popd
+    - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
+    - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor
     - cp testConfigs/high_gskewed_cv.bsv core/src/Config.bsv
     - export RISCV=/opt/riscv/ 
     - source ./run_core_v.sh

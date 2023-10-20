@@ -13,7 +13,7 @@ export CV_SW_PREFIX=riscv64-unknown-elf-
 
 export DV_TARGET=cv32a6_imac_sv0
 
-test_scripts=(dv-riscv-arch-test dv-riscv-tests dv-riscv-compliance dv-riscv-csr-access-test dv-generated-tests benchmark coremark)
+test_scripts=(dv-generated-tests dv-riscv-tests dv-riscv-arch-test dv-riscv-compliance dv-riscv-csr-access-test benchmark coremark)
 mkdir -p core-v-logs
 
 source ./scoooter/regress/install-spike.sh
