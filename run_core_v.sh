@@ -30,8 +30,6 @@ do
 	else 
 	  echo "FAIL"
 	fi
-	mkdir -p core_v_logs/$script
-	cp -r scoooter/sim/out* core-v-logs/$script/ &>/dev/null
 done
 
 cd -
