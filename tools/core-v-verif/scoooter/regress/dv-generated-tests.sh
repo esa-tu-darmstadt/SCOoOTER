@@ -112,6 +112,31 @@ elif [[ "$list_num" = 99 ]];then
            "riscv_arithmetic_basic_sub_prog_test"
            "cva6_instr_base_test"
            );
+   I=(20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1);
+elif [[ "$list_num" = 42 ]];then
+  TEST_NAME=(
+           "riscv_arithmetic_basic_loop_test"
+           "riscv_arithmetic_basic_test_no_comp"
+           "riscv_arithmetic_basic_test_bcomp"
+           "riscv_arithmetic_basic_illegal"
+           "riscv_arithmetic_basic_test_comp"
+           "riscv_arithmetic_basic_same_reg_test"
+           "riscv_arithmetic_basic_hazard_rdrs1_test"
+           "riscv_arithmetic_basic_hazard_rdrs2_test"
+           "riscv_arithmetic_basic_csr_dummy"
+           "riscv_arithmetic_basic_Randcsr_test"
+           "riscv_arithmetic_basic_ebreak_dret_test"
+           "riscv_arithmetic_basic_illegal_csr"
+           "riscv_mmu_stress_test"
+           "riscv_load_store_test"
+           "riscv_load_store_cmp_test"
+           "riscv_load_store_hazard_test"
+           "riscv_unaligned_load_store_test"
+           "riscv_rand_jump_no_cmp_test"
+           "riscv_rand_jump_illegal_test"
+           "riscv_arithmetic_basic_sub_prog_test"
+           "cva6_instr_base_test"
+           );
    I=(20 100 100 100 100 100 100 100 20 20 20 20 100 50 50 50 50 75 50 20 1);
 fi
 
