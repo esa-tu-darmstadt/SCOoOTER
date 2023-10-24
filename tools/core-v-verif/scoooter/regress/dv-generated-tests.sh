@@ -162,7 +162,7 @@ printf "+=======================================================================
 j=0
 while [[ $j -lt ${#TEST_NAME[@]} ]];do
   cp ../env/corev-dv/custom/riscv_custom_instr_enum.sv ./dv/src/isa/custom/
-  python3 cva6.py --testlist=$TESTLIST_FILE --test ${TEST_NAME[j]} --iss_yaml cva6.yaml --target $DV_TARGET -cs ../env/corev-dv/target/rv32i/ --mabi ilp32 --isa rv32imac --simulator_yaml ../env/corev-dv/simulator.yaml --iss=spike,veri-testharness -i ${I[j]} -bz 1 --iss_timeout 1200
+  python3 cva6.py --testlist=$TESTLIST_FILE --test ${TEST_NAME[j]} --iss_yaml cva6.yaml --target $DV_TARGET -cs ../env/corev-dv/target/rv32i/ --mabi ilp32 --isa rv32ima --simulator_yaml ../env/corev-dv/simulator.yaml --iss=spike,veri-testharness -i ${I[j]} -bz 1 --iss_timeout 1200
   n=0
   echo "Generate the test: ${TEST_NAME[j]}"
 #this while loop detects the failed tests from the log file and remove them
