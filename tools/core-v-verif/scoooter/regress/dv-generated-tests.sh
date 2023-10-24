@@ -178,7 +178,7 @@ while [[ $j -lt ${#TEST_NAME[@]} ]];do
       fi
     done
   done < $logfile
-  #rm -rf out_$dd
+  rm -rf out_$dd
   j=$((j+1))
 done
 #Execute directed tests to improve functional coverage of ISA
