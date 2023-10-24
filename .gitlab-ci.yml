@@ -305,6 +305,7 @@ run_corev_simple:
     - source ./run_core_v.sh
   artifacts:
     paths:
+      - tools/core-v-verif/scoooter/sim/out*
       - tools/core-v-verif/core-v-logs
     when: always
 
@@ -324,6 +325,7 @@ run_corev_medium:
     - source ./run_core_v.sh
   artifacts:
     paths:
+      - tools/core-v-verif/scoooter/sim/out*
       - tools/core-v-verif/core-v-logs
     when: always
 
@@ -343,6 +345,7 @@ run_corev_high:
     - source ./run_core_v.sh
   artifacts:
     paths:
+      - tools/core-v-verif/scoooter/sim/out*
       - tools/core-v-verif/core-v-logs
     when: always
 
