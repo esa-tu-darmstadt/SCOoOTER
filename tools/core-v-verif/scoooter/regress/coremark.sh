@@ -27,9 +27,6 @@ DV_SIMULATORS=spike,veri-testharness
 
 cd scoooter/sim/
 
-make -C ../../core-v-cores/cva6 clean
-make clean_all
-
 src0=../tests/custom/coremark/core_main.c
 srcA=(
         ../tests/custom/coremark/uart.c
