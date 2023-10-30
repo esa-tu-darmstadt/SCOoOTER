@@ -74,6 +74,11 @@ Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 Reg#(Bool) aq_r <- mkReg(False);
 Wire#(Bool) store_queue_empty_w <- mkBypassWire();
 
+function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
+    BYTE: False;
+    HALF: (mask[0] != 0);
+    WORD: (mask != 0);
+endcase;
 
 // STORE HANDLING
 
@@ -104,10 +109,22 @@ rule calculate_store if (in.first().opc == STORE && !aq_r);
         B: (1 << pack(final_addr)[1:0]);
     endcase;
 
+    Width width = case (inst.funct)
+        W: WORD;
+        H: HALF;
+        B: BYTE;
+    endcase;
+
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
     
     // produce result
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : inst.tag });
+    let local_result = Result {result : ((check_misalign(truncate(pack(final_addr)), width)) ? tagged Except AMO_ST_MISALIGNED : tagged Result 0) , new_pc : tagged Invalid, tag : inst.tag 
+        `ifdef RVFI 
+            , mem_addr: final_addr
+        `endif
+        };
+    if (inst.exception matches tagged Valid .e) local_result.result = tagged Except e;
+    out.enq(local_result);
     out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
 endrule
 
@@ -145,12 +162,6 @@ Wire#(UInt#(TLog#(ROBDEPTH))) request_ROB <- mkWire();
 Wire#(Bool) response_ROB <- mkWire();
 //output to next stage
 FIFO#(LoadPipe) stage1 <- mkPipelineFIFO();
-
-function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
-    BYTE: False;
-    HALF: (mask[0] != 0);
-    WORD: (mask != 0);
-endcase;
 
 rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id] && !aq_r);
 
@@ -340,6 +351,11 @@ rule collect_result_read_bypass if(!stage3.first().amo &&& stage3.first().result
         result.result = tagged Except MISALIGNED_LOAD;
     end
 
+    //RVFI
+    `ifdef RVFI
+        result.mem_addr = internal_struct.addr;
+    `endif
+
     dbg_print(Mem, $format("read (byp):  ", fshow(result)));
     out.enq(result);
 endrule
@@ -364,6 +380,11 @@ rule collect_result_read if(stage3.first().result matches tagged None &&& !stage
 
     dbg_print(Mem, $format("read (axi):  ", fshow(result)));
 
+    //RVFI
+    `ifdef RVFI
+        result.mem_addr = internal_struct.addr;
+    `endif
+
     out.enq(result);
 endrule
 
@@ -371,7 +392,16 @@ rule collect_result_mispredict if(stage3.first().mispredicted);
     stage3.deq();
     let internal_struct = stage3.first();
     if(internal_struct.aq) aq_r <= False;
-    out.enq(Result {result : tagged Result 0, new_pc : tagged Invalid, tag : internal_struct.tag});
+
+    //RVFI
+    out.enq(Result {
+        result : tagged Result 0,
+        new_pc : tagged Invalid,
+        tag : internal_struct.tag
+        `ifdef RVFI 
+            , mem_addr: internal_struct.addr
+        `endif
+    });
 endrule
 
 // generate output (and define in which urgency results shall be propagated)

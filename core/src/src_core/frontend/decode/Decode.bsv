@@ -96,7 +96,12 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EP
 
         ras: ras,
 
-        thread_id: thread_id
+        thread_id : thread_id
+
+        `ifdef RVFI
+            // RVFI
+            , iword : inst
+        `endif
     };
 
 endfunction
@@ -284,11 +289,11 @@ endfunction
 // Create a instruction struct with required fields
 function Instruction decode(InstructionPredecode inst);
     return Instruction {
-        eut: get_exec_unit(inst),
+        eut: (getFunct(inst) == INVALID ? ALU : get_exec_unit(inst)),
 
         pc : inst.pc,
         //general opcode
-        opc : inst.opc,
+        opc : (getFunct(inst) == INVALID ? OP : inst.opc),
 
         //function fields for R-type instructions, garbage for other inst
         funct : getFunct(inst),
@@ -317,6 +322,11 @@ function Instruction decode(InstructionPredecode inst);
         ras: inst.ras,
 
         thread_id: inst.thread_id
+
+        // RVFI
+        `ifdef RVFI
+            , iword : inst.iword
+        `endif
     };
 endfunction
 

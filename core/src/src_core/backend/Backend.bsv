@@ -19,6 +19,9 @@ import RegFileArch::*;
 import CSRFile::*;
 import StoreBuffer::*;
 import BuildVector::*;
+`ifdef RVFI
+    import RVFITracer::*;
+`endif
 
 // connections to external world
 interface BackendIFC;
@@ -98,6 +101,14 @@ module mkBackend(BackendIFC) provisos (
         let insts <- rob.get();
         commit.consume_instructions(insts, rob.available());
     endrule
+
+    `ifdef RVFI
+        let trace <- mkRVFITracer();
+        (* fire_when_enabled, no_implicit_conditions *)
+        rule pass_rvfi;
+            trace.rvfi_in(commit.rvfi_out());
+        endrule
+    `endif
 
     // methods to external world
     method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) result_bus);

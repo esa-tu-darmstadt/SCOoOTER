@@ -235,6 +235,10 @@ module mkReorderBuffer_in(RobIFC) provisos (
                         tagged Except .e : tagged Except e;
                     endcase;
 
+                    `ifdef RVFI
+                        current_entry.mem_addr = unpacked_result.mem_addr;
+                    `endif
+
                     // generate the next pc field from the result
                     current_entry.next_pc = case (unpacked_result.new_pc) matches
                         tagged Valid .v : v;
@@ -305,6 +309,9 @@ module mkReorderBuffer_in(RobIFC) provisos (
             new_pc : r.Valid.new_pc,
             result : r.Valid.result,
             write : w
+            `ifdef RVFI
+                , mem_addr : r.Valid.mem_addr
+            `endif
         } : tagged Invalid;
         let full_result_bus_vec = Vector::map(uncurry(parts_to_full_result), Vector::zip(results, write_result_bus_vec));
 

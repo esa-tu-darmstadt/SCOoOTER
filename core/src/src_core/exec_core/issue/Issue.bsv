@@ -208,7 +208,7 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
     return RobEntry {
         pc : inst.pc,
         destination : inst.rd,
-        result : (tagged Tag idx),
+        result : ((tagged Tag idx)),
         pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
         next_pc : ?,
@@ -219,6 +219,12 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         ras: inst.ras,
         ret: (inst.funct == RET),
         thread_id: inst.thread_id
+
+        //RVFI
+        `ifdef RVFI
+            , iword: inst.iword,
+              opc: inst.opc
+        `endif
     };
 endfunction
 
@@ -287,11 +293,12 @@ rule assemble_instructions;
             `ifdef LOG_PIPELINE
                 $fdisplay(out_log, "%d ISSUE %x %d %d", clk_ctr, instructions[i].pc, instructions[i].tag, instructions[i].epoch);
             `endif
+            dbg_print(Issue, $format("Issuing ", fshow(instructions[i])));
         end
     end
 
     instructions_rs_v <= instructions_rs;
-    dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
+    //dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
 endrule
 
 // return issue bus

@@ -19,7 +19,7 @@ package TestsMulti;
         function inst_test_priv(String name_unit) = mkTestProgram("../../testPrograms/priv/bsv_hex/"+name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
 		    "../../testPrograms/priv/bsv_hex/"+name_unit+"-data_32.bsv", 
 		    name_unit,
-		    100000,
+		    500000,
             'haaaaaaaa);
 
         function inst_test_ISA(Test_unit in) = mkTestProgram("../../testPrograms/isa/"+in.isa+"/bsv_hex/"+in.name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 

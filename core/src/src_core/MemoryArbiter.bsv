@@ -92,7 +92,9 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
             let amo_op = tpl_2(in.amo_data_and_type.Valid);
             let amo_data = tpl_1(in.amo_data_and_type.Valid);
 
-            if(amo_op == LR) link_lrsc <= tagged Valid in.addr;
+            if(amo_op == LR) begin
+                link_lrsc <= tagged Valid in.addr;
+            end
                     
             if(amo_op != SC) begin
                 amo_description.enq(tuple4(in.addr, amo_data, amo_op, in.cpu_id));
@@ -114,7 +116,8 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
                 amo_in_progress <= True;
 
                 dbg_print(AMO, $format("Arbiter: request Data"));
-                end else begin
+            
+            end else begin // SC handling
 
                 // calculate failure
                 if(link_lrsc matches tagged Valid .v &&& v == in.addr) begin

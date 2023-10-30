@@ -65,7 +65,7 @@ RWire#(CsrWriteResult) out_wr_valid <- mkRWire();
 
 // req and resp wires for CSR reading
 FIFO#(CsrRead) csr_req <- mkBypassFIFO();
-FIFO#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassFIFO();
+Wire#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassWire();
 // Buffer between stages
 FIFO#(Internal_struct) stage1 <- mkFIFO();
 
@@ -99,15 +99,15 @@ rule get_request if (!blocked && !inflight_r);
         tag: inst.tag,
         except: isValid(inst.exception),
         op: case (inst.funct)
-                RW:     RW;
-                RS:     RS;
-                RC:     RC;
-                RWI:    RWI;
-                RSI:    RSI;
-                RCI:    RCI;
-                RET:    RET;
-                ECALL:  ECALL;
-                EBREAK: EBREAK;
+                RW:      RW;
+                RS:      RS;
+                RC:      RC;
+                RWI:     RWI;
+                RSI:     RSI;
+                RCI:     RCI;
+                RET:     RET;
+                ECALL:   ECALL;
+                EBREAK:  EBREAK;
             endcase,
         operand: op,
         addr: csr_addr
@@ -116,9 +116,9 @@ endrule
 
 // read the CSR and write it if needed
 rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stage1.first().op != EBREAK);
-    let csr_data = csr_res.first(); csr_res.deq();
+    let csr_data = csr_res;
     let internal = stage1.first(); stage1.deq();
-
+    
     dbg_print(CSR, $format("read: %x %x", internal.addr, csr_data, fshow(blocked)));
 
     Result res = ?;
@@ -151,11 +151,11 @@ endrule
 rule dummy_result_ret (stage1.first().op == RET || stage1.first().op == ECALL || stage1.first().op == EBREAK);
     let internal = stage1.first(); stage1.deq();
     let res = Result {
-        result : case (stage1.first().op)
-                    RET:    tagged Result 0;
-                    ECALL:  tagged Except ECALL_M;
-                    EBREAK: tagged Except BREAKPOINT;
-                 endcase,
+        result : (!internal.except ? case (stage1.first().op)
+                                        RET:    tagged Result 0;
+                                        ECALL:  tagged Except ECALL_M;
+                                        EBREAK: tagged Except BREAKPOINT;
+                                      endcase : tagged Except INVALID_INST),
         new_pc : tagged Invalid,
         tag : internal.tag
     };
@@ -187,7 +187,9 @@ endinterface
 // CSR read interface
 interface Client csr_read;
     interface Get request = toGet(csr_req);
-    interface Put response = toPut(csr_res);
+    interface Put response;
+        method Action put(Maybe#(Bit#(XLEN)) in) = csr_res._write(in);
+    endinterface
 endinterface
 
 // input from ROB that blocks CSR operations if one is pending

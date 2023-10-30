@@ -127,26 +127,20 @@ module mkMultiCycleMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#
     
 endmodule
 
-// pipelined mul first creating partial results and then suming them
+// pipelined mul first creating partial results and then summing them
 module mkPipelineMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(64)));
     
     FIFO#(Bit#(64)) out_f <- mkPipelineFIFO();
-    Vector#(32, FIFO#(Bit#(64))) stage1_buf <- replicateM(mkPipelineFIFO());
-    Vector#(16, FIFO#(Bit#(64))) stage2_buf <- replicateM(mkPipelineFIFO());
-    Vector#(8, FIFO#(Bit#(64))) stage3_buf <-  replicateM(mkPipelineFIFO());
-    Vector#(4, FIFO#(Bit#(64))) stage4_buf <-  replicateM(mkPipelineFIFO());
-    Vector#(2, FIFO#(Bit#(64))) stage5_buf <-  replicateM(mkPipelineFIFO());
-    FIFO#(Bit#(64)) stage6_buf <-                         mkPipelineFIFO();
+    FIFO#(Tuple2#(Vector#(32, Bit#(64)), Bool)) stage1_buf <- mkPipelineFIFO();
+    FIFO#(Tuple2#(Vector#(16, Bit#(64)), Bool)) stage2_buf <- mkPipelineFIFO();
+    FIFO#(Tuple2#(Vector#(08, Bit#(64)), Bool)) stage3_buf <-  mkPipelineFIFO();
+    FIFO#(Tuple2#(Vector#(04, Bit#(64)), Bool)) stage4_buf <-  mkPipelineFIFO();
+    FIFO#(Tuple2#(Vector#(02, Bit#(64)), Bool)) stage5_buf <-  mkPipelineFIFO();
+    FIFO#(Tuple2#(Bit#(64), Bool)) stage6_buf <-              mkPipelineFIFO();
     FIFO#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool)) incoming_request <- mkPipelineFIFO();
     FIFO#(Tuple3#(Bit#(64), Bit#(64), Bool)) stage0_buf <- mkPipelineFIFO();
 
     Vector#(6, Reg#(Bool)) require_invert <- replicateM(mkRegU());
-
-    // advance the invert result flag through the stages
-    rule advance_invert;
-        for(Integer i = 5; i > 0; i=i-1)
-            require_invert[i] <= require_invert[i-1];
-    endrule
 
     // convert operands to unsigned and invert result flag
     rule stage_0;
@@ -160,51 +154,74 @@ module mkPipelineMul(Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(6
         let req = stage0_buf.first(); stage0_buf.deq();
         Bit#(64) op1 = extend(tpl_1(req));
         Bit#(XLEN) op2 = truncate(tpl_2(req));
-        require_invert[0] <= tpl_3(req);
+        
+        Vector#(32, Bit#(64)) new_values;
 
         for(Integer i = 0; i < 32; i=i+1) begin
-            stage1_buf[i].enq( op2[i] == 0 ? 0 : op1 << i );
+            new_values[i] = ( op2[i] == 0 ? 0 : op1 << i );
         end
+        
+        stage1_buf.enq(tuple2(new_values, tpl_3(req)));
     endrule
 
     // build a sum tree
     rule stage_2;
-        for(Integer i = 0; i < 32; i = i+1) stage1_buf[i].deq();
+        stage1_buf.deq();
+        
+        Vector#(16, Bit#(64)) new_values;
+        
         for(Integer i = 0; i < 16; i = i+1) begin
-            stage2_buf[i].enq( stage1_buf[2*i].first() + stage1_buf[2*i+1].first() );
+            new_values[i] = tpl_1(stage1_buf.first())[2*i] + tpl_1(stage1_buf.first())[2*i+1];
         end
+        
+        stage2_buf.enq(tuple2(new_values, tpl_2(stage1_buf.first())));
     endrule
 
     rule stage_3;
-        for(Integer i = 0; i < 16; i = i+1) stage2_buf[i].deq();
+        stage2_buf.deq();
+        
+        Vector#(8, Bit#(64)) new_values;
+        
         for(Integer i = 0; i < 8; i = i+1) begin
-            stage3_buf[i].enq( stage2_buf[2*i].first() + stage2_buf[2*i+1].first() );
+            new_values[i] = tpl_1(stage2_buf.first())[2*i] + tpl_1(stage2_buf.first())[2*i+1];
         end
+        
+        stage3_buf.enq(tuple2(new_values, tpl_2(stage2_buf.first())));
     endrule
 
     rule stage_4;
-        for(Integer i = 0; i < 8; i = i+1) stage3_buf[i].deq();
+        stage3_buf.deq();
+        
+        Vector#(4, Bit#(64)) new_values;
+        
         for(Integer i = 0; i < 4; i = i+1) begin
-            stage4_buf[i].enq( stage3_buf[2*i].first() + stage3_buf[2*i+1].first() );
+            new_values[i] = tpl_1(stage3_buf.first())[2*i] + tpl_1(stage3_buf.first())[2*i+1];
         end
+        
+        stage4_buf.enq(tuple2(new_values, tpl_2(stage3_buf.first())));
     endrule
 
     rule stage_5;
-        for(Integer i = 0; i < 4; i = i+1) stage4_buf[i].deq();
+        stage4_buf.deq();
+        
+        Vector#(2, Bit#(64)) new_values;
+        
         for(Integer i = 0; i < 2; i = i+1) begin
-            stage5_buf[i].enq( stage4_buf[2*i].first() + stage4_buf[2*i+1].first() );
+            new_values[i] = tpl_1(stage4_buf.first())[2*i] + tpl_1(stage4_buf.first())[2*i+1];
         end
+        
+        stage5_buf.enq(tuple2(new_values, tpl_2(stage4_buf.first())));
     endrule
 
     rule stage_6;
-        for(Integer i = 0; i < 2; i = i+1) stage5_buf[i].deq();
-        stage6_buf.enq( stage5_buf[0].first() + stage5_buf[1].first() );
+        stage5_buf.deq();
+        stage6_buf.enq( tuple2(tpl_1(stage5_buf.first())[0] + tpl_1(stage5_buf.first())[1], tpl_2(stage5_buf.first())) );
     endrule
 
     // invert final sum if necessary
     rule stage_7;
-        let value = stage6_buf.first(); stage6_buf.deq();
-        out_f.enq( require_invert[5] ? two_complement_forward(value) : value);
+        let value = tpl_1(stage6_buf.first()); stage6_buf.deq();
+        out_f.enq( tpl_2(stage6_buf.first()) ? two_complement_forward(value) : value);
     endrule
 
     interface Put request;
