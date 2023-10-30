@@ -6,11 +6,11 @@ variables:
 
 stages:
   - deps
-  - corev
   - build
   - isa
   - priv
   - multi
+  - corev
   - embench (gskewed)
   - embench (no predictor)
 
