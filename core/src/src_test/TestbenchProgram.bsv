@@ -79,9 +79,10 @@ package TestbenchProgram;
         // create a fitting BRAM
         BRAM_Configure cfg_i = defaultValue;
         cfg_i.allowWriteResponseBypass = True;
+        cfg_i.memorySize = valueOf(bram_word_num_t);
         cfg_i.loadFormat = tagged Hex imem_file;
         cfg_i.latency = 1;
-        BRAM1Port#(Bit#(XLEN), Bit#(ifuwidth)) ibram <- mkBRAM1Server(cfg_i);
+        BRAM2PortBE#(Bit#(XLEN), Bit#(ifuwidth), 4) ibram <- mkBRAM2ServerBE(cfg_i);
 
         FIFO#(Bit#(cpu_idx_t)) inflight_ids_inst <- mkSizedFIFO(16);
 
@@ -89,8 +90,8 @@ package TestbenchProgram;
         rule ifuread if (start_r && !done_r && count_r <= fromInteger(max_ticks));
     		let r <- iram_axi.request.get();
             // the address must be converted to a word-address
-            ibram.portA.request.put(BRAMRequest{
-                write: False,
+            ibram.portA.request.put(BRAMRequestBE{
+                writeen: 0,
                 responseOnWrite: False,
                 address: (r.addr>>2)/fromInteger(valueOf(IFUINST)),
                 datain: ?

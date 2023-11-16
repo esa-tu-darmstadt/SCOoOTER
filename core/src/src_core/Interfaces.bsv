@@ -11,9 +11,12 @@ import GetPutCustom::*;
 import ClientServer::*;
 
 interface DaveIFC;
-
+    `ifndef SOC
     (* prefix= "axi_master_fetch" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
+        interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
+    `else
+        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
+    `endif
     (* prefix= "axi_master_data" *)
     interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_r;
     (* prefix= "axi_master_data" *)
@@ -69,7 +72,12 @@ endinterface
 
 interface InstArbiterIFC;
     // axi to data memory
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) axi_r;
+    `ifndef SOC
+        interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) axi_r;
+    `else
+        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
+    `endif
+
     interface Vector#(NUM_CPU, Server#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST)))) reads;
 endinterface
 

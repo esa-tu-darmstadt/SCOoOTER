@@ -368,9 +368,10 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         can_insert_buffer <= free_slots > fromInteger(cmp);
     endrule
 
-    // method to request an instruction
+    FIFO#(Instruction) inst_out_buf <- mkPipelineFIFO();
+
     Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_v);
-    method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
+    rule collect_rdy if (Vector::any(is_ready, instruction_buffer_read_v));
         let idx = fromMaybe(?, Vector::findIndex(is_ready, instruction_buffer_read_v));
         let inst = fromMaybe(?, instruction_buffer_read_v[idx]);
         clear_idx_w <= idx;
@@ -378,7 +379,13 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         `ifdef LOG_PIPELINE
             $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
         `endif
-        return inst;
+        inst_out_buf.enq(inst);
+    endrule
+
+    // method to request an instruction
+    method ActionValue#(Instruction) get;
+        inst_out_buf.deq();
+        return inst_out_buf.first();
     endmethod
 
     // return execution unit tag

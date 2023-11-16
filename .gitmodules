@@ -19,3 +19,6 @@
 [submodule "tools/tapasco-integration/tapasco-riscv"]
 	path = tools/tapasco-integration/tapasco-riscv
 	url = https://github.com/esa-tu-darmstadt/tapasco-riscv
+[submodule "core/libraries/BlueSRAM"]
+	path = core/libraries/BlueSRAM
+	url = git@gitlab.esa.informatik.tu-darmstadt.de:asic/bluesram.git
