@@ -3,8 +3,8 @@ package Config;
 typedef 1 IFUINST;
 typedef 1 ISSUEWIDTH;
 
-typedef 'h2000  RESETVEC;
-typedef 'h320000 BRAMSIZE;
+typedef 'h0000  RESETVEC;
+typedef 'h10000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
 typedef 1 ROBDEPTH;
@@ -47,12 +47,12 @@ typedef 4 BITS_PHT;
 
 typedef 0 BITS_BHR;
 
-typedef 1  USE_RAS;
+typedef 0  USE_RAS;
 typedef 1 RAS_SAVE_HEAD;
 typedef 1 RAS_SAVE_FIRST;
 typedef 4 RASDEPTH;
 
-typedef 8 STORE_BUF_DEPTH;
+typedef 2 STORE_BUF_DEPTH;
 
 typedef 1 NUM_CPU;
 typedef 1 NUM_THREADS;

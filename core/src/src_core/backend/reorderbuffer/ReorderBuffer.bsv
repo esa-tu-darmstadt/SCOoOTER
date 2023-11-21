@@ -82,9 +82,12 @@ module mkReorderBuffer_in(RobIFC) provisos (
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule open if (clk_ctr == 0);
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
@@ -250,6 +253,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
                     `ifdef LOG_PIPELINE
                         $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, current_entry.pc, i, current_entry.epoch);
+                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, current_entry.log_id, 0, "E");
                     `endif
                 end
             end

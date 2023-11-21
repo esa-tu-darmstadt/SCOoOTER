@@ -53,9 +53,12 @@ module mkIssue(IssueIFC) provisos(
     Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
     rule count_clk; clk_ctr <= clk_ctr + 1; endrule
     Reg#(File) out_log <- mkRegU();
+    Reg#(File) out_log_ko <- mkRegU();
     rule open if (clk_ctr == 0);
         File out_log_l <- $fopen("scoooter.log", "a");
         out_log <= out_log_l;
+        File out_log_kol <- $fopen("konata.log", "a");
+        out_log_ko <= out_log_kol;
     endrule
 `endif
 
@@ -225,6 +228,9 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
             , iword: inst.iword,
               opc: inst.opc
         `endif
+        `ifdef LOG_PIPELINE
+            , log_id: inst.log_id
+        `endif
     };
 endfunction
 
@@ -292,6 +298,7 @@ rule assemble_instructions;
             instructions_rs[needed_rs_idx_w[i]] = tagged Valid instructions[i];
             `ifdef LOG_PIPELINE
                 $fdisplay(out_log, "%d ISSUE %x %d %d", clk_ctr, instructions[i].pc, instructions[i].tag, instructions[i].epoch);
+                $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "I");
             `endif
             dbg_print(Issue, $format("Issuing ", fshow(instructions[i])));
         end

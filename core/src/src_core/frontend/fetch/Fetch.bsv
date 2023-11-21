@@ -32,12 +32,18 @@ module mkFetch(FetchIFC) provisos(
     `ifdef LOG_PIPELINE
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         rule init if (clk_ctr == 0);
             File out_log_f <- $fopen("scoooter.log", "w");
             $fflush();
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+
+            File out_log_kof <- $fopen("konata.log", "w");
+            $fflush();
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
@@ -93,6 +99,7 @@ module mkFetch(FetchIFC) provisos(
             let overlap = (pc[current_thread_r][0]>>2)%fromInteger(valueOf(IFUINST));
             pc[current_thread_r][0] <= pc[current_thread_r][0]-(overlap<<2)+fromInteger(valueOf(TMul#(4, IFUINST)));
         end
+        dbg_print(Fetch, $format("request: ", fshow(pc[current_thread_r][0])));
     endrule
 
     // if the epoch has changed, drop read data
@@ -200,12 +207,17 @@ module mkFetch(FetchIFC) provisos(
                     next_pc: isValid(cleaned_predictions[i]) ? cleaned_predictions[i].Valid : (acqpc + (fromInteger(i)*4) + 4),
                     history: dir_resp_w_v[i].history,
                     ras: ras[inflight_thread.first()].ports[i].extra(),
+                    `ifdef LOG_PIPELINE
+                        log_id: (pack(clk_ctr)<<valueof(TLog#(IFUINST)) | fromInteger(i)),
+                    `endif
                     thread_id: inflight_thread.first()};
             end
         end
 
         // enq gathered instructions
         fetched_inst.enq(instructions_v);
+
+        dbg_print(Fetch, $format("got: ", fshow(instructions_v)));
 
         // check how many instructions are correct path according to prediction
         let count_pred = Vector::findIndex(isValid, cleaned_predictions);
@@ -224,8 +236,12 @@ module mkFetch(FetchIFC) provisos(
         `ifdef LOG_PIPELINE
             for(Integer i = 0; i < valueOf(IFUINST); i=i+1) begin
                 if(fromInteger(i) < amount) begin
-                    $fdisplay(out_log, "%d FETCH %x %x %d", clk_ctr, tpl_2(instructions_v[i]), tpl_1(instructions_v[i]), tpl_3(instructions_v[i]));
+                    $fdisplay(out_log, "%d FETCH %x %x %d", clk_ctr, instructions_v[i].pc, instructions_v[i].instruction, instructions_v[i].epoch);
                     $fflush(out_log);
+                    $fdisplay(out_log_ko, "%d I %d %d %d", clk_ctr, instructions_v[i].log_id, 0, instructions_v[i].thread_id);
+                    //$fdisplay(out_log_ko, "%d L %d %d %s", clk_ctr, instructions_v[i].log_id, 0, "hi mom");
+                    $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions_v[i].log_id, 0, "F");
+                    $fflush(out_log_ko);
                 end
             end
         `endif

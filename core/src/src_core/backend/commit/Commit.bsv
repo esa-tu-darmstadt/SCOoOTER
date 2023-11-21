@@ -137,10 +137,13 @@ for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
 `ifdef LOG_PIPELINE
     Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
     Reg#(File) out_log <- mkRegU();
+    Reg#(File) out_log_ko <- mkRegU();
     rule count_clk; clk_ctr <= clk_ctr + 1; endrule
     rule open if (clk_ctr == 0);
         File out_log_l <- $fopen("scoooter.log", "a");
         out_log <= out_log_l;
+        File out_log_kol <- $fopen("konata.log", "a");
+        out_log_ko <= out_log_kol;
     endrule
 `endif
 
@@ -171,7 +174,11 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
             if(instructions[i].epoch == epoch[inst_thread_id] && fromInteger(i) < count) begin
 
                 `ifdef LOG_PIPELINE
-                    if(done[inst_thread_id]) $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                    if(done[inst_thread_id]) begin
+                        $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
+                        $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 1);
+                    end
                 `endif
 
                 if(!done[inst_thread_id]) begin
@@ -279,6 +286,8 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
 
                         `ifdef LOG_PIPELINE
                             $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                            $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
+                            $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 0);
                         `endif
 
                         if(instructions[i].branch == True && 
@@ -315,6 +324,8 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
             `ifdef LOG_PIPELINE
                 else if(fromInteger(i) < count) begin
                     $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                    $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
+                    $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 1); 
                 end
             `endif
 

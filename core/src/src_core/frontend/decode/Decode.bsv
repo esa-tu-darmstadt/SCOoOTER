@@ -71,7 +71,11 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id
+    `ifdef LOG_PIPELINE
+        , Bit#(XLEN) log_id
+    `endif
+);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),
@@ -101,6 +105,10 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EP
         `ifdef RVFI
             // RVFI
             , iword : inst
+        `endif
+
+        `ifdef LOG_PIPELINE
+            , log_id: log_id
         `endif
     };
 
@@ -327,11 +335,19 @@ function Instruction decode(InstructionPredecode inst);
         `ifdef RVFI
             , iword : inst.iword
         `endif
+
+        `ifdef LOG_PIPELINE
+            , log_id: inst.log_id
+        `endif
     };
 endfunction
 
 function InstructionPredecode predecode_instruction_struct(FetchedInstruction in);
-    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras, in.thread_id);
+    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras, in.thread_id
+    `ifdef LOG_PIPELINE
+        , in.log_id
+    `endif
+    );
 endfunction
 
 `ifdef SYNTH_SEPARATE
@@ -346,9 +362,12 @@ module mkDecode(DecodeIFC) provisos (
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule open if (clk_ctr == 0);
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
@@ -372,8 +391,11 @@ module mkDecode(DecodeIFC) provisos (
                 let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
                 decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
                 `ifdef LOG_PIPELINE
-                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count)
+                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count) begin
                         $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
+                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, decoded_vec[i].log_id, 0, "D");
+                        $fdisplay(out_log_ko, "%d L %d %d %x DASM(%x)", clk_ctr, decoded_vec[i].log_id, 0, inst_from_decode.instructions[i].pc, inst_from_decode.instructions[i].instruction);
+                    end
                 `endif
             end
         endmethod

@@ -142,6 +142,10 @@ typedef struct {
     `ifdef RVFI
         Bit#(XLEN) iword;
     `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
 // operand of an instruction
@@ -204,6 +208,10 @@ typedef struct {
 
     `ifdef RVFI
         Bit#(XLEN) iword;
+    `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
     `endif
 } Instruction deriving(Bits, Eq, FShow);
 
@@ -299,6 +307,10 @@ typedef struct {
         UInt#(XLEN) mem_addr;
         OpCode opc;
     `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
 } RobEntry deriving(Bits, FShow);
 
 // write to a register
@@ -361,6 +373,9 @@ typedef struct {
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
     UInt#(TLog#(NUM_THREADS)) thread_id;
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
 } FetchedInstruction deriving(Bits, FShow);
 
 // output from fetch stage
