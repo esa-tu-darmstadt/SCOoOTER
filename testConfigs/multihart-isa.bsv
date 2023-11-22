@@ -32,8 +32,8 @@ typedef 2 RS_DEPTH_BR;
 
 // bus buffering
 typedef 0 RS_LATCH_BUS;
-typedef 1 DECODE_LATCH_OUTPUT;
-typedef 1 ROB_LATCH_OUTPUT;
+typedef 0 DECODE_LATCH_OUTPUT;
+typedef 0 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
 typedef 0 RS_LATCH_INPUT;
 
@@ -54,6 +54,6 @@ typedef 16 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
 
-typedef 4 NUM_CPU;
+typedef 2 NUM_CPU;
 typedef 2 NUM_THREADS;
 endpackage
