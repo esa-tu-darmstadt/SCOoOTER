@@ -149,7 +149,7 @@ for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
 
 function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
 
-method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
+method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     action
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
@@ -189,8 +189,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                         Bit#(31) except_code = extend(pack(e));
                         `ifdef RVFI
                             mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, pack(instructions[i].mem_addr)));
-                        `endif
-                        `ifndef RVFI
+                        `else
                             mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, 32'hdeadbeef));
                         `endif
                         dbg_print(Commit, $format("EXCEPT: ", fshow(instructions[i])));
@@ -339,10 +338,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
         // reg write
         out_buffer.enq(mask_maybes(temp_requests, committed_mask));
 
-        // memory write
-        let writes = Vector::map(rob_entry_to_memory_write, instructions);
-        memory_rq_out.enq(mask_maybes(writes, committed_mask));
-
         // train predictor
         let trains = Vector::map(rob_entry_to_train, instructions);
         branch_train.enq(mask_maybes(trains, committed_mask));
@@ -362,22 +357,10 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
     endaction
 endmethod
 
-interface GetS memory_writes;
-    interface first = memory_rq_out.first();
-    interface deq = memory_rq_out.deq();
-endinterface
-
 interface Get csr_writes = toGet(csr_rq_out);
 
 method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     return Vector::map(read_rwire, redirect_pc_w_out);
-endmethod
-
-method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
-    actionvalue
-        out_buffer.deq();
-        return out_buffer.first();
-    endactionvalue
 endmethod
 
 
@@ -404,6 +387,14 @@ endmethod
 method Action ext_interrupt_mask(Vector#(NUM_THREADS, Bit#(3)) in);
     Vector::writeVReg(int_in, in);
 endmethod
+
+method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
+    actionvalue
+        out_buffer.deq();
+        return out_buffer.first();
+    endactionvalue
+endmethod
+
 
 `ifdef EVA_BR
     method UInt#(XLEN) correct_pred_br = correct_pred_br_r;

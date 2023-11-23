@@ -57,9 +57,6 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     mkConnection(be.train, fe.train);
 
-    rule propagate_memory_guards;
-        ec.store_queue_empty(be.store_queue_empty());
-    endrule
 
     mkConnection(be.read_registers, ec.read_committed);
 
@@ -67,9 +64,7 @@ module mkSCOOOTER_riscv(Top) provisos(
         be.res_bus(ec.res_bus());
     endrule
 
-    
-    mkConnection(be.check_pending_memory, ec.check_rob);
-    mkConnection(be.forward, ec.check_store_buffer);
+
 
     mkConnection(ec.csr_read, be.csr_read);
 
@@ -114,7 +109,7 @@ module mkSCOOOTER_riscv(Top) provisos(
         method UInt#(XLEN) wrong_pred_j = be.wrong_pred_j;
     `endif
 
-    interface write_d = be.write;
+    interface write_d = ec.write;
     interface read_d = ec.read;
     interface read_i = fe.read_inst;
 

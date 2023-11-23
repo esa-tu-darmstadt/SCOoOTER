@@ -22,6 +22,8 @@ import RegFileEvo::*;
 import BuildVector::*;
 import ReservationStation::*;
 import ShiftBuffer::*;
+import StoreBuffer::*;
+
 
 interface ExecCoreIFC;
     // instruction input
@@ -45,10 +47,9 @@ interface ExecCoreIFC;
     interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_committed;
 
     // memory handling
-    interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) read;
-    interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
-    method Action store_queue_empty(Bool b);
+
+    interface Client#(MemWr, void) write;
 
     // csr handling
     interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
@@ -76,13 +77,22 @@ module mkExecCore(ExecCoreIFC);
     Vector#(NUM_BR, FunctionalUnitIFC) brs <- replicateM(mkBranch());
     let mem <- mkMem();
     let csr <- mkCSR();
+    let store_buf <- mkStoreBuffer();
+
+    mkConnection(mem.check_store_buffer, store_buf.forward);
+    mkConnection(mem.write, store_buf.memory_write);
+    
+    rule fwd_empty_sb;
+        mem.store_queue_empty(store_buf.empty());
+        mem.store_queue_full(store_buf.full());
+    endrule
 
     // generate the result bus
     let fu_vec = append(alus, append(append(mds, brs), vec(mem.fu, csr.fu)));
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
     // generate the result bus with memory and CSR writes
-    Maybe#(MemWr) mem_wr = isValid(mem.write()) ? tagged Valid mem.write.Valid : tagged Invalid;
+    Maybe#(MemWr) mem_wr = tagged Invalid;
     Maybe#(CsrWriteResult) csr_wr = isValid(csr.write()) ? tagged Valid csr.write.Valid : tagged Invalid;
     let full_result_bus_vec = tuple3(result_bus_vec, mem_wr, csr_wr);
 
@@ -171,18 +181,16 @@ module mkExecCore(ExecCoreIFC);
     method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = issue.rob_current_idx(idx);
     method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx) = mem.current_rob_id(idx);
 
-    interface Client check_rob = mem.check_rob;
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
     method Action flush(Vector#(NUM_THREADS, Bool) in);
         mem.flush(in);
         regfile_evo.flush(in);
     endmethod
     method Action csr_busy(Bool b) = csr.block(b);
-    interface Client check_store_buffer = mem.check_store_buffer();
     interface Client read = mem.request();
     method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus = full_result_bus_vec;
     interface Client csr_read = csr.csr_read;
-    method Action store_queue_empty(Bool b) = mem.store_queue_empty(b);
+    interface write = store_buf.write;
 endmodule
 
 endpackage

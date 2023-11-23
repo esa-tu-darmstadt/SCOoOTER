@@ -322,36 +322,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
         result_bus_vec._write(full_result_bus_vec); // connect to result bus
     endmethod
 
-    // check if there is a blocking memory write
-    //TODO: can be more efficient if checking for epoch and address
-    interface Server check_pending_memory;
-        interface Put request;
-            // request if this inst is blocked by a mem op
-            method Action put(UInt#(TLog#(ROBDEPTH)) idx) = fwd_test_mem_f.enq(idx);
-        endinterface
-        interface Get response;
-            method ActionValue#(Bool) get();
-                actionvalue
-                    Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);
-                    let idx = fwd_test_mem_f.first(); fwd_test_mem_f.deq();
-                    //rob cannot be empty!
-                    //this slice of ROB cannot be full (since the instruction for which we request is excluded)
-                    Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(False, idx, tail_r), Vector::map(fromInteger, Vector::genVector()));
-                    Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
-                    Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
-                    Bool out = Vector::elem(True, inhibitants_map);
-                    if (valueOf(ROB_LATCH_OUTPUT) == 1) begin 
-                        Vector#(ISSUEWIDTH, Bool) pending_write_rdy_vector = Vector::map(pending_write, tpl_1(insts_passing.first()));
-                        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-                            if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_write_rdy_vector[i] = False;
-                        out = out || Vector::elem(True, pending_write_rdy_vector);
-                    end
-                    return out;
-                endactionvalue
-            endmethod
-        endinterface
-    endinterface
-
     // check if there is a pending CSR operation
     method Bool csr_busy();
         Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);

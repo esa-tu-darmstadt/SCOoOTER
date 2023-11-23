@@ -156,13 +156,13 @@ endinterface
 
 interface MemoryUnitIFC;
     interface FunctionalUnitIFC fu;
-    interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) request;
     method Action flush(Vector#(NUM_THREADS, Bool) in);
     method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
     method Action store_queue_empty(Bool b);
-    method Maybe#(MemWr) write;
+    method Action store_queue_full(Bool b);
+    interface Get#(MemWr) write;
 endinterface
 
 interface RobIFC;
@@ -179,7 +179,6 @@ interface RobIFC;
 
     method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
 
-    interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     method Bool csr_busy();
 endinterface
 
@@ -187,7 +186,6 @@ interface CommitIFC;
     method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
-    interface GetS#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_writes;
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 
@@ -226,11 +224,11 @@ interface RegFileEvoIFC;
 endinterface
 
 interface StoreBufferIFC;
-    interface Put#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
-    method Bool deq_memory_writes();
+    interface Put#(MemWr) memory_write;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     interface Client#(MemWr, void) write;
     method Bool empty();
+    method Bool full();
 endinterface
 
 interface BTBIfc;

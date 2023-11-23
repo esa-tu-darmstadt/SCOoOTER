@@ -65,8 +65,7 @@ typedef enum {
     ECALL_M = 11,
     INST_PAGE_FAULT = 12,
     LOAD_PAGE_FAULT = 13,
-    AMO_ST_PAGE_FAULT = 15,
-    NONE
+    AMO_ST_PAGE_FAULT = 15
 } ExceptionType deriving(Bits, Eq, FShow);
 
 // known Opcode values
