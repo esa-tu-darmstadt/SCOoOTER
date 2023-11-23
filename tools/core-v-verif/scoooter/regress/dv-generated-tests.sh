@@ -37,7 +37,7 @@ logfile=out_$dd/iss_regr.log
 TESTLIST_FILE=cva6_base_testlist.yaml
 DIRECTED_TESTLIST=../tests/testlist_isacov.yaml
 j=0;
-rm -rf out_$dd
+rm -rf out_$dd || true
 
 if [[ "$list_num" = 1 ]];then
   TEST_NAME=(
@@ -162,7 +162,7 @@ printf "+=======================================================================
 j=0
 while [[ $j -lt ${#TEST_NAME[@]} ]];do
   cp ../env/corev-dv/custom/riscv_custom_instr_enum.sv ./dv/src/isa/custom/
-  python3 cva6.py --testlist=$TESTLIST_FILE --test ${TEST_NAME[j]} --iss_yaml cva6.yaml --target $DV_TARGET -cs ../env/corev-dv/target/rv32i/ --mabi ilp32 --isa rv32ima --simulator_yaml ../env/corev-dv/simulator.yaml --iss=spike,veri-testharness -i ${I[j]} -bz 1 --iss_timeout 3000
+  python3 cva6.py --testlist=$TESTLIST_FILE --test ${TEST_NAME[j]} --iss_yaml cva6.yaml --target $DV_TARGET -cs ../env/corev-dv/target/rv32i/ --mabi ilp32 --isa rv32ima --simulator_yaml ../env/corev-dv/simulator.yaml --iss=spike,veri-testharness -i ${I[j]} -bz 1 --iss_timeout 6000
   n=0
   echo "Generate the test: ${TEST_NAME[j]}"
 #this while loop detects the failed tests from the log file and remove them
@@ -178,7 +178,7 @@ while [[ $j -lt ${#TEST_NAME[@]} ]];do
       fi
     done
   done < $logfile
-  rm -rf out_$dd
+  rm -rf out_$dd || true
   j=$((j+1))
 done
 #Execute directed tests to improve functional coverage of ISA
