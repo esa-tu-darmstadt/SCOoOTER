@@ -26,7 +26,6 @@ import BuildVector::*;
 interface BackendIFC;
     method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
-    method Bool csr_busy();
     interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
     interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
@@ -40,6 +39,7 @@ interface BackendIFC;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
+    interface Put#(CsrWrite) csr_write;
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
@@ -62,9 +62,6 @@ module mkBackend(BackendIFC) provisos (
     RobIFC rob <- mkReorderBuffer();
     CommitIFC commit <- mkCommit();
     RegFileIFC regfile_arch <- mkRegFile();
-
-    // csr writing
-    mkConnection(commit.csr_writes, csrf.writes);
 
     // reg writing
     rule connect_commit_regs;
@@ -102,7 +99,6 @@ module mkBackend(BackendIFC) provisos (
         rob.result_bus(result_bus);
     endmethod
     interface Get train = commit.train;
-    method Bool csr_busy() = rob.csr_busy();
     
     interface read_registers = regfile_arch.read_registers();
     
@@ -129,6 +125,8 @@ module mkBackend(BackendIFC) provisos (
         method UInt#(XLEN) wrong_pred_j = commit.wrong_pred_j;
     `endif
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = csrf.hart_id(in);
+
+    interface Put csr_write = csrf.write();
 endmodule
 
 endpackage

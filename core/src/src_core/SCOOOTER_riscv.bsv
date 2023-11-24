@@ -49,13 +49,9 @@ module mkSCOOOTER_riscv(Top) provisos(
     let ec <- mkExecCore();
     let be <- mkBackend();
 
-    
-    rule rob_csr;
-        let b = be.csr_busy();
-        ec.csr_busy(b);
-    endrule
-
     mkConnection(be.train, fe.train);
+
+    mkConnection(ec.csr_write, be.csr_write);
 
 
     mkConnection(be.read_registers, ec.read_committed);

@@ -87,24 +87,18 @@ module mkCSRFile(CsrFileIFC) provisos (
     endinterface
 
     // write implementation - disambiguated by EHRs for multi-issue
-    interface Put writes;
-        method Action put(Vector#(ISSUEWIDTH, Maybe#(CsrWrite)) requests);
-            action
-                for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                    if(requests[i] matches tagged Valid .req) begin
-                        let ehr_maybe = get_csr_wr(req.addr, req.thread_id);
-                        if (ehr_maybe matches tagged Valid .r) begin
-                            Bit#(XLEN) wr_data = req.data;
-                            if (req.addr == 'h300) begin
-                                let current_mstatus = r[i];
-                                wr_data = {1'b0, req.data[30:23], 0, 2'b11, req.data[10:9], 1'b0, /*current_mstatus[7]*/ 1'b1, req.data[6], 2'b0, req.data[3:2], 2'b00};
-                            end
-                            r[i] <= wr_data;
-                            dbg_print(CSRFile, $format("writing %x to %x", req.data, req.addr));
-                        end
+    interface Put write;
+        method Action put(CsrWrite request);
+            let ehr_maybe = get_csr_wr(request.addr, request.thread_id);
+                if (ehr_maybe matches tagged Valid .r) begin
+                    Bit#(XLEN) wr_data = request.data;
+                    if (request.addr == 'h300) begin
+                        let current_mstatus = r[1];
+                        wr_data = {1'b0, request.data[30:23], 0, 2'b11, request.data[10:9], 1'b0, /*current_mstatus[7]*/ 1'b1, request.data[6], 2'b0, request.data[3:2], 2'b00};
                     end
+                    r[1] <= wr_data;
+                    dbg_print(CSRFile, $format("writing %x to %x", request.data, request.addr));
                 end
-            endaction
         endmethod
     endinterface
 

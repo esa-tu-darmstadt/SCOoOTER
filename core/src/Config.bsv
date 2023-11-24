@@ -1,13 +1,13 @@
 package Config;
 
-typedef 2 IFUINST;
-typedef 2 ISSUEWIDTH;
+typedef 1 IFUINST;
+typedef 1 ISSUEWIDTH;
 
-typedef 0 RESETVEC;
+typedef 'h0 RESETVEC;
 typedef 'h10000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
-typedef 4 ROBDEPTH;
+typedef 1 ROBDEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)
@@ -42,8 +42,8 @@ typedef 0 RS_LATCH_INPUT;
 // 1: smiths
 typedef 1 BRANCHPRED;
 
-typedef 8 BITS_BTB;
-typedef 8 BITS_PHT;
+typedef 4 BITS_BTB;
+typedef 4 BITS_PHT;
 
 typedef 0 BITS_BHR;
 

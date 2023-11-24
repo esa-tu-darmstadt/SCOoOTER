@@ -54,7 +54,7 @@ interface ExecCoreIFC;
     // csr handling
     interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
     (* always_ready, always_enabled *)
-    method Action csr_busy(Bool b);
+    interface Get#(CsrWrite) csr_write;    
 
     // result bus output
     method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus;
@@ -93,7 +93,7 @@ module mkExecCore(ExecCoreIFC);
     let result_bus_vec = Vector::map(get_result, fu_vec);
     // generate the result bus with memory and CSR writes
     Maybe#(MemWr) mem_wr = tagged Invalid;
-    Maybe#(CsrWriteResult) csr_wr = isValid(csr.write()) ? tagged Valid csr.write.Valid : tagged Invalid;
+    Maybe#(CsrWriteResult) csr_wr = tagged Invalid;
     let full_result_bus_vec = tuple3(result_bus_vec, mem_wr, csr_wr);
 
     // generate the ReservationStations
@@ -179,18 +179,21 @@ module mkExecCore(ExecCoreIFC);
     interface decoded_inst = issue.decoded_inst();
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = issue.rob_free(free);
     method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = issue.rob_current_idx(idx);
-    method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx) = mem.current_rob_id(idx);
+    method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx);
+        mem.current_rob_id(idx);
+        csr.current_rob_id(idx);
+    endmethod
 
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
     method Action flush(Vector#(NUM_THREADS, Bool) in);
         mem.flush(in);
         regfile_evo.flush(in);
     endmethod
-    method Action csr_busy(Bool b) = csr.block(b);
     interface Client read = mem.request();
     method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus = full_result_bus_vec;
     interface Client csr_read = csr.csr_read;
     interface write = store_buf.write;
+    interface Get csr_write = csr.write;
 endmodule
 
 endpackage

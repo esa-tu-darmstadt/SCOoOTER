@@ -150,8 +150,9 @@ endinterface
 interface CsrIFC;
     interface FunctionalUnitIFC fu;
     interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
-    method Action block(Bool b);
-    method Maybe#(CsrWriteResult) write;
+    interface Get#(CsrWrite) write;
+    method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
 endinterface
 
 interface MemoryUnitIFC;
@@ -244,7 +245,7 @@ interface PredIfc;
 endinterface
 
 interface CsrFileIFC;
-    interface Put#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) writes;
+    interface Put#(CsrWrite) write;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) read;
     method Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) trap_vectors();
     method Action write_int_data(Vector#(NUM_THREADS, Maybe#(TrapDescription)) in);

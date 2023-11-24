@@ -342,10 +342,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
         let trains = Vector::map(rob_entry_to_train, instructions);
         branch_train.enq(mask_maybes(trains, committed_mask));
 
-        // csr writes
-        let csrs = Vector::map(rob_entry_to_csr_write, instructions);
-        csr_rq_out.enq(mask_maybes(csrs, committed_mask));
-
         // show prediction performance
         `ifdef EVA_BR
             correct_pred_br_r <= correct_pred_br_local;
