@@ -178,6 +178,10 @@ package TestbenchProgram;
                     begin
                         $write("%c", data[7:0]);
                     end
+                `ifdef RVFI
+                    `TOHOST:
+                        $finish();
+                `endif
                 default:
                     if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))
                     begin
