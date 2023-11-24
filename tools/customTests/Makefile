@@ -26,7 +26,7 @@
 ARCH?="RV32"
 
 ifeq ($(ARCH), "RV32")
-	MARCH?="rv32ima"
+	MARCH?="rv32ima_zicsr"
 	MABI?="ilp32"
 	OUT?="32bit"
 else
@@ -36,7 +36,7 @@ else
 endif
 
 CROSS_COMPILE?="riscv64-unknown-elf"
-CFLAGS+=-march=${MARCH} -mabi=${MABI} -fno-zero-initialized-in-bss -O0 -nostdlib -T rv.ld startup.s -g
+CFLAGS+=-march=${MARCH} -mabi=${MABI} -fno-zero-initialized-in-bss -O3 -nostdlib -T rv.ld startup.s -g
 OFLAGS+=-O binary
 
 TARGETS = $(subst /,, $(filter %/, $(wildcard test_*/)))
