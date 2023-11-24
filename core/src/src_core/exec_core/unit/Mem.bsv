@@ -125,7 +125,7 @@ rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r
         };
     if (inst.exception matches tagged Valid .e) local_result.result = tagged Except e;
     out.enq(local_result);
-    out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
+    if (!check_misalign(truncate(pack(final_addr)), width)) out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
 endrule
 
 rule calculate_store_flush if (in.first().opc == STORE && in.first().epoch != epoch_r[in.first().thread_id]);
