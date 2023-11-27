@@ -75,17 +75,7 @@ function Maybe#(a) read_rwire(RWire#(a) r) = r.wget();
 
 Vector#(NUM_THREADS, Wire#(Bit#(3))) int_in <- replicateM(mkBypassWire());
 
-FIFOF#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_rq_out <- mkPipelineFIFOF();
 FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) branch_train <- mkPipelineFIFO();
-FIFO#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_rq_out <- mkPipelineFIFO();
-
-
-function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch[re.thread_id] &&& re.write matches tagged Mem .v ? tagged Valid v : tagged Invalid; 
-function Maybe#(CsrWrite) rob_entry_to_csr_write(RobEntry re) = re.epoch == epoch[re.thread_id] &&& re.write matches tagged Csr .v ? tagged Valid CsrWrite {addr: v.addr, data: v.data, thread_id: re.thread_id} : tagged Invalid; 
-function Vector#(b, Maybe#(a)) mask_maybes(Vector#(b, Maybe#(a)) m, Bit#(b) f);
-    for(Integer i = 0; i < valueOf(b); i=i+1) if (f[i] == 0) m[i] = tagged Invalid;
-    return m;
-endfunction
 
 function Maybe#(TrainPrediction) rob_entry_to_train(RobEntry re);
     Maybe#(TrainPrediction) out;
@@ -147,7 +137,10 @@ for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
     endrule
 `endif
 
-function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
+function Vector#(b, Maybe#(a)) mask_maybes(Vector#(b, Maybe#(a)) m, Bit#(b) f);
+    for(Integer i = 0; i < valueOf(b); i=i+1) if (f[i] == 0) m[i] = tagged Invalid;
+    return m;
+endfunction
 
 method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     action
@@ -210,20 +203,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                                 rvfi_i.insn = instructions[i].iword;
                                 rvfi_i.thread_id = instructions[i].thread_id;
 
-                                //mem info - alignment may be wrong since RVFI does not monitor this
-                                if(instructions[i].opc == LOAD) begin
-                                    rvfi_i.mem_rmask = 'hffffffff;
-                                    rvfi_i.mem_addr = instructions[i].mem_addr;
-                                end
-                                if(instructions[i].opc == STORE) begin
-                                    Bit#(XLEN) wmask = 0;
-                                    for(Integer j = 0; j<valueOf(XLEN); j=j+1)
-                                        wmask[j] = instructions[i].write.Mem.store_mask[j/8];
-                                    rvfi_i.mem_wmask = wmask;
-                                    rvfi_i.mem_wdata = instructions[i].write.Mem.data;
-                                    rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
-                                end
-
                                 rvfi[i] <= rvfi_i;
 
                                 first_trap[i] <= False;
@@ -262,20 +241,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                             if (rvfi_i.rd1_addr != 0 &&& instructions[i].result matches tagged Result .r) rvfi_i.rd1_wdata = r;
                             rvfi_i.insn = instructions[i].iword;
                             rvfi_i.thread_id = instructions[i].thread_id;
-
-                            //mem info - alignment may be wrong since RVFI does not monitor this
-                            if(instructions[i].opc == LOAD) begin
-                                rvfi_i.mem_rmask = 'hffffffff;
-                                rvfi_i.mem_addr = instructions[i].mem_addr;
-                            end
-                            if(instructions[i].opc == STORE) begin
-                                Bit#(XLEN) wmask = 0;
-                                for(Integer j = 0; j<valueOf(XLEN); j=j+1)
-                                    wmask[j] = instructions[i].write.Mem.store_mask[j/8];
-                                rvfi_i.mem_wmask = wmask;
-                                rvfi_i.mem_wdata = instructions[i].write.Mem.data;
-                                rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
-                            end
 
                             rvfi[i] <= rvfi_i;
 
@@ -352,8 +317,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
 
     endaction
 endmethod
-
-interface Get csr_writes = toGet(csr_rq_out);
 
 method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     return Vector::map(read_rwire, redirect_pc_w_out);

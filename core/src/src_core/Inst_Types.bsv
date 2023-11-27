@@ -286,12 +286,6 @@ typedef struct {
     Bit#(XLEN) next_pc;
     Bit#(XLEN) pred_pc;
     UInt#(EPOCH_WIDTH) epoch; // epoch to synchronize on misprediction
-    union tagged { // writes to memory or CSRs
-        MemWr Mem;
-        void Pending_mem;
-        void None;
-        CsrWriteResult Csr;
-    } write;
     // identify if the instruction is branching and if it is br or jal
     Bool branch;
     Bool br;

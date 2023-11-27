@@ -106,9 +106,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
     //avoid sacrificing one storage space
     Ehr#(2, Bool) full_r <- mkEhr(False);
 
-    // those functions test if a pending write to memory or CSR space is in the current instruction
-    function Bool pending_write(RobEntry re) = (re.write matches tagged Mem .v ? True : (re.write matches tagged Pending_mem ? True : False)); 
-    function Bool pending_csr(RobEntry re) = (re.write matches tagged Csr .v ? True : False); 
     // helper function to and two bools
     function Bool andd(Bool a, Bool b) = (a && b);
 
@@ -228,10 +225,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
                 if(produced_result matches tagged Valid .found_result &&&
                    found_result matches tagged Valid .unpacked_result) begin
 
-                    // extract CSR and Mem writes
-                    current_entry.write = (unpacked_result.write matches tagged Mem .v ? tagged Mem v : 
-                                           unpacked_result.write matches tagged Csr .v ? tagged Csr v : tagged None);
-
                     // unpack the result or the exception
                     current_entry.result = case (unpacked_result.result) matches
                         tagged Result .r : tagged Result r;
@@ -321,23 +314,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
         result_bus_vec._write(full_result_bus_vec); // connect to result bus
     endmethod
-
-    // check if there is a pending CSR operation
-    method Bool csr_busy();
-        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);
-        Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(full_r[0], head_r, tail_r), Vector::map(fromInteger, Vector::genVector()));
-        Vector#(ROBDEPTH, Bool) pending_csr_vector = Vector::map(pending_csr, local_store);
-        Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_csr_vector));
-        Bool out = Vector::countElem(True, inhibitants_map) >= 1;
-        if (valueOf(ROB_LATCH_OUTPUT) == 1) begin
-            Vector#(ISSUEWIDTH, Bool) pending_csr_rdy_vector = Vector::map(pending_csr, tpl_1(insts_passing.first()));
-            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-                if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_csr_rdy_vector[i] = False;
-            out = out || (Vector::countElem(True, pending_csr_rdy_vector) >= 1);
-        end
-        return out;
-    endmethod
-
     
 endmodule
 

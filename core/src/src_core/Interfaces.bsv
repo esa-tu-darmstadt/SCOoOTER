@@ -179,15 +179,12 @@ interface RobIFC;
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
     method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
-
-    method Bool csr_busy();
 endinterface
 
 interface CommitIFC;
     method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
-    interface Get#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_writes;
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 
     method Action trap_vectors(Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) vecs);

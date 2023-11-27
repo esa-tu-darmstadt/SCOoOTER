@@ -53,7 +53,6 @@ interface ExecCoreIFC;
 
     // csr handling
     interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
-    (* always_ready, always_enabled *)
     interface Get#(CsrWrite) csr_write;    
 
     // result bus output
