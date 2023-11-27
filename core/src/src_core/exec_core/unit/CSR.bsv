@@ -146,7 +146,9 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
             new_pc : tagged Invalid,
             tag : internal.tag
         };
-        if (stage1.first.epoch() == epoch_r[stage1.first().thread_id]) out_wr.enq(CsrWrite {addr: internal.addr, data: out, thread_id: internal.thread_id});
+        if (stage1.first.epoch() == epoch_r[stage1.first().thread_id]) begin
+            out_wr.enq(CsrWrite {addr: internal.addr, data: out, thread_id: internal.thread_id});
+        end
     end else // if no read was returned, the CSR does not exist
         res = Result {
             result : tagged Except INVALID_INST,
@@ -202,7 +204,9 @@ method Action current_rob_id(UInt#(rob_idx_t) idx) = rob_head._write(idx);
 // epoch handling
 method Action flush(Vector#(NUM_THREADS, Bool) flags);
     for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
-        if(flags[i]) epoch_r[i] <= epoch_r[i] + 1;
+        if(flags[i]) begin
+            epoch_r[i] <= epoch_r[i] + 1;
+        end
 endmethod
 
 interface Get write = toGet(out_wr);

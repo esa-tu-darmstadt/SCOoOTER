@@ -188,6 +188,7 @@ module mkExecCore(ExecCoreIFC);
     method Action flush(Vector#(NUM_THREADS, Bool) in);
         mem.flush(in);
         regfile_evo.flush(in);
+        csr.flush(in);
     endmethod
     interface Client read = mem.request();
     method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus = full_result_bus_vec;
