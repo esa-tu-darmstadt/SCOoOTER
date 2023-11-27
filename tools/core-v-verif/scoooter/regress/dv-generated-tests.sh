@@ -166,18 +166,18 @@ while [[ $j -lt ${#TEST_NAME[@]} ]];do
   n=0
   echo "Generate the test: ${TEST_NAME[j]}"
 #this while loop detects the failed tests from the log file and remove them
-  echo "Deleting failed tests: "
-  while read line;do
-    if [[ "$line" = "" ]];then
-      n=$((n+1))
-    fi
-    for word in $line;do
-      if [[ "$word" = "$key_word" ]];then
-        echo -e ""${TEST_NAME[j+1]}"_"$n": Failed"
+  #echo "Deleting failed tests: "
+  #while read line;do
+  #  if [[ "$line" = "" ]];then
+  #    n=$((n+1))
+  #  fi
+  #  for word in $line;do
+  #    if [[ "$word" = "$key_word" ]];then
+  #      echo -e ""${TEST_NAME[j+1]}"_"$n": Failed"
         #rm -rf vcs_results/default/vcs.d/simv.vdb/snps/coverage/db/testdata/"${TEST_NAME[j+1]}"_"$n"/
-      fi
-    done
-  done < $logfile
+  #    fi
+  #  done
+  #done < $logfile
   rm -rf out_$dd || true
   j=$((j+1))
 done
