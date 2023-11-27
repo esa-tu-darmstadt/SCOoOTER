@@ -44,9 +44,9 @@ module mkGskewed(PredIfc) provisos (
     function Bit#(BITS_PHT) hash_bwd(Bit#(BITS_PHT) val) = {truncate(val), val[0]^val[valueOf(BITS_PHT)-1]};
 
     // three different PC and BHR combinatory functions
-    function Bit#(BITS_PHT) hash1(Bit#(XLEN) addr, Bit#(BITS_BHR) hist) = hash_bwd( truncate(addr>>2) )^hash_fwd({hist,0})^{hist,0};
-    function Bit#(BITS_PHT) hash2(Bit#(XLEN) addr, Bit#(BITS_BHR) hist) = hash_bwd( truncate(addr>>2) )^hash_fwd({hist,0})^(truncate(addr>>2));
-    function Bit#(BITS_PHT) hash3(Bit#(XLEN) addr, Bit#(BITS_BHR) hist) = hash_fwd( truncate(addr>>2) )^hash_bwd({hist,0})^{hist,0};
+    function Bit#(BITS_PHT) hash1(Bit#(PCLEN) addr, Bit#(BITS_BHR) hist) = hash_bwd( truncate(addr) )^hash_fwd({hist,0})^{hist,0};
+    function Bit#(BITS_PHT) hash2(Bit#(PCLEN) addr, Bit#(BITS_BHR) hist) = hash_bwd( truncate(addr) )^hash_fwd({hist,0})^(truncate(addr));
+    function Bit#(BITS_PHT) hash3(Bit#(PCLEN) addr, Bit#(BITS_BHR) hist) = hash_fwd( truncate(addr) )^hash_bwd({hist,0})^{hist,0};
 
     // train signal inputs
     FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) trains <- mkPipelineFIFO();
@@ -120,7 +120,7 @@ module mkGskewed(PredIfc) provisos (
     // prediction happens here
     // we use EHRs to pass info betwen consecutive predictions in a single cycle
     Vector#(IFUINST, Wire#(Bool)) outbound_results <- replicateM(mkDWire(False));
-    Vector#(IFUINST, Wire#(Tuple2#(Bit#(XLEN), Bool))) reqs <- replicateM(mkWire());
+    Vector#(IFUINST, Wire#(Tuple2#(Bit#(PCLEN), Bool))) reqs <- replicateM(mkWire());
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         rule generate_prediction;
             // all previous predictions must be untaken for this one to matter
@@ -158,11 +158,11 @@ module mkGskewed(PredIfc) provisos (
     end
 
     // prediction request/response interface
-    Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN), Bool), Prediction)) pred_ifc = ?;
+    Vector#(IFUINST, Server#(Tuple2#(Bit#(PCLEN), Bool), Prediction)) pred_ifc = ?;
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         pred_ifc[i] = (interface Server;
             interface Put request;
-                method Action put(Tuple2#(Bit#(XLEN), Bool) in);
+                method Action put(Tuple2#(Bit#(PCLEN), Bool) in);
                     reqs[i] <= in;
                 endmethod
             endinterface

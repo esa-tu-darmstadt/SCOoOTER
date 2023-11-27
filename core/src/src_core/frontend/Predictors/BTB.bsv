@@ -29,12 +29,12 @@ module mkBTB(BTBIfc) provisos (
     Log#(issuewidth_pad_t, issuewidth_log_t)
 );
     // create internal storage
-    Vector#(entries_t, Reg#(Bit#(XLEN))) targets <- replicateM(mkRegU());
+    Vector#(entries_t, Reg#(Bit#(PCLEN))) targets <- replicateM(mkRegU());
     Vector#(entries_t, Reg#(Bit#(bits_tag_t))) tags <- replicateM(mkRegU());
 
     // request / response FIFOs
-    FIFO#(Bit#(XLEN)) requested_prediction <- mkPipelineFIFO();
-    FIFO#(Vector#(IFUINST, Maybe#(Bit#(XLEN)))) produced_prediction <- mkBypassFIFO();
+    FIFO#(Bit#(PCLEN)) requested_prediction <- mkPipelineFIFO();
+    FIFO#(Vector#(IFUINST, Maybe#(Bit#(PCLEN)))) produced_prediction <- mkBypassFIFO();
 
     // debug rule to show debuging info
     rule show_buffer;
@@ -47,10 +47,10 @@ module mkBTB(BTBIfc) provisos (
 
     // produce predictions based on the internally stored information
     rule calculate;
-        Bit#(inst_addr_t) base = truncate(requested_prediction.first()>>2);
+        Bit#(inst_addr_t) base = requested_prediction.first();
         requested_prediction.deq();
 
-        Vector#(IFUINST, Maybe#(Bit#(XLEN))) temp = replicate(tagged Invalid);
+        Vector#(IFUINST, Maybe#(Bit#(PCLEN))) temp = replicate(tagged Invalid);
         for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
             Bit#(BITS_BTB) idx = truncate(base+fromInteger(i));
             Bit#(bits_tag_t) tag = truncateLSB(base+fromInteger(i));
@@ -65,14 +65,14 @@ module mkBTB(BTBIfc) provisos (
     // if a branch was evaluated to be taken, store target
     interface Put train;
         method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
-            Vector#(entries_t, Bit#(XLEN)) local_targets = Vector::readVReg(targets);
+            Vector#(entries_t, Bit#(PCLEN)) local_targets = Vector::readVReg(targets);
             Vector#(entries_t, Bit#(bits_tag_t)) local_tags = Vector::readVReg(tags);
 
         
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
                     let train = in[i];
                     if (train matches tagged Valid .tv &&& tv.taken) begin
-                        Bit#(inst_addr_t) aligned_addr = truncate(tv.pc>>2);
+                        Bit#(inst_addr_t) aligned_addr = tv.pc;
                         Bit#(BITS_BTB) idx = truncate(aligned_addr);
                         Bit#(bits_tag_t) tag = truncateLSB(aligned_addr);
 

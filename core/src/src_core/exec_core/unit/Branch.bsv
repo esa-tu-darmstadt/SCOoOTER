@@ -62,7 +62,7 @@ rule calculate_target;
     let inst = in_f.first();
     dbg_print(BRU, $format("got instruction: ", fshow(inst)));
 
-    Bit#(XLEN) current_pc = inst.pc;
+    Bit#(XLEN) current_pc = {inst.pc, 2'b00};
     Bit#(XLEN) imm = inst.imm;
 
     Bit#(XLEN) target = case (inst.opc)
@@ -82,7 +82,7 @@ rule build_response_packet;
         tag:    inst.tag,
         result: (inst.exception matches tagged Valid .e ? tagged Except e :
                   target matches tagged Valid .a &&& a[1:0] != 0 ? tagged Except MISALIGNED_ADDR
-                  : tagged Result (inst.pc+4)),
+                  : tagged Result ({inst.pc+1, 2'b00})),
         new_pc: target
         };
     dbg_print(BRU, $format("produced result: ", fshow(resp)));

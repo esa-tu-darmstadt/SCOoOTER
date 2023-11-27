@@ -12,7 +12,7 @@ package RAS;
 
     // a single prediction interface
     interface RASPort;
-        method ActionValue#(Maybe#(Bit#(XLEN))) push_pop(Maybe#(Bit#(XLEN)) push, Bool pop);
+        method ActionValue#(Maybe#(Bit#(PCLEN))) push_pop(Maybe#(Bit#(PCLEN)) push, Bool pop);
         method Bit#(RAS_EXTRA) extra();
     endinterface
 
@@ -27,11 +27,11 @@ package RAS;
         Log#(RASDEPTH, rasdepth_logidx_t),
         // create types for state saving and retrieval
         Mul#(RAS_SAVE_HEAD, rasdepth_logidx_t, ras_ext_head_t),
-        Mul#(RAS_SAVE_FIRST, XLEN, ras_ext_first_t)
+        Mul#(RAS_SAVE_FIRST, PCLEN, ras_ext_first_t)
     );
         // internal storage and head pointer
         // we do not need a tail since prediction musn't be perfect
-        Vector#(RASDEPTH, Ehr#(TAdd#(1, IFUINST), Bit#(XLEN))) internal_store_v <- replicateM(mkEhr(0));
+        Vector#(RASDEPTH, Ehr#(TAdd#(1, IFUINST), Bit#(PCLEN))) internal_store_v <- replicateM(mkEhr(0));
         Ehr#(TAdd#(1, IFUINST), UInt#(rasdepth_logidx_t)) head_pointer <- mkEhr(0);
 
         // implement inc and dec functions for correct overroll
@@ -49,12 +49,12 @@ package RAS;
                         Bit#(ras_ext_first_t) f = truncate(internal_store_v[head_pointer[i+1]-1][i+1]);
                         return {h, f};
                     endmethod
-                    method ActionValue#(Maybe#(Bit#(XLEN))) push_pop(Maybe#(Bit#(XLEN)) push_in, Bool pop);
+                    method ActionValue#(Maybe#(Bit#(PCLEN))) push_pop(Maybe#(Bit#(PCLEN)) push_in, Bool pop);
                         actionvalue
                             Bool push = isValid(push_in);
                             let head = head_pointer[i];
 
-                            Maybe#(Bit#(XLEN)) ret = tagged Invalid;
+                            Maybe#(Bit#(PCLEN)) ret = tagged Invalid;
 
                             // pop off the stack
                             if(pop) begin

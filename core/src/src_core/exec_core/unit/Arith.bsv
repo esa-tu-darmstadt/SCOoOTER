@@ -31,7 +31,7 @@ rule calculate;
 
     let op1 = case (inst.opc)
         LUI: 0;
-        AUIPC: inst.pc;
+        AUIPC: {inst.pc, 2'b00};
         OPIMM, OP: inst.rs1.Operand;
     endcase;
 

@@ -80,7 +80,7 @@ FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) branch_train <- mkPipelineFI
 function Maybe#(TrainPrediction) rob_entry_to_train(RobEntry re);
     Maybe#(TrainPrediction) out;
     if (!re.branch || re.epoch != epoch[re.thread_id]) out = tagged Invalid;
-    else out = tagged Valid TrainPrediction {pc: re.pc, target: re.next_pc, taken: re.pc+4 != re.next_pc, history: re.history, miss: re.pred_pc != re.next_pc, branch: re.br, thread_id: re.thread_id};
+    else out = tagged Valid TrainPrediction {pc: truncateLSB(re.pc), target: truncateLSB(re.next_pc), taken: re.pc+4 != re.next_pc, history: re.history, miss: re.pred_pc != re.next_pc, branch: re.br, thread_id: re.thread_id};
     return out;
 endfunction
 

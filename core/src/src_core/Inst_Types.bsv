@@ -109,7 +109,7 @@ typedef enum {
 
 // Struct containing all possible fields of an instruction
 typedef struct {
-    Bit#(XLEN) pc;
+    Bit#(PCLEN) pc;
     OpCode opc;
 
     //function fields
@@ -130,7 +130,7 @@ typedef struct {
 
     UInt#(EPOCH_WIDTH) epoch;
 
-    Bit#(XLEN) predicted_pc;
+    Bit#(PCLEN) predicted_pc;
 
     Bit#(BITS_BHR) history;
 
@@ -168,7 +168,7 @@ typedef union tagged {
 // struct containing condensed amount of fields
 typedef struct {
     ExecUnitTag eut;
-    Bit#(XLEN) pc;
+    Bit#(PCLEN) pc;
     OpCode opc;
 
     //function fields for R type inst
@@ -196,7 +196,7 @@ typedef struct {
     UInt#(EPOCH_WIDTH) epoch;
 
     // log predicted successor instruction
-    Bit#(XLEN) predicted_pc;
+    Bit#(PCLEN) predicted_pc;
 
     // save history for predictors
     Bit#(BITS_BHR) history;
@@ -358,11 +358,11 @@ typedef union tagged {
 
 // instruction right after fetch with metadata
 typedef struct {
-    Bit#(32) instruction;
-    Bit#(32) pc;
+    Bit#(XLEN) instruction;
+    Bit#(PCLEN) pc;
     UInt#(EPOCH_WIDTH) epoch;
     // predictor metadata
-    Bit#(32) next_pc;
+    Bit#(PCLEN) next_pc;
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
     UInt#(TLog#(NUM_THREADS)) thread_id;
@@ -385,9 +385,9 @@ typedef struct {
 
 // training info for predictors
 typedef struct {
-    Bit#(XLEN) pc; // pc of branching inst
+    Bit#(PCLEN) pc; // pc of branching inst
     Bool taken; // was inst taken or untaken?
-    Bit#(XLEN) target; // what is the branch target
+    Bit#(PCLEN) target; // what is the branch target
     Bit#(BITS_BHR) history; // history from BHR
     Bool miss; // was the predictor wrong?
     Bool branch; // was this a br or jal?

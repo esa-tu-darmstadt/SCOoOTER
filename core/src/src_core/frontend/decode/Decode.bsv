@@ -71,7 +71,7 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(PCLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(PCLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id
     `ifdef LOG_PIPELINE
         , Bit#(XLEN) log_id
     `endif
