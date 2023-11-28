@@ -18,7 +18,7 @@ import Debug::*;
 module mkArith(FunctionalUnitIFC);
 
 // FIFOs for input and output
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 // RWire to always produce an output
 RWire#(Result) out_valid <- mkRWire();
@@ -77,7 +77,7 @@ rule propagate_result;
 endrule
 
 // in and out functions
-method Action put(Instruction inst) = in.enq(inst);
+method Action put(InstructionIssue inst) = in.enq(inst);
 method Maybe#(Result) get() = out_valid.wget();
 endmodule
 

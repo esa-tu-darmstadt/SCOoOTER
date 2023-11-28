@@ -233,6 +233,38 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
     };
 endfunction
 
+// create rob entry from instruction
+function InstructionIssue map_to_issued(Inst_Types::Instruction inst);
+    return InstructionIssue {
+        pc : inst.pc,
+        opc : inst.opc,
+
+        funct : inst.funct,
+
+        aq : inst.aq,
+        rl : inst.rl,
+
+        rs1 : ?,
+        rs2 : ?,
+
+        tag : inst.tag,
+
+        imm : inst.imm,
+
+        exception : inst.exception,
+
+        //RVFI
+        `ifdef RVFI
+            iword: inst.iword,
+        `endif
+        `ifdef LOG_PIPELINE
+            log_id: inst.log_id,
+        `endif
+
+        epoch : inst.epoch,
+        thread_id : inst.thread_id
+    };
+endfunction
 
 Wire#(Vector#(ISSUEWIDTH, RobEntry)) rob_entry_wire <- mkWire();
 
@@ -252,16 +284,16 @@ rule set_regfile_tags;
     tag_res <= RegReservations {reservations: reservations, count: possible_issue_amount};
 endrule
 
-Wire#(Vector#(NUM_RS, Maybe#(Instruction))) instructions_rs_v <- mkWire();
+Wire#(Vector#(NUM_RS, Maybe#(InstructionIssue))) instructions_rs_v <- mkWire();
 
 // finally, assemble the instructions and issue them via the issue bus
 rule assemble_instructions;
-    Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
+    Vector#(ISSUEWIDTH, InstructionIssue) instructions = Vector::map(map_to_issued, inst_in);
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
 
         //first, set up all operands
-        if(instructions[i].rs1 matches tagged Raddr .register) begin
+        if(inst_in[i].rs1 matches tagged Raddr .register) begin
             if(cross_dependant_operands[i*2].wget() matches tagged Valid .tag) begin
                 instructions[i].rs1 = tagged Tag tag;
             end else begin
@@ -272,7 +304,7 @@ rule assemble_instructions;
             end
         end
 
-        if(instructions[i].rs2 matches tagged Raddr .register) begin
+        if(inst_in[i].rs2 matches tagged Raddr .register) begin
             if(cross_dependant_operands[i*2+1].wget() matches tagged Valid .tag) begin
                 instructions[i].rs2 = tagged Tag tag;
             end else begin
@@ -290,7 +322,7 @@ rule assemble_instructions;
     //TODO: assembly of the issue bus is not yet ideal and is unregistered
 
     //then assemble issue bus
-    Vector#(NUM_RS, Maybe#(Instruction)) instructions_rs = replicate(tagged Invalid);
+    Vector#(NUM_RS, Maybe#(InstructionIssue)) instructions_rs = replicate(tagged Invalid);
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
         if(fromInteger(i) < possible_issue_amount) begin
@@ -308,7 +340,7 @@ rule assemble_instructions;
 endrule
 
 // return issue bus
-method Vector#(NUM_RS, Maybe#(Instruction)) get_issue() = instructions_rs_v;
+method Vector#(NUM_RS, Maybe#(InstructionIssue)) get_issue() = instructions_rs_v;
 // inputs from ROB
 method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = rob_free_w._write(free);
 method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = rob_idx_w._write(idx);

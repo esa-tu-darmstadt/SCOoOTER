@@ -124,16 +124,16 @@ interface IssueIFC;
     method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
 
-    method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
+    method Vector#(NUM_RS, Maybe#(InstructionIssue)) get_issue();
 endinterface
 
 interface ReservationStationPutIFC;
-    interface Put#(Instruction) instruction;
+    interface Put#(InstructionIssue) instruction;
     method Bool can_insert;
 endinterface
 
 interface ReservationStationIFC#(numeric type entries);
-    method ActionValue#(Instruction) get;
+    method ActionValue#(InstructionIssue) get;
     interface ReservationStationPutIFC in;
     (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
@@ -142,7 +142,7 @@ interface ReservationStationIFC#(numeric type entries);
 endinterface
 
 interface FunctionalUnitIFC;
-    method Action put(Instruction inst);
+    method Action put(InstructionIssue inst);
     (* always_enabled *)
     method Maybe#(Result) get();
 endinterface

@@ -63,7 +63,7 @@ module mkCSR(CsrIFC) provisos (
 Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch_r <- replicateM(mkReg(0));
 
 // in, out FIFOS and output wire
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 FIFOF#(Result) out <- mkFIFOF();
 RWire#(Result) out_valid <- mkRWire();
 Reg#(Bool) inflight_r <- mkReg(False);
@@ -187,7 +187,7 @@ endrule
 
 // FU interface
 interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst) = in.enq(inst);
+    method Action put(InstructionIssue inst) = in.enq(inst);
     method Maybe#(Result) get() = out_valid.wget();
 endinterface
 

@@ -52,7 +52,7 @@ module mkMem(MemoryUnitIFC) provisos (
 );
 
 // incoming instruction
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 
 // outgoing result
 FIFO#(Result) out <- mkPipelineFIFO();
@@ -420,7 +420,7 @@ endrule
 
 // FU iface
 interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst);
+    method Action put(InstructionIssue inst);
         dbg_print(Mem, $format("got from RS:  ", fshow(inst)));
         in.enq(inst);
     endmethod

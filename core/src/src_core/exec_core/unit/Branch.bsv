@@ -18,7 +18,7 @@ import Debug::*;
 module mkBranch(FunctionalUnitIFC);
 
 // FIFOs for input and output
-FIFO#(Instruction) in_f <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in_f <- mkPipelineFIFO();
 FIFO#(Result) out_f <- mkPipelineFIFO();
 // RWire to always produce an output
 RWire#(Result) out_valid_w <- mkRWire();
@@ -90,7 +90,7 @@ rule build_response_packet;
 endrule
 
 // input and output
-method Action put(Instruction inst) = in_f.enq(inst);
+method Action put(InstructionIssue inst) = in_f.enq(inst);
 method Maybe#(Result) get() = out_valid_w.wget();
 endmodule
 

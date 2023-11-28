@@ -156,6 +156,10 @@ typedef union tagged {
     UInt#(TLog#(ROBDEPTH)) Tag;
     Bit#(XLEN) Operand;
 } Operand deriving(Bits, Eq, FShow);
+typedef union tagged {
+    UInt#(TLog#(ROBDEPTH)) Tag;
+    Bit#(XLEN) Operand;
+} OperandRS deriving(Bits, Eq, FShow);
 
 // destination of a result
 // can be a register, memory or nothing
@@ -217,6 +221,46 @@ typedef struct {
 instance DefaultValue#(Instruction);
     defaultValue = ?;
 endinstance
+
+// struct containing condensed amount of fields
+typedef struct {
+    Bit#(PCLEN) pc;
+    OpCode opc;
+
+    //function fields for R type inst
+    OpFunction funct;
+
+    //atomic fields
+    Bool aq;
+    Bool rl;
+
+    //reg fields
+    OperandRS rs2;
+    OperandRS rs1;
+
+    //tag field for ROB
+    UInt#(TLog#(ROBDEPTH)) tag;
+
+    //immediate fields
+    Bit#(XLEN) imm;
+
+    // track an occurred exception
+    Maybe#(ExceptionType) exception;
+
+    // epoch is used to synchronize all units in case of misprediction
+    UInt#(EPOCH_WIDTH) epoch;
+
+    // multithreading
+    UInt#(TLog#(NUM_THREADS)) thread_id;
+
+    `ifdef RVFI
+        Bit#(XLEN) iword;
+    `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
+} InstructionIssue deriving(Bits, Eq, FShow);
 
 // write accesses to memory
 typedef struct {

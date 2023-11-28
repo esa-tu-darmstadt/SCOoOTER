@@ -223,7 +223,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
 
                     // write registers
                     if(instructions[i].result matches tagged Result .r) begin
-                        dbg_print(Commit, $format(fshow(instructions[i])));
+                        dbg_print(Commit, $format(fshow({instructions[i].pc, 2'b00}), " ", fshow(instructions[i])));
                         temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r, thread_id: inst_thread_id};
 
                         `ifdef RVFI

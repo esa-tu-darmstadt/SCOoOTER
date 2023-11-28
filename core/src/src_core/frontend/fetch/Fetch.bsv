@@ -58,10 +58,10 @@ module mkFetch(FetchIFC) provisos(
     //port 0 is used to advance the PC
     Vector#(NUM_THREADS, Array#(Reg#(Bit#(PCLEN)))) pc <- replicateM(mkCReg(3, fromInteger(valueof(RESETVEC)/4)));
     Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch <- replicateM(mkReg(0));
-    FIFOF#(Bit#(PCLEN)) inflight_pcs <- mkSizedFIFOF(8);
-    FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkSizedFIFOF(8);
-    FIFOF#(UInt#(3)) inflight_local_epoch <- mkSizedFIFOF(8);
-    FIFOF#(UInt#(thread_id_t)) inflight_thread <- mkSizedFIFOF(8);
+    FIFOF#(Bit#(PCLEN)) inflight_pcs <- mkSizedFIFOF(4);
+    FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkSizedFIFOF(4);
+    FIFOF#(UInt#(3)) inflight_local_epoch <- mkSizedFIFOF(4);
+    FIFOF#(UInt#(thread_id_t)) inflight_thread <- mkSizedFIFOF(4);
     Vector#(NUM_THREADS, Reg#(UInt#(3))) local_epoch <- replicateM(mkReg(0));
     //holds outbound Instruction and PC
     FIFOF#(Vector#(IFUINST, FetchedInstruction)) fetched_inst <- mkPipelineFIFOF();
