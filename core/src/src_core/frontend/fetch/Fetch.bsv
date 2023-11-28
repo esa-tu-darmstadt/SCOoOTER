@@ -248,10 +248,10 @@ module mkFetch(FetchIFC) provisos(
     endrule
 
     // redirect PC 
-    Vector#(NUM_THREADS, Wire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirected <- replicateM(mkWire());
+    Vector#(NUM_THREADS, Wire#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirected <- replicateM(mkWire());
     for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
         rule redirect_write_pc;
-            pc[i][2] <= truncateLSB(tpl_1(redirected[i]));
+            pc[i][2] <= tpl_1(redirected[i]);
             ras[i].redirect(tpl_2(redirected[i]));
         endrule
 
@@ -280,7 +280,7 @@ module mkFetch(FetchIFC) provisos(
     endinterface
 
     // redirect the fetch stage
-    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) in);
         for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) if (in[i] matches tagged Valid .v) begin
             redirected[i] <= v;
             dbg_print(Fetch, $format("Redirected: ", tpl_1(v)));

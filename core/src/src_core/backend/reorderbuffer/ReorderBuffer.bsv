@@ -237,8 +237,8 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
                     // generate the next pc field from the result
                     current_entry.next_pc = case (unpacked_result.new_pc) matches
-                        tagged Valid .v : v;
-                        tagged Invalid  : (current_entry.pc+4);
+                        tagged Valid .v : truncateLSB(v);
+                        tagged Invalid  : truncateLSB(current_entry.pc+1);
                     endcase;
 
                     // update entry

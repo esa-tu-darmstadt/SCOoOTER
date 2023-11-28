@@ -87,7 +87,7 @@ interface FetchIFC;
     interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read;
     // mispredict signal
     (* always_ready, always_enabled *)
-    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) in);
     // output
     interface GetS#(FetchResponse) instructions;
 
@@ -184,7 +184,7 @@ endinterface
 interface CommitIFC;
     method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
-    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
+    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 
     method Action trap_vectors(Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) vecs);

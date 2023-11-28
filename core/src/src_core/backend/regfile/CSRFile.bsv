@@ -123,7 +123,7 @@ module mkCSRFile(CsrFileIFC) provisos (
         for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
             if (in[i] matches tagged Valid .v) begin
                 mcause[i][valueOf(ISSUEWIDTH)] <= v.cause;
-                mepc[i][valueOf(ISSUEWIDTH)] <= v.pc;
+                mepc[i][valueOf(ISSUEWIDTH)] <= {v.pc, 2'b00};
                 // we do not provide MTVAL feature, therefore it is set to 0
                 // we still need this reg to avoid fault loops
                 if (unpack(truncate(v.cause)) == MISALIGNED_LOAD || unpack(truncate(v.cause)) == AMO_ST_MISALIGNED) mtval[i][valueOf(ISSUEWIDTH)] <= v.val;

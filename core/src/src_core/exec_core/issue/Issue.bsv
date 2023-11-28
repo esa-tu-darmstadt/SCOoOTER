@@ -209,10 +209,10 @@ endrule
 // create rob entry from instruction
 function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logidx_t) idx);
     return RobEntry {
-        pc : {inst.pc, 2'b00},
+        pc : inst.pc,
         destination : inst.rd,
         result : ((tagged Tag idx)),
-        pred_pc : {inst.predicted_pc, 2'b00},
+        pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
         next_pc : ?,
         branch : (inst.eut == BR),

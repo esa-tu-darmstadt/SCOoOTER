@@ -27,10 +27,9 @@ interface BackendIFC;
     method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
     interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
-    interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
     method Action int_flags(Vector#(NUM_THREADS, Vector#(3, Bool)) int_mask);
-    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
+    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_idx;
     (* always_enabled, always_ready *)
@@ -113,7 +112,7 @@ module mkBackend(BackendIFC) provisos (
         commit.ext_interrupt_mask(out);
     endmethod
 
-    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc() = commit.redirect_pc;
+    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc() = commit.redirect_pc;
     method UInt#(TLog#(ROBDEPTH)) current_idx = rob.current_idx();
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num) = rob.reserve(data, num);

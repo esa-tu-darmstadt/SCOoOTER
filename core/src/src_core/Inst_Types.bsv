@@ -275,7 +275,7 @@ typedef struct {
 
 // entries to reorder buffer
 typedef struct {
-    Bit#(XLEN) pc; // addr of the instruction
+    Bit#(PCLEN) pc; // addr of the instruction
     RADDR destination; // destination register
     union tagged { // result (or tag identifying producing instruction)
         UInt#(TLog#(ROBDEPTH)) Tag;
@@ -283,8 +283,8 @@ typedef struct {
         ExceptionType Except;
     } result;
     // next real pc and predicted one
-    Bit#(XLEN) next_pc;
-    Bit#(XLEN) pred_pc;
+    Bit#(PCLEN) next_pc;
+    Bit#(PCLEN) pred_pc;
     UInt#(EPOCH_WIDTH) epoch; // epoch to synchronize on misprediction
     // identify if the instruction is branching and if it is br or jal
     Bool branch;
@@ -403,7 +403,7 @@ typedef struct {
 // Trap description
 typedef struct {
     Bit#(XLEN) cause;
-    Bit#(XLEN) pc;
+    Bit#(PCLEN) pc;
     Bit#(XLEN) val;
 } TrapDescription deriving(Bits, FShow);
 
