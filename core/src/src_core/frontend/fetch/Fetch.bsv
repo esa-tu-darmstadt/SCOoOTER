@@ -56,7 +56,7 @@ module mkFetch(FetchIFC) provisos(
     //pc is a CREG, port 2 is used for fetching the next instruction
     // port 1 is used to redirect the program counter
     //port 0 is used to advance the PC
-    Vector#(NUM_THREADS, Array#(Reg#(Bit#(PCLEN)))) pc <- replicateM(mkCReg(3, fromInteger(valueof(RESETVEC))));
+    Vector#(NUM_THREADS, Array#(Reg#(Bit#(PCLEN)))) pc <- replicateM(mkCReg(3, fromInteger(valueof(RESETVEC)/4)));
     Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch <- replicateM(mkReg(0));
     FIFOF#(Bit#(PCLEN)) inflight_pcs <- mkSizedFIFOF(8);
     FIFOF#(UInt#(EPOCH_WIDTH)) inflight_epoch <- mkSizedFIFOF(8);
