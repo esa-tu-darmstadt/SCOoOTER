@@ -268,25 +268,6 @@ typedef struct {
     `endif
 } Result deriving(Bits, FShow);
 
-// Entire result struct also containing CSR and mem operations
-// the struct is bulkier than required by most units
-typedef union tagged { // writes to mem or csr
-        MemWr Mem;
-        void None;
-        CsrWriteResult Csr;
-} ResultWrite deriving(Bits, FShow);
-
-typedef struct {
-    UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
-    Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
-    ResultOrExcept result;
-    ResultWrite write;
-
-    `ifdef RVFI
-        UInt#(XLEN) mem_addr;
-    `endif
-} FullResult deriving(Bits, FShow);
-
 // reservationStation result bus
 // RSs only require a tagged result. Exceptions and mem/CSR state is superficial here
 typedef struct {

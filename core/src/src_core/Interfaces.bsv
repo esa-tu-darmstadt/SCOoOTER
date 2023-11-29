@@ -178,7 +178,7 @@ interface RobIFC;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
-    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
 endinterface
 
 interface CommitIFC;

@@ -56,7 +56,7 @@ interface ExecCoreIFC;
     interface Get#(CsrWrite) csr_write;    
 
     // result bus output
-    method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus;
+    method Vector#(NUM_FU, Maybe#(Result)) res_bus;
 endinterface
 
 `ifdef SYNTH_SEPARATE_BLOCKS
@@ -90,10 +90,6 @@ module mkExecCore(ExecCoreIFC);
     let fu_vec = append(alus, append(append(mds, brs), vec(mem.fu, csr.fu)));
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
-    // generate the result bus with memory and CSR writes
-    Maybe#(MemWr) mem_wr = tagged Invalid;
-    Maybe#(CsrWriteResult) csr_wr = tagged Invalid;
-    let full_result_bus_vec = tuple3(result_bus_vec, mem_wr, csr_wr);
 
     // generate the ReservationStations
     // ALU unit
@@ -190,7 +186,7 @@ module mkExecCore(ExecCoreIFC);
         csr.flush(in);
     endmethod
     interface Client read = mem.request();
-    method Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus = full_result_bus_vec;
+    method Vector#(NUM_FU, Maybe#(Result)) res_bus = result_bus_vec;
     interface Client csr_read = csr.csr_read;
     interface write = store_buf.write;
     interface Get csr_write = csr.write;

@@ -92,7 +92,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
     `endif
 
     // wire to distribute result bus
-    Wire#(Vector#(NUM_FU, Maybe#(FullResult))) result_bus_vec <- mkWire();
+    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
     //internal storage
     Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_v <- replicateM(mkRegU());
@@ -200,7 +200,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
     endfunction
 
     // helper function to check if a result has a certain tag
-    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(FullResult) res)
+    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res)
         = isValid(res) && res.Valid.tag == current_tag;
 
     rule bypass_cdb;
@@ -293,26 +293,8 @@ module mkReorderBuffer_in(RobIFC) provisos (
         insts_passing.deq();
         return tpl_1(insts_passing.first());
     endmethod
-    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
-        let results = tpl_1(res_bus);
-        ResultWrite mem_wr = isValid(tpl_2(res_bus)) ? tagged Mem tpl_2(res_bus).Valid : tagged None;
-        ResultWrite csr_wr = isValid(tpl_3(res_bus)) ? tagged Csr tpl_3(res_bus).Valid : tagged None;
-        Vector#(NUM_FU, ResultWrite) write_result_bus_vec = Vector::append(Vector::replicate(tagged None), vec( // zero out non-mem/csr units
-            mem_wr,
-            csr_wr
-        ));
-        function Maybe#(FullResult) parts_to_full_result(Maybe#(Result) r, ResultWrite w) = isValid(r) ? tagged Valid FullResult {
-            tag : r.Valid.tag,
-            new_pc : r.Valid.new_pc,
-            result : r.Valid.result,
-            write : w
-            `ifdef RVFI
-                , mem_addr : r.Valid.mem_addr
-            `endif
-        } : tagged Invalid;
-        let full_result_bus_vec = Vector::map(uncurry(parts_to_full_result), Vector::zip(results, write_result_bus_vec));
-
-        result_bus_vec._write(full_result_bus_vec); // connect to result bus
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
+        result_bus_vec._write(res_bus); // connect to result bus
     endmethod
     
 endmodule

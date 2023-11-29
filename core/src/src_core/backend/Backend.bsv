@@ -24,7 +24,7 @@ import BuildVector::*;
 
 // connections to external world
 interface BackendIFC;
-    method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
+    method Action res_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
     interface Server#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) read_registers;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
@@ -94,7 +94,7 @@ module mkBackend(BackendIFC) provisos (
     `endif
 
     // methods to external world
-    method Action res_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) result_bus);
+    method Action res_bus(Vector#(NUM_FU, Maybe#(Result)) result_bus);
         rob.result_bus(result_bus);
     endmethod
     interface Get train = commit.train;
