@@ -14,6 +14,7 @@ import Debug::*;
 import ClientServer::*;
 import GetPut::*;
 import Vector::*;
+import Decode::*;
 
 // struct for access width
 typedef enum {
@@ -88,7 +89,7 @@ rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r
     let inst = in.first(); in.deq();
 
     // calculate final access address
-    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
+    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + getImmS({inst.remaining_inst, ?}));
     // AXI addresses entire word, therefore remove lower two bits
     UInt#(XLEN) axi_addr = final_addr & 'hfffffffc;
 
@@ -177,7 +178,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
     // get instruction, do not deq here as we do this only on success for ROB request
     let inst = in.first();
     // calculate address to which the store is pending
-    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
+    let imm = (inst.opc == AMO ? 0 : getImmI({inst.remaining_inst, ?}));
+    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + imm);
     // send a request to ROB (this will be acknowledged in the same clock cycle)
     request_ROB <= inst.tag;
 
@@ -204,8 +206,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
         amo: (inst.opc == AMO),
         amo_t: op_function_to_amo_type(inst.funct),
         amo_modifier: inst.rs2.Operand,
-        aq: inst.aq,
-        rl: inst.rl,
+        aq: unpack(inst.remaining_inst[19]),
+        rl: unpack(inst.remaining_inst[18]),
         mispredicted: False,
         thread_id: inst.thread_id
     };

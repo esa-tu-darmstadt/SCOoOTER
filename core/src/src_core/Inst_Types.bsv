@@ -116,21 +116,11 @@ typedef struct {
     Bit#(7) funct7;
     Bit#(3) funct3;
 
-    //reg fields
-    RADDR rs2;
-    RADDR rs1;
-    RADDR rd;
-
-    //immediate fields
-    Bit#(XLEN) immI;
-    Bit#(XLEN) immS;
-    Bit#(XLEN) immB;
-    Bit#(XLEN) immU;
-    Bit#(XLEN) immJ;
-
     UInt#(EPOCH_WIDTH) epoch;
 
     Bit#(PCLEN) predicted_pc;
+
+    Bit#(25) remaining_inst;
 
     Bit#(BITS_BHR) history;
 
@@ -178,23 +168,15 @@ typedef struct {
     //function fields for R type inst
     OpFunction funct;
 
-    //atomic fields
-    Bool aq;
-    Bool rl;
+    Bit#(25) remaining_inst;
 
     //reg fields
-    Operand rs2;
-    Operand rs1;
-    RADDR rd;
+    Bool has_rs2;
+    Bool has_rs1;
+    Bool has_rd;
 
-    //tag field for ROB
-    UInt#(TLog#(ROBDEPTH)) tag;
-
-    //immediate fields
-    Bit#(XLEN) imm;
-
-    // track an occurred exception
-    Maybe#(ExceptionType) exception;
+    // track an occurred exception (can only be INVALID_INST, hence Bool)
+    Bool exception;
 
     // epoch is used to synchronize all units in case of misprediction
     UInt#(EPOCH_WIDTH) epoch;
@@ -230,19 +212,12 @@ typedef struct {
     //function fields for R type inst
     OpFunction funct;
 
-    //atomic fields
-    Bool aq;
-    Bool rl;
-
     //reg fields
     OperandRS rs2;
     OperandRS rs1;
 
     //tag field for ROB
     UInt#(TLog#(ROBDEPTH)) tag;
-
-    //immediate fields
-    Bit#(XLEN) imm;
 
     // track an occurred exception
     Maybe#(ExceptionType) exception;
@@ -252,6 +227,8 @@ typedef struct {
 
     // multithreading
     UInt#(TLog#(NUM_THREADS)) thread_id;
+
+    Bit#(25) remaining_inst;
 
     `ifdef RVFI
         Bit#(XLEN) iword;

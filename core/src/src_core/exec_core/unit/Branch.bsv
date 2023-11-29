@@ -11,6 +11,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import RWire::*;
 import Debug::*;
+import Decode::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -63,11 +64,11 @@ rule calculate_target;
     dbg_print(BRU, $format("got instruction: ", fshow(inst)));
 
     Bit#(XLEN) current_pc = {inst.pc, 2'b00};
-    Bit#(XLEN) imm = inst.imm;
 
     Bit#(XLEN) target = case (inst.opc)
-        JAL, BRANCH:   (current_pc + imm);
-        JALR:          ((inst.rs1.Operand + imm) & 'hfffffffe);
+        BRANCH:        (current_pc + getImmB({inst.remaining_inst, ?}));
+        JAL:           (current_pc + getImmJ({inst.remaining_inst, ?}));
+        JALR:          ((inst.rs1.Operand + getImmI({inst.remaining_inst, ?})) & 'hfffffffe);
     endcase;
 
     target_w <= target;

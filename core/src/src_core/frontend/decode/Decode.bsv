@@ -83,15 +83,7 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(PCLEN) pc, UInt#(E
         funct7 : getFunct7(inst),
         funct3 : getFunct3(inst),
 
-        rs1 : getRs1(inst),
-        rs2 : getRs2(inst),
-        rd : getRd(inst),
-
-        immI : getImmI(inst),
-        immS : getImmS(inst),
-        immB : getImmB(inst),
-        immU : getImmU(inst),
-        immJ : getImmJ(inst),
+        remaining_inst : truncateLSB(inst),
 
         epoch : epoch,
 
@@ -125,7 +117,7 @@ function Action print_inst(t inst) provisos(
     endaction);
 endfunction
 
-function Bit#(XLEN) select_imm(InstructionPredecode inst);
+/*function Bit#(XLEN) select_imm(InstructionPredecode inst);
     return case(inst.opc)
         //SYSTEM uses U type as we must know which register is src
         LUI, AUIPC, SYSTEM                 : inst.immU;
@@ -136,26 +128,26 @@ function Bit#(XLEN) select_imm(InstructionPredecode inst);
 
         default : ?;
     endcase;
-endfunction
+endfunction*/
 
-function Operand select_rs1(InstructionPredecode inst);
+function Bool select_rs1(InstructionPredecode inst);
     return case(inst.opc)
-        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO, SYSTEM : tagged Raddr inst.rs1;
-        default : tagged Operand 0;
+        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO, SYSTEM : True;
+        default : False;
     endcase;
 endfunction
 
-function Operand select_rs2(InstructionPredecode inst);
+function Bool select_rs2(InstructionPredecode inst);
     return case(inst.opc)
-        OP, BRANCH, STORE, AMO : tagged Raddr inst.rs2;
-        default : tagged Operand 0;
+        OP, BRANCH, STORE, AMO : True;
+        default : False;
     endcase;
 endfunction
 
-function RADDR select_rd(InstructionPredecode inst);
+function Bool select_rd(InstructionPredecode inst);
     return case(inst.opc)
-        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO, SYSTEM : inst.rd;
-        default : 0;
+        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO, SYSTEM : True;
+        default : False;
     endcase;
 endfunction
 
@@ -257,7 +249,7 @@ function OpFunction getFunct(InstructionPredecode inst);
             default: INVALID;
             endcase
         SYSTEM : case(inst.funct3)
-            'b000: case(inst.immI)
+            'b000: case(inst.remaining_inst[24:13])
                 0: ECALL;
                 1: EBREAK;
                 'b001100000010: RET;
@@ -306,22 +298,16 @@ function Instruction decode(InstructionPredecode inst);
         //function fields for R-type instructions, garbage for other inst
         funct : getFunct(inst),
 
-        //Atomic flags, only for A inst, garbage otherwise
-        aq : unpack(inst.funct7[1]),
-        rl : unpack(inst.funct7[0]),
-
         //registers, contains 0 if unused (or 0 is specified in inst)
-        rs1 : select_rs1(inst),
-        rs2 : select_rs2(inst),
-        rd  : select_rd(inst),
+        has_rs1 : select_rs1(inst),
+        has_rs2 : select_rs2(inst),
+        has_rd  : select_rd(inst),
 
         //set exception INVALID_INST if decode error
-        exception : (getFunct(inst) == INVALID ? tagged Valid INVALID_INST : tagged Invalid),
+        exception : (getFunct(inst) == INVALID),
 
-        //immediate value, garbage if no immediate is used
-        imm : select_imm(inst),
+        remaining_inst : inst.remaining_inst,
 
-        tag : ?, //will be set in issue logic
         epoch : inst.epoch,
 
         predicted_pc : inst.predicted_pc,

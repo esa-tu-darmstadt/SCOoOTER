@@ -11,6 +11,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import RWire::*;
 import Debug::*;
+import Decode::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -36,7 +37,8 @@ rule calculate;
     endcase;
 
     let op2 = case (inst.opc)
-        LUI, AUIPC, OPIMM: inst.imm;
+        LUI, AUIPC: getImmU({inst.remaining_inst, ?});
+        OPIMM: getImmI({inst.remaining_inst, ?});
         OP: inst.rs2.Operand;
     endcase;
 

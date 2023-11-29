@@ -86,8 +86,8 @@ rule get_request if ((!inflight_r) && (valueOf(ROBDEPTH) == 1 || in.first().tag 
 
     inflight_r <= True;
 
-    Bit#(12) csr_addr = inst.imm[31:20];
-    Bit#(5) csr_imm = inst.imm[19:15];
+    Bit#(12) csr_addr = truncateLSB(inst.remaining_inst);
+    Bit#(5) csr_imm = inst.remaining_inst[12:8];
 
     dbg_print(CSR, $format("%x", inst.pc));
 

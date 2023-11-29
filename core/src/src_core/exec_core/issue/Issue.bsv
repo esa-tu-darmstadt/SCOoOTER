@@ -89,8 +89,9 @@ Wire#(Vector#(ISSUEWIDTH, UInt#(rs_count_log_t))) needed_rs_idx_w <- mkWire();
 Wire#(Vector#(TMul#(2, ISSUEWIDTH), RegRead)) req_addrs <- mkWire();
 
 // helper function to extract destination RADDR from an instruction
-function RADDR inst_to_raddr(Instruction inst) = (inst.rd);
-
+function RADDR inst_to_raddr(Instruction inst) = (inst.has_rd ? truncate(inst.remaining_inst) : 0);
+function RADDR inst_to_rs1(Instruction inst) = (inst.remaining_inst[12:8]);
+function RADDR inst_to_rs2(Instruction inst) = (inst.remaining_inst[17:13]);
 
 // REAL IMPLEMENTATION
 // we use a lot of wires here to separate the distinct steps of issuing
@@ -102,8 +103,8 @@ rule gather_operands;
     Vector#(TMul#(2, ISSUEWIDTH), RegRead) request_addrs;
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-        request_addrs[2*i].addr = inst_in[i].rs1.Raddr;
-        request_addrs[2*i+1].addr = inst_in[i].rs2.Raddr;
+        request_addrs[2*i].addr = inst_to_rs1(inst_in[i]);
+        request_addrs[2*i+1].addr = inst_to_rs2(inst_in[i]);
         request_addrs[2*i].thread_id = inst_in[i].thread_id;
         request_addrs[2*i+1].thread_id = inst_in[i].thread_id;
     end
@@ -126,13 +127,13 @@ rule resolve_cross_dependencies;
         for(Integer j = i; j > 0; j = j-1) begin
 
             // extract rd and epoch of inst to compare
-            let rd_addr = inst_in[j-1].rd;
+            let rd_addr = inst_to_raddr(inst_in[j-1]);
             let epoch = inst_in[j-1].epoch;
             let thread_id = inst_in[j-1].thread_id;
             //check rs1
-            if( rd_addr != 0 &&&
-                inst_in[i].rs1 matches tagged Raddr .rs1_addr &&&
-                rd_addr == rs1_addr &&& !found_rs1 &&&
+            if( rd_addr != 0 &&
+                inst_in[i].has_rs1 &&
+                rd_addr == inst_to_rs1(inst_in[i]) && !found_rs1 &&
                 inst_in[i].epoch == epoch && 
                 inst_in[i].thread_id == thread_id)
                 begin
@@ -140,9 +141,9 @@ rule resolve_cross_dependencies;
                     found_rs1 = True;
                 end
             //check rs2
-            if( rd_addr != 0 &&&
-                inst_in[i].rs2 matches tagged Raddr .rs2_addr &&&
-                rd_addr == rs2_addr &&& !found_rs2 &&&
+            if( rd_addr != 0 &&
+                inst_in[i].has_rs2 &&
+                rd_addr == inst_to_rs2(inst_in[i]) &&& !found_rs2 &&&
                 inst_in[i].epoch == epoch &&
                 inst_in[i].thread_id == thread_id)
                 begin
@@ -210,7 +211,7 @@ endrule
 function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logidx_t) idx);
     return RobEntry {
         pc : inst.pc,
-        destination : inst.rd,
+        destination : inst_to_raddr(inst),
         result : ((tagged Tag idx)),
         pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
@@ -233,7 +234,7 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
     };
 endfunction
 
-// create rob entry from instruction
+// create issue entry from instruction
 function InstructionIssue map_to_issued(Inst_Types::Instruction inst);
     return InstructionIssue {
         pc : inst.pc,
@@ -241,17 +242,14 @@ function InstructionIssue map_to_issued(Inst_Types::Instruction inst);
 
         funct : inst.funct,
 
-        aq : inst.aq,
-        rl : inst.rl,
-
         rs1 : ?,
         rs2 : ?,
 
-        tag : inst.tag,
+        tag : ?,
 
-        imm : inst.imm,
+        remaining_inst: inst.remaining_inst,
 
-        exception : inst.exception,
+        exception : (inst.exception ? tagged Valid INVALID_INST : tagged Invalid),
 
         //RVFI
         `ifdef RVFI
@@ -278,7 +276,7 @@ Wire#(RegReservations) tag_res <- mkWire();
 
 // set tags in the speculative register file
 function RegReservation inst_to_register_reservation(Instruction ins, UInt#(size_logidx_t) idx) 
-    = RegReservation { addr : ins.rd, tag: idx, epoch: ins.epoch, thread_id: ins.thread_id };
+    = RegReservation { addr : inst_to_raddr(ins), tag: idx, epoch: ins.epoch, thread_id: ins.thread_id };
 rule set_regfile_tags;
     Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_register_reservation), Vector::zip(inst_in, rob_entry_idx_v));
     tag_res <= RegReservations {reservations: reservations, count: possible_issue_amount};
@@ -293,7 +291,7 @@ rule assemble_instructions;
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
 
         //first, set up all operands
-        if(inst_in[i].rs1 matches tagged Raddr .register) begin
+        if(inst_in[i].has_rs1) begin
             if(cross_dependant_operands[i*2].wget() matches tagged Valid .tag) begin
                 instructions[i].rs1 = tagged Tag tag;
             end else begin
@@ -304,7 +302,7 @@ rule assemble_instructions;
             end
         end
 
-        if(inst_in[i].rs2 matches tagged Raddr .register) begin
+        if(inst_in[i].has_rs2) begin
             if(cross_dependant_operands[i*2+1].wget() matches tagged Valid .tag) begin
                 instructions[i].rs2 = tagged Tag tag;
             end else begin
