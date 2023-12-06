@@ -22,7 +22,9 @@ import Ehr::*;
     } Rd_or_amo_req deriving(Bits, Eq, FShow);
 
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkMemoryArbiter(MemoryArbiterIFC) provisos (
     Log#(NUM_CPU, idx_cpu_t),
     Mul#(NUM_CPU, 2, num_by_two_cpu_t),

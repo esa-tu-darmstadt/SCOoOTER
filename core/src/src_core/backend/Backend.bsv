@@ -60,7 +60,7 @@ module mkBackend(BackendIFC) provisos (
     let csrf <- mkCSRFile();
     RobIFC rob <- mkReorderBuffer();
     CommitIFC commit <- mkCommit();
-    RegFileIFC regfile_arch <- mkRegFile();
+    RegFileIFC regfile_arch <- valueOf(REGFILE_LATCH_BASED) == 0 ? mkRegFile() : mkRegFileAriane();
 
     // reg writing
     rule connect_commit_regs;

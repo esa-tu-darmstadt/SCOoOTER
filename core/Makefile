@@ -47,10 +47,13 @@ endif
 EXTRA_FLAGS= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
 EXTRA_FLAGS+= -show-schedule -D "BSV_TIMESCALE=1ns/1ps"
 EXTRA_FLAGS+= -D $(TB) +RTS -K1G -RTS -D BSV_ASYNC_RESET -D TOHOST=$(TOHOST)
+
 ifeq ($(SOC),)
-	EXTRA_FLAGS+=  -keep-fires -D BSV_NO_INITIAL_BLOCKS
+	ifeq ($(SIM_TYPE),)
+		EXTRA_FLAGS+=  -keep-fires -D BSV_NO_INITIAL_BLOCKS
+	endif
 else
-	EXTRA_FLAGS+= -D SOC
+		EXTRA_FLAGS+= -D SOC
 endif
 ifeq ($(IP),1)
 EXTRA_FLAGS+= -verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" " -D BSV_NO_INITIAL_BLOCKS
@@ -72,6 +75,8 @@ endif
 ifeq ($(RVFI),1)
 	EXTRA_FLAGS+=-D RVFI
 endif
+
+$(shell cp src/BVI/*.v build/verilog)
 
 ###
 # User configuration

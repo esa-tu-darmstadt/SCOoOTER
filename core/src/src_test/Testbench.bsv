@@ -18,8 +18,8 @@ package Testbench;
         `endif
 
         `ifdef CUSTOM_TB
-            let testCustom <- mkTestProgram("../../testPrograms/custom/test_multi_core_amoxor/bsv/test_multi_core_amoxor" + "_" + select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
-		        "../../testPrograms/custom/test_multi_core_amoxor/bsv/test_multi_core_amoxor" + "-data_32.bsv", 
+            let testCustom <- mkTestProgram("../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-xor" + "_" + select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
+		        "../../testPrograms/isa/32ui/bsv_hex/rv32ui-p-xor" + "-data_32.bsv", 
                 "custom", 
                 'hffffffff, 
                 'hffffffff);

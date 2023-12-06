@@ -1,34 +1,39 @@
 package Config;
 
-typedef 1 IFUINST;
-typedef 1 ISSUEWIDTH;
+typedef 2 IFUINST;
+typedef 2 ISSUEWIDTH;
 
-typedef 'h0 RESETVEC;
+typedef 0 RESETVEC;
 typedef 'h10000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
-typedef 1 ROBDEPTH;
+typedef 8 ROBDEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)
-typedef 2 INST_WINDOW;
+typedef 16 INST_WINDOW;
 
 // 0: single cycle
 // 1: multi cycle
 // 2: pipelined
-typedef 0 MUL_DIV_STRATEGY;
+typedef 1 MUL_DIV_STRATEGY;
 
 // CSR and Mem units are always one
-typedef 1 NUM_ALU;
+typedef 2 NUM_ALU;
 typedef 1 NUM_MULDIV;
 typedef 1 NUM_BR;
 
+// Regfile as Latches
+typedef 1 REGFILE_LATCH_BASED;
+typedef 1 REGEVO_LATCH_BASED;
+typedef 1 REGCSR_LATCH_BASED;
+
 // rs depths
-typedef 2 RS_DEPTH_ALU;
-typedef 2 RS_DEPTH_MEM;
-typedef 2 RS_DEPTH_CSR;
-typedef 2 RS_DEPTH_MULDIV;
-typedef 2 RS_DEPTH_BR;
+typedef 4 RS_DEPTH_ALU;
+typedef 4 RS_DEPTH_MEM;
+typedef 4 RS_DEPTH_CSR;
+typedef 4 RS_DEPTH_MULDIV;
+typedef 4 RS_DEPTH_BR;
 
 // bus buffering
 typedef 0 RS_LATCH_BUS;
@@ -40,10 +45,10 @@ typedef 0 RS_LATCH_INPUT;
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 1 BRANCHPRED;
+typedef 2 BRANCHPRED;
 
-typedef 4 BITS_BTB;
-typedef 4 BITS_PHT;
+typedef 5 BITS_BTB;
+typedef 5 BITS_PHT;
 
 typedef 0 BITS_BHR;
 

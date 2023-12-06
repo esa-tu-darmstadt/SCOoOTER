@@ -14,6 +14,7 @@ import ClientServer::*;
 import FIFO::*;
 import SpecialFIFOs::*;
 import Debug::*;
+import ArianeEhr::*;
 
 module mkCSRFile(CsrFileIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
@@ -21,17 +22,20 @@ module mkCSRFile(CsrFileIFC) provisos (
     Log#(NUM_THREADS, thread_idx_t)
 );
 
+    // select latch or flip-flop based implementation
+    let ehrModal = (valueOf(REGCSR_LATCH_BASED) == 0 ? mkEhr : mkArianeEhr);
+
     // register implementations
     // one port per issue slot and one extra port for updates from hw
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mcause <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mie <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) misa <- replicateM(mkEhr( { 2'h1, 'b1000100000001 } )); //upper two bits: 32 Bit XLEN, lower bits: ISA ext in alphabetic
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtvec <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mepc <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mstatus <- replicateM(mkEhr( (3<<11)|(1<<7) ));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mscratch <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtval <- replicateM(mkEhr(0));
-    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mhartid <- replicateM(mkEhr(?));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mcause <- replicateM(ehrModal(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mie <- replicateM(ehrModal(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) misa <- replicateM(ehrModal( { 2'h1, 'b1000100000001 } )); //upper two bits: 32 Bit XLEN, lower bits: ISA ext in alphabetic
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtvec <- replicateM(ehrModal(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mepc <- replicateM(ehrModal(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mstatus <- replicateM(ehrModal( (3<<11)|(1<<7) ));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mscratch <- replicateM(ehrModal(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mtval <- replicateM(ehrModal(0));
+    Vector#(NUM_THREADS, Ehr#(issuewidth_pad_t, Bit#(XLEN))) mhartid <- replicateM(ehrModal(?));
 
     // buffer for read responses
     Reg#(Maybe#(Bit#(XLEN))) read_resp <- mkRegU();

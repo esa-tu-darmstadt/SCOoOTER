@@ -81,7 +81,7 @@ package SocTop;
         rule ifuresp;
             read_pend_imem.deq();
             let r <- imem.portA.response.get();
-            dut.imem_r.response.put(tuple2(r, 0));
+            dut.imem_r.response.put(tuple2(extend(r), 0));
         endrule
 
         // DATA MEMORY

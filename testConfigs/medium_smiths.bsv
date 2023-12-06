@@ -23,6 +23,11 @@ typedef 2 NUM_ALU;
 typedef 1 NUM_MULDIV;
 typedef 1 NUM_BR;
 
+// Regfile as Latches
+typedef 0 REGFILE_LATCH_BASED;
+typedef 0 REGEVO_LATCH_BASED;
+typedef 0 REGCSR_LATCH_BASED;
+
 // rs depths
 typedef 4 RS_DEPTH_ALU;
 typedef 4 RS_DEPTH_MEM;

@@ -21,7 +21,9 @@ import Ehr::*;
     } Rd_req deriving(Bits, Eq, FShow);
 
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkInstructionArbiter(InstArbiterIFC) provisos (
     Log#(NUM_CPU, idx_cpu_t),
     Mul#(NUM_CPU, 8, num_by_two_cpu_t),
