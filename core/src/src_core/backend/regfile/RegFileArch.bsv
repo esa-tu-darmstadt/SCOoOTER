@@ -16,7 +16,7 @@ import ArianeRegFile::*;
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkRegFile(RegFileIFC) provisos (
+module mkRegFileAriane(RegFileIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t)
 );
 
@@ -87,7 +87,7 @@ endmodule
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkRegFileAriane(RegFileIFC) provisos (
+module mkRegFile(RegFileIFC) provisos (
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t)
 );
 
