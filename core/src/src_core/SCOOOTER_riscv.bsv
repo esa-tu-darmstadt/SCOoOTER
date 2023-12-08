@@ -38,9 +38,7 @@ import Backend::*;
 import ShiftBuffer::*;
 import ArianeRegFile::*;
 
-`ifdef SYNTH_SEPARATE
-    (* synthesize *)
-`endif
+(* synthesize *)
 module mkSCOOOTER_riscv(Top) provisos(
         Mul#(XLEN, IFUINST, ifuwidth),
         Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
