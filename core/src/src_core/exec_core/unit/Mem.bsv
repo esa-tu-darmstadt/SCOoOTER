@@ -414,6 +414,12 @@ endrule
 
 // generate output (and define in which urgency results shall be propagated)
 (* preempts="calculate_store, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
+(* preempts="calculate_store_flush, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
+(* mutually_exclusive = "flush_invalid_axi_rq, check_rob_response" *)
+(* mutually_exclusive = "collect_result_mispredict, check_rob_response" *)
+(* mutually_exclusive = "collect_result_read, check_rob_response" *)
+(* mutually_exclusive = "flush_invalid_fwds, check_rob_response" *)
+
 rule propagate_result;
     out.deq();
     let res = out.first();
