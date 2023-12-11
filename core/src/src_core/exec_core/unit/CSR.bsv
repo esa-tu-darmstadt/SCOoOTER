@@ -49,6 +49,7 @@ typedef struct {
     Bit#(12) addr;
     UInt#(EPOCH_WIDTH) epoch;
     UInt#(TLog#(NUM_THREADS)) thread_id;
+    Bool is_readonly_inst;
 } Internal_struct deriving(Bits, FShow);
 
 `ifdef SYNTH_SEPARATE
@@ -117,6 +118,7 @@ rule get_request if ((!inflight_r) && (valueOf(ROBDEPTH) == 1 || in.first().tag 
                 ECALL:   ECALL;
                 EBREAK:  EBREAK;
             endcase,
+        is_readonly_inst: (inst.remaining_inst[12:8] == 5'h0),
         operand: op,
         addr: csr_addr,
         epoch: inst.epoch,
@@ -133,6 +135,10 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
 
     Result res = ?;
 
+    Bool is_readonly_csr = 2'b11 == truncateLSB(internal.addr);
+    Bool is_readonly_inst = (internal.is_readonly_inst) && (internal.op == RS || internal.op == RSI || internal.op == RC || internal.op == RCI);
+    Bool is_invalid_inst = is_readonly_csr && !is_readonly_inst;
+
     // return read data and csr writing request
     if(csr_data matches tagged Valid .data) begin
         let out = case (internal.op)
@@ -142,11 +148,11 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
         endcase;
 
         res = Result {
-            result : tagged Result data,
+            result : (is_invalid_inst ? tagged Except INVALID_INST : tagged Result data),
             new_pc : tagged Invalid,
             tag : internal.tag
         };
-        if (stage1.first.epoch() == epoch_r[stage1.first().thread_id]) begin
+        if (!is_invalid_inst && stage1.first.epoch() == epoch_r[stage1.first().thread_id]) begin
             out_wr.enq(CsrWrite {addr: internal.addr, data: out, thread_id: internal.thread_id});
         end
     end else // if no read was returned, the CSR does not exist
