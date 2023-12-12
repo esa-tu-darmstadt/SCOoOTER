@@ -11,6 +11,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import RWire::*;
 import Debug::*;
+import Decode::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -18,7 +19,7 @@ import Debug::*;
 module mkBranch(FunctionalUnitIFC);
 
 // FIFOs for input and output
-FIFO#(Instruction) in_f <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in_f <- mkPipelineFIFO();
 FIFO#(Result) out_f <- mkPipelineFIFO();
 // RWire to always produce an output
 RWire#(Result) out_valid_w <- mkRWire();
@@ -62,12 +63,12 @@ rule calculate_target;
     let inst = in_f.first();
     dbg_print(BRU, $format("got instruction: ", fshow(inst)));
 
-    Bit#(XLEN) current_pc = inst.pc;
-    Bit#(XLEN) imm = inst.imm;
+    Bit#(XLEN) current_pc = {inst.pc, 2'b00};
 
     Bit#(XLEN) target = case (inst.opc)
-        JAL, BRANCH:   (current_pc + imm);
-        JALR:          ((inst.rs1.Operand + imm) & 'hfffffffe);
+        BRANCH:        (current_pc + getImmB({inst.remaining_inst, ?}));
+        JAL:           (current_pc + getImmJ({inst.remaining_inst, ?}));
+        JALR:          ((inst.rs1.Operand + getImmI({inst.remaining_inst, ?})) & 'hfffffffe);
     endcase;
 
     target_w <= target;
@@ -82,7 +83,7 @@ rule build_response_packet;
         tag:    inst.tag,
         result: (inst.exception matches tagged Valid .e ? tagged Except e :
                   target matches tagged Valid .a &&& a[1:0] != 0 ? tagged Except MISALIGNED_ADDR
-                  : tagged Result (inst.pc+4)),
+                  : tagged Result ({inst.pc+1, 2'b00})),
         new_pc: target
         };
     dbg_print(BRU, $format("produced result: ", fshow(resp)));
@@ -90,7 +91,7 @@ rule build_response_packet;
 endrule
 
 // input and output
-method Action put(Instruction inst) = in_f.enq(inst);
+method Action put(InstructionIssue inst) = in_f.enq(inst);
 method Maybe#(Result) get() = out_valid_w.wget();
 endmodule
 

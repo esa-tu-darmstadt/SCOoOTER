@@ -23,6 +23,7 @@ before_script:
   - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.esa.informatik.tu-darmstadt.de/".insteadOf "https://gitlab.esa.informatik.tu-darmstadt.de/"
   - git submodule deinit -f .
   - git submodule sync
+  - git rm core/libraries/BlueSRAM -f
   - git submodule update --init --recursive
 
 deps:

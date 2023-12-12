@@ -38,7 +38,7 @@ module mkSmiths(PredIfc) provisos (
     endrule
 
     // function to truncate PC
-    function Bit#(BITS_PHT) pc_to_pht_idx(Bit#(XLEN) pc) = truncate(pc>>2);
+    function Bit#(BITS_PHT) pc_to_pht_idx(Bit#(PCLEN) pc) = truncate(pc);
     // check if a train entry matches an index
     function Bool matches_idx(Bit#(BITS_PHT) test_idx, Maybe#(TrainPrediction) train) = (train matches tagged Valid .tv &&& pc_to_pht_idx(tv.pc) == test_idx ? True : False);
     // incoming training signals
@@ -64,12 +64,12 @@ module mkSmiths(PredIfc) provisos (
     endrule
 
     // build the prediction interface
-    Vector#(IFUINST, Wire#(Bit#(XLEN))) reqs <- replicateM(mkWire());
-    Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN),Bool), Prediction)) pred_ifc = ?;
+    Vector#(IFUINST, Wire#(Bit#(PCLEN))) reqs <- replicateM(mkWire());
+    Vector#(IFUINST, Server#(Tuple2#(Bit#(PCLEN),Bool), Prediction)) pred_ifc = ?;
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         pred_ifc[i] = (interface Server;
             interface Put request;
-                method Action put(Tuple2#(Bit#(XLEN),Bool) in);
+                method Action put(Tuple2#(Bit#(PCLEN),Bool) in);
                     reqs[i] <= tpl_1(in);
                 endmethod
             endinterface

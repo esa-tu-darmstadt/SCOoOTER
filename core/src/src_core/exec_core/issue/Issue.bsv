@@ -53,9 +53,12 @@ module mkIssue(IssueIFC) provisos(
     Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
     rule count_clk; clk_ctr <= clk_ctr + 1; endrule
     Reg#(File) out_log <- mkRegU();
+    Reg#(File) out_log_ko <- mkRegU();
     rule open if (clk_ctr == 0);
         File out_log_l <- $fopen("scoooter.log", "a");
         out_log <= out_log_l;
+        File out_log_kol <- $fopen("konata.log", "a");
+        out_log_ko <= out_log_kol;
     endrule
 `endif
 
@@ -86,8 +89,9 @@ Wire#(Vector#(ISSUEWIDTH, UInt#(rs_count_log_t))) needed_rs_idx_w <- mkWire();
 Wire#(Vector#(TMul#(2, ISSUEWIDTH), RegRead)) req_addrs <- mkWire();
 
 // helper function to extract destination RADDR from an instruction
-function RADDR inst_to_raddr(Instruction inst) = (inst.rd);
-
+function RADDR inst_to_raddr(Instruction inst) = (inst.has_rd ? truncate(inst.remaining_inst) : 0);
+function RADDR inst_to_rs1(Instruction inst) = (inst.remaining_inst[12:8]);
+function RADDR inst_to_rs2(Instruction inst) = (inst.remaining_inst[17:13]);
 
 // REAL IMPLEMENTATION
 // we use a lot of wires here to separate the distinct steps of issuing
@@ -99,8 +103,8 @@ rule gather_operands;
     Vector#(TMul#(2, ISSUEWIDTH), RegRead) request_addrs;
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-        request_addrs[2*i].addr = inst_in[i].rs1.Raddr;
-        request_addrs[2*i+1].addr = inst_in[i].rs2.Raddr;
+        request_addrs[2*i].addr = inst_to_rs1(inst_in[i]);
+        request_addrs[2*i+1].addr = inst_to_rs2(inst_in[i]);
         request_addrs[2*i].thread_id = inst_in[i].thread_id;
         request_addrs[2*i+1].thread_id = inst_in[i].thread_id;
     end
@@ -123,13 +127,13 @@ rule resolve_cross_dependencies;
         for(Integer j = i; j > 0; j = j-1) begin
 
             // extract rd and epoch of inst to compare
-            let rd_addr = inst_in[j-1].rd;
+            let rd_addr = inst_to_raddr(inst_in[j-1]);
             let epoch = inst_in[j-1].epoch;
             let thread_id = inst_in[j-1].thread_id;
             //check rs1
-            if( rd_addr != 0 &&&
-                inst_in[i].rs1 matches tagged Raddr .rs1_addr &&&
-                rd_addr == rs1_addr &&& !found_rs1 &&&
+            if( rd_addr != 0 &&
+                inst_in[i].has_rs1 &&
+                rd_addr == inst_to_rs1(inst_in[i]) && !found_rs1 &&
                 inst_in[i].epoch == epoch && 
                 inst_in[i].thread_id == thread_id)
                 begin
@@ -137,9 +141,9 @@ rule resolve_cross_dependencies;
                     found_rs1 = True;
                 end
             //check rs2
-            if( rd_addr != 0 &&&
-                inst_in[i].rs2 matches tagged Raddr .rs2_addr &&&
-                rd_addr == rs2_addr &&& !found_rs2 &&&
+            if( rd_addr != 0 &&
+                inst_in[i].has_rs2 &&
+                rd_addr == inst_to_rs2(inst_in[i]) &&& !found_rs2 &&&
                 inst_in[i].epoch == epoch &&
                 inst_in[i].thread_id == thread_id)
                 begin
@@ -207,12 +211,11 @@ endrule
 function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logidx_t) idx);
     return RobEntry {
         pc : inst.pc,
-        destination : inst.rd,
+        destination : inst_to_raddr(inst),
         result : ((tagged Tag idx)),
         pred_pc : inst.predicted_pc,
         epoch : inst.epoch,
         next_pc : ?,
-        write : (inst.opc == STORE || inst.opc == AMO ? tagged Pending_mem : tagged None),
         branch : (inst.eut == BR),
         br : (inst.opc == BRANCH),
         history : inst.history,
@@ -225,9 +228,41 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
             , iword: inst.iword,
               opc: inst.opc
         `endif
+        `ifdef LOG_PIPELINE
+            , log_id: inst.log_id
+        `endif
     };
 endfunction
 
+// create issue entry from instruction
+function InstructionIssue map_to_issued(Inst_Types::Instruction inst);
+    return InstructionIssue {
+        pc : inst.pc,
+        opc : inst.opc,
+
+        funct : inst.funct,
+
+        rs1 : ?,
+        rs2 : ?,
+
+        tag : ?,
+
+        remaining_inst: inst.remaining_inst,
+
+        exception : (inst.exception ? tagged Valid INVALID_INST : tagged Invalid),
+
+        //RVFI
+        `ifdef RVFI
+            iword: inst.iword,
+        `endif
+        `ifdef LOG_PIPELINE
+            log_id: inst.log_id,
+        `endif
+
+        epoch : inst.epoch,
+        thread_id : inst.thread_id
+    };
+endfunction
 
 Wire#(Vector#(ISSUEWIDTH, RobEntry)) rob_entry_wire <- mkWire();
 
@@ -241,22 +276,22 @@ Wire#(RegReservations) tag_res <- mkWire();
 
 // set tags in the speculative register file
 function RegReservation inst_to_register_reservation(Instruction ins, UInt#(size_logidx_t) idx) 
-    = RegReservation { addr : ins.rd, tag: idx, epoch: ins.epoch, thread_id: ins.thread_id };
+    = RegReservation { addr : inst_to_raddr(ins), tag: idx, epoch: ins.epoch, thread_id: ins.thread_id };
 rule set_regfile_tags;
     Vector#(ISSUEWIDTH, RegReservation) reservations = Vector::map(uncurry(inst_to_register_reservation), Vector::zip(inst_in, rob_entry_idx_v));
     tag_res <= RegReservations {reservations: reservations, count: possible_issue_amount};
 endrule
 
-Wire#(Vector#(NUM_RS, Maybe#(Instruction))) instructions_rs_v <- mkWire();
+Wire#(Vector#(NUM_RS, Maybe#(InstructionIssue))) instructions_rs_v <- mkWire();
 
 // finally, assemble the instructions and issue them via the issue bus
 rule assemble_instructions;
-    Vector#(ISSUEWIDTH, Instruction) instructions = inst_in;
+    Vector#(ISSUEWIDTH, InstructionIssue) instructions = Vector::map(map_to_issued, inst_in);
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
 
         //first, set up all operands
-        if(instructions[i].rs1 matches tagged Raddr .register) begin
+        if(inst_in[i].has_rs1) begin
             if(cross_dependant_operands[i*2].wget() matches tagged Valid .tag) begin
                 instructions[i].rs1 = tagged Tag tag;
             end else begin
@@ -267,7 +302,7 @@ rule assemble_instructions;
             end
         end
 
-        if(instructions[i].rs2 matches tagged Raddr .register) begin
+        if(inst_in[i].has_rs2) begin
             if(cross_dependant_operands[i*2+1].wget() matches tagged Valid .tag) begin
                 instructions[i].rs2 = tagged Tag tag;
             end else begin
@@ -285,13 +320,14 @@ rule assemble_instructions;
     //TODO: assembly of the issue bus is not yet ideal and is unregistered
 
     //then assemble issue bus
-    Vector#(NUM_RS, Maybe#(Instruction)) instructions_rs = replicate(tagged Invalid);
+    Vector#(NUM_RS, Maybe#(InstructionIssue)) instructions_rs = replicate(tagged Invalid);
 
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
         if(fromInteger(i) < possible_issue_amount) begin
             instructions_rs[needed_rs_idx_w[i]] = tagged Valid instructions[i];
             `ifdef LOG_PIPELINE
                 $fdisplay(out_log, "%d ISSUE %x %d %d", clk_ctr, instructions[i].pc, instructions[i].tag, instructions[i].epoch);
+                $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "I");
             `endif
             dbg_print(Issue, $format("Issuing ", fshow(instructions[i])));
         end
@@ -302,7 +338,7 @@ rule assemble_instructions;
 endrule
 
 // return issue bus
-method Vector#(NUM_RS, Maybe#(Instruction)) get_issue() = instructions_rs_v;
+method Vector#(NUM_RS, Maybe#(InstructionIssue)) get_issue() = instructions_rs_v;
 // inputs from ROB
 method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = rob_free_w._write(free);
 method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = rob_idx_w._write(idx);

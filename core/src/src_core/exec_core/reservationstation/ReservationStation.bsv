@@ -25,7 +25,7 @@ import SpecialFIFOs::*;
 // the wrappers abstract the depth of the RS
 // such that the interface of any depth is similar
 interface ReservationStationWrIFC;
-    method ActionValue#(Instruction) get;
+    method ActionValue#(InstructionIssue) get;
     interface ReservationStationPutIFC in;
     (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
@@ -95,7 +95,7 @@ module mkReservationStationMULDIV(ReservationStationWrIFC);
     interface result_bus = m.result_bus;
 endmodule
 
-function Bool is_ready(Maybe#(Instruction) inst);
+function Bool is_ready(Maybe#(InstructionIssue) inst);
     return (inst matches tagged Valid .i &&& i.rs1 matches tagged Operand .v1 &&& i.rs2 matches tagged Operand .v2 ? True : False);
 endfunction
 
@@ -126,7 +126,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     endrule
 
     // internal storage
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
+    Vector#(entries, Reg#(Maybe#(InstructionIssue))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
     // head, tail and full pointers
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
@@ -160,7 +160,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
             if(instruction_buffer_v[j] matches tagged Valid .inst) begin
-                Instruction current_instruction = inst;
+                InstructionIssue current_instruction = inst;
 
                 Bool change = False;
 
@@ -200,13 +200,16 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule open if (clk_ctr == 0);
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
-    FIFOF#(Instruction) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
+    FIFOF#(InstructionIssue) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
 
     (* conflict_free="enqueue, listen_to_cdb" *)
     rule enqueue;
@@ -235,7 +238,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     endrule
 
     // dequeue an instruction if one is ready
-    method ActionValue#(Instruction) get if (
+    method ActionValue#(InstructionIssue) get if (
             (head_r != tail_r || full_r[0]) && 
             is_ready(instruction_buffer_v[tail_r])
         );
@@ -244,6 +247,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(inst)));
         `ifdef LOG_PIPELINE
             $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
+            $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, inst.log_id, 0, "S");
         `endif
         return inst;
     endmethod
@@ -257,7 +261,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     // input instructions to RS
     interface ReservationStationPutIFC in;
         interface Put instruction;
-            method Action put(Instruction inst);
+            method Action put(InstructionIssue inst);
                 will_insert_next.send();
                 inst_to_enqueue.enq(inst);
             endmethod
@@ -279,7 +283,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkReg(replicate(tagged Invalid)) : mkBypassWire());
 
     //create a buffer of Instructions
-    Vector#(entries, Reg#(Maybe#(Instruction))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
+    Vector#(entries, Reg#(Maybe#(InstructionIssue))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
 
     // print contents for debugging
     rule print_innards;
@@ -288,7 +292,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         end
     endrule
 
-    Wire#(Vector#(entries, Maybe#(Instruction))) instruction_buffer_preread <- mkBypassWire();
+    Wire#(Vector#(entries, Maybe#(InstructionIssue))) instruction_buffer_preread <- mkBypassWire();
     rule preread;
         instruction_buffer_preread <= Vector::readVReg(instruction_buffer_v);
     endrule
@@ -298,7 +302,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
 
             if(instruction_buffer_preread[j] matches tagged Valid .inst) begin
-                Instruction current_instruction = inst;
+                InstructionIssue current_instruction = inst;
                 Bool chg = False;
 
                 // loop pver result bus
@@ -325,7 +329,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     endrule
 
     // insert instruction, wires will be written by method
-    FIFOF#(Instruction) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF();
+    FIFOF#(InstructionIssue) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF();
     rule insert_instruction;
         let inst = inst_to_insert.first();
         inst_to_insert.deq();
@@ -346,9 +350,12 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule open if (clk_ctr == 0);
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
@@ -368,17 +375,25 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
         can_insert_buffer <= free_slots > fromInteger(cmp);
     endrule
 
-    // method to request an instruction
-    Vector#(entries, Maybe#(Instruction)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_v);
-    method ActionValue#(Instruction) get if (Vector::any(is_ready, instruction_buffer_read_v));
+    FIFO#(InstructionIssue) inst_out_buf <- mkPipelineFIFO();
+
+    Vector#(entries, Maybe#(InstructionIssue)) instruction_buffer_read_v = Vector::readVReg(instruction_buffer_v);
+    rule collect_rdy if (Vector::any(is_ready, instruction_buffer_read_v));
         let idx = fromMaybe(?, Vector::findIndex(is_ready, instruction_buffer_read_v));
         let inst = fromMaybe(?, instruction_buffer_read_v[idx]);
         clear_idx_w <= idx;
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(idx)));
         `ifdef LOG_PIPELINE
             $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
+            $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, inst.log_id, 0, "S");
         `endif
-        return inst;
+        inst_out_buf.enq(inst);
+    endrule
+
+    // method to request an instruction
+    method ActionValue#(InstructionIssue) get;
+        inst_out_buf.deq();
+        return inst_out_buf.first();
     endmethod
 
     // return execution unit tag
@@ -390,7 +405,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     // insert instructions
     interface ReservationStationPutIFC in;
         interface Put instruction;
-            method Action put(Instruction inst);
+            method Action put(InstructionIssue inst);
                 inst_to_insert.enq(inst);
                 will_insert_next.send();
                 dbg_print(RS, $format("got inst: ", fshow(inst)));

@@ -15,7 +15,7 @@ int main() {
 		                          : "r" (csr_read_mhartid())  /* input : register */
 		                          , "r" ( &hartid_max ));
 		                          
-	for(register int i = 0; i < 100; i++);
+	for(register volatile int i = 0; i < 100; i++);
 	
 	register int i = 0;
 	while((i*(hartid_max+1)+csr_read_mhartid()) < amount) {

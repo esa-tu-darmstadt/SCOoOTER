@@ -37,7 +37,7 @@ module mkGshare(PredIfc) provisos (
     Wire#(UInt#(thread_id_t)) thread_id_w <- mkBypassWire();
 
     // function to combine PC and history into the PHT index
-    function Bit#(BITS_PHT) pc_to_pht_idx(Bit#(XLEN) pc, Bit#(BITS_BHR) history) = truncate(pc>>2)^{history, 0};
+    function Bit#(BITS_PHT) pc_to_pht_idx(Bit#(PCLEN) pc, Bit#(BITS_BHR) history) = truncate(pc^{history, 0});
     // test wether a prediction matches a certain index
     function Bool matches_idx(Bit#(BITS_PHT) test_idx, Maybe#(TrainPrediction) train) = (train matches tagged Valid .tv &&& pc_to_pht_idx(tv.pc, tv.history) == test_idx ? True : False);
     // train signal inputs
@@ -101,7 +101,7 @@ module mkGshare(PredIfc) provisos (
     // prediction happens here
     // we use EHRs to pass info betwen consecutive predictions in a single cycle
     Vector#(IFUINST, Wire#(Bool)) outbound_results <- replicateM(mkDWire(False));
-    Vector#(IFUINST, Wire#(Tuple2#(Bit#(XLEN), Bool))) reqs <- replicateM(mkWire());
+    Vector#(IFUINST, Wire#(Tuple2#(Bit#(PCLEN), Bool))) reqs <- replicateM(mkWire());
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         rule generate_prediction;
             // all previous predictions must be untaken for this one to matter
@@ -130,11 +130,11 @@ module mkGshare(PredIfc) provisos (
     end
 
     // prediction request/response interface
-    Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN), Bool), Prediction)) pred_ifc = ?;
+    Vector#(IFUINST, Server#(Tuple2#(Bit#(PCLEN), Bool), Prediction)) pred_ifc = ?;
     for(Integer i = 0; i < valueOf(IFUINST); i = i+1) begin
         pred_ifc[i] = (interface Server;
             interface Put request;
-                method Action put(Tuple2#(Bit#(XLEN), Bool) in);
+                method Action put(Tuple2#(Bit#(PCLEN), Bool) in);
                     reqs[i] <= in;
                 endmethod
             endinterface

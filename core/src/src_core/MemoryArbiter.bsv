@@ -22,7 +22,9 @@ import Ehr::*;
     } Rd_or_amo_req deriving(Bits, Eq, FShow);
 
 
-(* synthesize *)
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
 module mkMemoryArbiter(MemoryArbiterIFC) provisos (
     Log#(NUM_CPU, idx_cpu_t),
     Mul#(NUM_CPU, 2, num_by_two_cpu_t),
@@ -83,7 +85,7 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
         let in = load_queue.first()[0];
         load_queue.deq(1);
 
-        dbg_print(CoherentMem, $format("%x LOAD/AMO: ", in.addr, fshow(in)));
+        if (isValid(in.amo_data_and_type)) dbg_print(CoherentMem, $format("%x LOAD/AMO: ", in.addr, fshow(in)));
 
         if(isValid(in.amo_data_and_type)) begin // AMO operation
             amo_notify_wire.send();
@@ -216,6 +218,7 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
                         last: True,
                         user: 0
                     });
+            dbg_print(AMOTrace, $format("AMO: ", fshow(tpl_1(amo_description.first())), " ", fshow(tpl_3(amo_description.first())), " ", fshow(read_data), " ", fshow(mod_data), " ", fshow(write_data)));
         end else begin
             amo_in_progress <= False;
         end
@@ -242,7 +245,7 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
         let cpu_id = tpl_2(in);
         store_queue.deq(1);
 
-        dbg_print(CoherentMem, $format("%x STORE: ", tpl_1(in).mem_addr, fshow(in)));
+        dbg_print(WriteTrace, $format("%x STORE: ", tpl_1(in).mem_addr, fshow(in)));
         
         axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
                     id: {0, cpu_id},

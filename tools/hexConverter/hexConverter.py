@@ -42,6 +42,9 @@ for arch in [32, 64, 96, 128, 160, 192, 224, 256]:
 		if(in_file.tell() >= args.bram_size):
 			break
 		chunk = in_file.read(arch_byte)
+
+	while len(chunks_text)-1 <= args.bram_size/arch_byte:
+		chunks_text.append(b'a'*arch_byte)
 		
 	# get data section
 	in_file.seek(args.bram_size)
@@ -49,6 +52,9 @@ for arch in [32, 64, 96, 128, 160, 192, 224, 256]:
 	while chunk:
 		chunks_data.append(chunk)
 		chunk = in_file.read(arch_byte)
+
+	while len(chunks_data)-1 <= args.bram_size/arch_byte:
+		chunks_data.append(b'a'*arch_byte)
 	
 	out_i.write("@0\n") # output new addr header
 	out_d.write("@0\n") # output new addr header
@@ -64,25 +70,26 @@ for arch in [32, 64, 96, 128, 160, 192, 224, 256]:
 					out_file.write(byte)
 			out_file.write("\n")
 			
-	write_to_file(chunks_text, out_i);
-	write_to_file(chunks_data, out_d);
+	write_to_file(chunks_text, out_i)
+	write_to_file(chunks_data, out_d)
 	
 	
-	# create bytewise SRAM description
+	# create split SRAM description
 	if arch == 32:
-		for i in range(arch_byte):
-			out_b = open(args.output_prefix + "-data_" + str(arch) + "_" + str(i) + ".bsv", "w");
+		for s in [0, 1]:
+			out_b = open(args.output_prefix + "-data_" + str(arch) + "_" + str(s) + ".bsv", "w");
 			out_b.write("@0\n") # output new addr header
 			for chunk in chunks_data:
 				chunk_hex = [chunk.hex()[i:i+2] for i in range(0, len(chunk.hex()), 2)]
 				chunks_inst = chunk_list(chunk_hex, int(arch/8)) # split byte array into words
 				for inst in chunks_inst:
 					try:
-						out_b.write(inst[i])
+						out_b.write(inst[2*s+1])
+						out_b.write(inst[2*s  ])
 					except:
-						out_b.write("00");
+						out_b.write("0000")
 				out_b.write("\n")
-		out_b.close();
+		out_b.close()
 
 	in_file.close()
 	out_i.close()

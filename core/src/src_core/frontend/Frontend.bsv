@@ -23,7 +23,7 @@ import ClientServer::*;
 
 interface FrontendIFC;
     interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read_inst;
-    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) in);
     interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
     interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 endinterface
@@ -70,7 +70,7 @@ module mkFrontend(FrontendIFC);
     endinterface
 
     // connect mispredict signals
-    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) in);
         ifu.redirect(in);
     endmethod
 

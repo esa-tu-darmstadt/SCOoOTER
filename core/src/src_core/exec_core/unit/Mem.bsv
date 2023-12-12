@@ -14,6 +14,7 @@ import Debug::*;
 import ClientServer::*;
 import GetPut::*;
 import Vector::*;
+import Decode::*;
 
 // struct for access width
 typedef enum {
@@ -52,15 +53,14 @@ module mkMem(MemoryUnitIFC) provisos (
 );
 
 // incoming instruction
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 
 // outgoing result
 FIFO#(Result) out <- mkPipelineFIFO();
 // wrap outgoing result as maybe to avoid blocking behavior
 RWire#(Result) out_valid <- mkRWire();
 // outgoing memory write
-FIFO#(MemWr) out_wr <- mkFIFO();
-RWire#(MemWr) out_wr_valid <- mkRWire();
+FIFO#(MemWr) out_wr <- mkBypassFIFO();
 
 // local epoch for tossing wrong-path instructions
 // this reduces bus pressure 
@@ -73,6 +73,7 @@ Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 // Aq / Rl handling
 Reg#(Bool) aq_r <- mkReg(False);
 Wire#(Bool) store_queue_empty_w <- mkBypassWire();
+Wire#(Bool) store_queue_full_w <- mkBypassWire();
 
 function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
     BYTE: False;
@@ -84,11 +85,11 @@ endcase;
 
 // single-cycle calculation
 // real write occurs in storebuffer after successful commit
-rule calculate_store if (in.first().opc == STORE && !aq_r);
+rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r && (rob_head == in.first().tag || valueOf(ROBDEPTH) == 1) && in.first().epoch == epoch_r[in.first().thread_id]);
     let inst = in.first(); in.deq();
 
     // calculate final access address
-    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
+    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + getImmS({inst.remaining_inst, ?}));
     // AXI addresses entire word, therefore remove lower two bits
     UInt#(XLEN) axi_addr = final_addr & 'hfffffffc;
 
@@ -125,7 +126,16 @@ rule calculate_store if (in.first().opc == STORE && !aq_r);
         };
     if (inst.exception matches tagged Valid .e) local_result.result = tagged Except e;
     out.enq(local_result);
-    out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
+    if (!check_misalign(truncate(pack(final_addr)), width)) out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
+endrule
+
+rule calculate_store_flush if (in.first().opc == STORE && in.first().epoch != epoch_r[in.first().thread_id]);
+    let inst = in.first(); in.deq();
+
+    // produce result
+    Result local_result = ?;
+    local_result.tag = inst.tag;
+    out.enq(local_result);
 endrule
 
 
@@ -168,7 +178,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
     // get instruction, do not deq here as we do this only on success for ROB request
     let inst = in.first();
     // calculate address to which the store is pending
-    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + inst.imm);
+    let imm = (inst.opc == AMO ? 0 : getImmI({inst.remaining_inst, ?}));
+    UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + imm);
     // send a request to ROB (this will be acknowledged in the same clock cycle)
     request_ROB <= inst.tag;
 
@@ -195,8 +206,8 @@ rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc
         amo: (inst.opc == AMO),
         amo_t: op_function_to_amo_type(inst.funct),
         amo_modifier: inst.rs2.Operand,
-        aq: inst.aq,
-        rl: inst.rl,
+        aq: unpack(inst.remaining_inst[19]),
+        rl: unpack(inst.remaining_inst[18]),
         mispredicted: False,
         thread_id: inst.thread_id
     };
@@ -208,14 +219,11 @@ endrule
 Wire#(UInt#(XLEN)) request_sb <- mkWire();
 rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id]));
     let internal_state = stage1_internal;
-    let rob_resp = response_ROB;
-    if(!rob_resp) begin
-        in.deq();
-        stage1.enq(internal_state);
-        dbg_print(AMO, $format("rob passed:  ", fshow(internal_state)));
-        if (internal_state.amo) aq_r <= internal_state.aq;
-        request_sb <= unpack({pack(internal_state.addr)[31:2], 2'b00});
-    end
+    in.deq();
+    stage1.enq(internal_state);
+    dbg_print(AMO, $format("rob passed:  ", fshow(internal_state)));
+    if (internal_state.amo) aq_r <= internal_state.aq;
+    request_sb <= unpack({pack(internal_state.addr)[31:2], 2'b00});
 endrule
 
 // toss instructions with wrong epoch
@@ -406,38 +414,25 @@ endrule
 
 // generate output (and define in which urgency results shall be propagated)
 (* preempts="calculate_store, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
+(* preempts="calculate_store_flush, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
+(* mutually_exclusive = "flush_invalid_axi_rq, check_rob_response" *)
+(* mutually_exclusive = "collect_result_mispredict, check_rob_response" *)
+(* mutually_exclusive = "collect_result_read, check_rob_response" *)
+(* mutually_exclusive = "flush_invalid_fwds, check_rob_response" *)
+
 rule propagate_result;
     out.deq();
     let res = out.first();
     out_valid.wset(res);
 endrule
-rule propagate_memory;
-    out_wr.deq();
-    let res = out_wr.first();
-    out_wr_valid.wset(res);
-endrule
 
 // FU iface
 interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst);
+    method Action put(InstructionIssue inst);
         dbg_print(Mem, $format("got from RS:  ", fshow(inst)));
         in.enq(inst);
     endmethod
     method Maybe#(Result) get() = out_valid.wget();
-endinterface
-
-// Request/Response interfaces
-interface Client check_rob;
-    interface Get request;
-        method ActionValue#(UInt#(TLog#(ROBDEPTH))) get();
-            actionvalue
-                return request_ROB;
-            endactionvalue
-        endmethod
-    endinterface
-    interface Put response;
-        method Action put(Bool b) = response_ROB._write(b);
-    endinterface
 endinterface
 
 // forwarding from store buffer
@@ -459,9 +454,6 @@ interface Client request;
     interface Put response = toPut(mem_rd_or_amo_response);
 endinterface
 
-// write req. handling
-method Maybe#(MemWr) write = out_wr_valid.wget();
-
 // epoch handling
 method Action flush(Vector#(NUM_THREADS, Bool) flags);
     for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
@@ -473,6 +465,10 @@ method Action current_rob_id(UInt#(rob_idx_t) idx) = rob_head._write(idx);
 
 // test if sb is empty
 method Action store_queue_empty(Bool b) = store_queue_empty_w._write(b);
+
+method Action store_queue_full(Bool b) = store_queue_full_w._write(b);
+
+interface Get write = toGet(out_wr);
 
 endmodule
 

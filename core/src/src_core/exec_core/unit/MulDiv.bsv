@@ -450,13 +450,25 @@ endmodule
 // Real FU module
 ///////////////////////////////////////////////////////////////////
 
+// types needed for mul/div inflight storage
+typedef struct {
+    UInt#(TLog#(ROBDEPTH)) tag;
+    Bool div_by_zero;
+    Bool is_rem;
+} DivPipe deriving(Bits);
+
+typedef struct {
+    UInt#(TLog#(ROBDEPTH)) tag;
+    Bool is_mulh;
+} MulPipe deriving(Bits);
+
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
 module mkMulDiv(FunctionalUnitIFC);
 
 // in and out buffers for this FU
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 RWire#(Result) out_valid <- mkRWire();
 
@@ -473,8 +485,8 @@ Server#(Tuple4#(Bit#(XLEN), Bool, Bit#(XLEN), Bool), Bit#(64)) mul <- case (valu
     endcase;
 
 // buffers for in flight instructions
-FIFO#(Instruction) pending_results_div <- mkSizedFIFO(32);
-FIFO#(Instruction) pending_results_mul <- mkSizedFIFO(9); //at most 9 mul are in flight at once
+FIFO#(DivPipe) pending_results_div <- mkSizedFIFO(32);
+FIFO#(MulPipe) pending_results_mul <- mkSizedFIFO(9); //at most 9 mul are in flight at once
 
 // this rule distributes the incoming instructions upon the multipliers and dividers
 // based on calculation type
@@ -489,23 +501,23 @@ rule calculate;
     // distribute the instructions
     if(inst.funct == DIV || inst.funct == REM) begin
         div.request.put(tuple3(op1, op2, True));
-        pending_results_div.enq(inst);
+        pending_results_div.enq(DivPipe {tag: inst.tag, div_by_zero: (inst.rs2.Operand == 0), is_rem: (inst.funct == REM || inst.funct == REMU)});
     end else
     if(inst.funct == DIVU || inst.funct == REMU) begin
         div.request.put(tuple3(op1, op2, False));
-        pending_results_div.enq(inst);
+        pending_results_div.enq(DivPipe {tag: inst.tag, div_by_zero: (inst.rs2.Operand == 0), is_rem: (inst.funct == REM || inst.funct == REMU)});
     end else
     if (inst.funct == MUL || inst.funct == MULHU) begin
         mul.request.put(tuple4(op1, False, op2, False));
-        pending_results_mul.enq(inst);
+        pending_results_mul.enq(MulPipe {tag: inst.tag, is_mulh: (inst.funct == MULHU)});
     end else
     if (inst.funct == MULH) begin
         mul.request.put(tuple4(op1, True, op2, True));
-        pending_results_mul.enq(inst);
+        pending_results_mul.enq(MulPipe {tag: inst.tag, is_mulh: True});
     end else
     if (inst.funct == MULHSU) begin
         mul.request.put(tuple4(op1, True, op2, False));
-        pending_results_mul.enq(inst);
+        pending_results_mul.enq(MulPipe {tag: inst.tag, is_mulh: True});
     end
 endrule
 
@@ -516,13 +528,10 @@ rule read_result_div;
     let inst = pending_results_div.first(); pending_results_div.deq();
     let resp <- div.response.get();
 
-    // catch edge case that the divisor is zero
-    Bit#(XLEN) result = case (inst.funct)  
-        DIV: ( inst.rs2.Operand == 0 ? unpack('hffffffff)       : tpl_1(resp));
-        REM: ( inst.rs2.Operand == 0 ? unpack(inst.rs1.Operand) : tpl_2(resp));
-        DIVU: ( inst.rs2.Operand == 0 ? unpack('hffffffff)       : tpl_1(resp));
-        REMU: ( inst.rs2.Operand == 0 ? unpack(inst.rs1.Operand) : tpl_2(resp));
-    endcase;
+    // catch edge case that the divisor is zero and select div or rem
+    Bit#(XLEN) result = (inst.is_rem ?
+        (tpl_2(resp)) :
+        ( inst.div_by_zero ? unpack('hffffffff) : tpl_1(resp)));
     
     dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
 
@@ -534,7 +543,7 @@ rule read_result_mul;
     let inst = pending_results_mul.first(); pending_results_mul.deq();
     let resp <- mul.response.get();
     
-    Bit#(XLEN) result = inst.funct == MUL ? resp[31:0] : resp[63:32];
+    Bit#(XLEN) result = !inst.is_mulh ? resp[31:0] : resp[63:32];
 
     dbg_print(MulDiv, $format("generated result: ", fshow(Result {result : tagged Result result, new_pc : tagged Invalid, tag : inst.tag})));
 
@@ -548,7 +557,7 @@ rule propagate_result;
     out_valid.wset(res);
 endrule
 
-method Action put(Instruction inst) = in.enq(inst);
+method Action put(InstructionIssue inst) = in.enq(inst);
 method Maybe#(Result) get() = out_valid.wget();
 endmodule
 

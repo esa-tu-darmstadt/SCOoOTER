@@ -71,7 +71,11 @@ endfunction
 
 //**************************************************************
 // Separates instruction word into struct of all possible fields
-function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(XLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id);
+function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(PCLEN) pc, UInt#(EPOCH_WIDTH) epoch, Bit#(PCLEN) predicted_pc, Bit#(BITS_BHR) history, Bit#(RAS_EXTRA) ras, UInt#(TLog#(NUM_THREADS)) thread_id
+    `ifdef LOG_PIPELINE
+        , Bit#(XLEN) log_id
+    `endif
+);
     return InstructionPredecode{
         pc : pc,
         opc : getOpc(inst),
@@ -79,15 +83,7 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EP
         funct7 : getFunct7(inst),
         funct3 : getFunct3(inst),
 
-        rs1 : getRs1(inst),
-        rs2 : getRs2(inst),
-        rd : getRd(inst),
-
-        immI : getImmI(inst),
-        immS : getImmS(inst),
-        immB : getImmB(inst),
-        immU : getImmU(inst),
-        immJ : getImmJ(inst),
+        remaining_inst : truncateLSB(inst),
 
         epoch : epoch,
 
@@ -101,6 +97,10 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(XLEN) pc, UInt#(EP
         `ifdef RVFI
             // RVFI
             , iword : inst
+        `endif
+
+        `ifdef LOG_PIPELINE
+            , log_id: log_id
         `endif
     };
 
@@ -117,7 +117,7 @@ function Action print_inst(t inst) provisos(
     endaction);
 endfunction
 
-function Bit#(XLEN) select_imm(InstructionPredecode inst);
+/*function Bit#(XLEN) select_imm(InstructionPredecode inst);
     return case(inst.opc)
         //SYSTEM uses U type as we must know which register is src
         LUI, AUIPC, SYSTEM                 : inst.immU;
@@ -128,26 +128,26 @@ function Bit#(XLEN) select_imm(InstructionPredecode inst);
 
         default : ?;
     endcase;
-endfunction
+endfunction*/
 
-function Operand select_rs1(InstructionPredecode inst);
+function Bool select_rs1(InstructionPredecode inst);
     return case(inst.opc)
-        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO, SYSTEM : tagged Raddr inst.rs1;
-        default : tagged Operand 0;
+        BRANCH, LOAD, STORE, OPIMM, OP, MISCMEM, JALR, AMO, SYSTEM : True;
+        default : False;
     endcase;
 endfunction
 
-function Operand select_rs2(InstructionPredecode inst);
+function Bool select_rs2(InstructionPredecode inst);
     return case(inst.opc)
-        OP, BRANCH, STORE, AMO : tagged Raddr inst.rs2;
-        default : tagged Operand 0;
+        OP, BRANCH, STORE, AMO : True;
+        default : False;
     endcase;
 endfunction
 
-function RADDR select_rd(InstructionPredecode inst);
+function Bool select_rd(InstructionPredecode inst);
     return case(inst.opc)
-        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO, SYSTEM : inst.rd;
-        default : 0;
+        LUI, AUIPC, JAL, JALR, LOAD, OPIMM, OP, MISCMEM, AMO, SYSTEM : True;
+        default : False;
     endcase;
 endfunction
 
@@ -249,7 +249,7 @@ function OpFunction getFunct(InstructionPredecode inst);
             default: INVALID;
             endcase
         SYSTEM : case(inst.funct3)
-            'b000: case(inst.immI)
+            'b000: case(inst.remaining_inst[24:13])
                 0: ECALL;
                 1: EBREAK;
                 'b001100000010: RET;
@@ -298,22 +298,16 @@ function Instruction decode(InstructionPredecode inst);
         //function fields for R-type instructions, garbage for other inst
         funct : getFunct(inst),
 
-        //Atomic flags, only for A inst, garbage otherwise
-        aq : unpack(inst.funct7[1]),
-        rl : unpack(inst.funct7[0]),
-
         //registers, contains 0 if unused (or 0 is specified in inst)
-        rs1 : select_rs1(inst),
-        rs2 : select_rs2(inst),
-        rd  : select_rd(inst),
+        has_rs1 : select_rs1(inst),
+        has_rs2 : select_rs2(inst),
+        has_rd  : select_rd(inst),
 
         //set exception INVALID_INST if decode error
-        exception : (getFunct(inst) == INVALID ? tagged Valid INVALID_INST : tagged Invalid),
+        exception : (getFunct(inst) == INVALID),
 
-        //immediate value, garbage if no immediate is used
-        imm : select_imm(inst),
+        remaining_inst : inst.remaining_inst,
 
-        tag : ?, //will be set in issue logic
         epoch : inst.epoch,
 
         predicted_pc : inst.predicted_pc,
@@ -327,11 +321,19 @@ function Instruction decode(InstructionPredecode inst);
         `ifdef RVFI
             , iword : inst.iword
         `endif
+
+        `ifdef LOG_PIPELINE
+            , log_id: inst.log_id
+        `endif
     };
 endfunction
 
 function InstructionPredecode predecode_instruction_struct(FetchedInstruction in);
-    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras, in.thread_id);
+    return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras, in.thread_id
+    `ifdef LOG_PIPELINE
+        , in.log_id
+    `endif
+    );
 endfunction
 
 `ifdef SYNTH_SEPARATE
@@ -346,9 +348,12 @@ module mkDecode(DecodeIFC) provisos (
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule open if (clk_ctr == 0);
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
@@ -372,8 +377,11 @@ module mkDecode(DecodeIFC) provisos (
                 let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
                 decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
                 `ifdef LOG_PIPELINE
-                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count)
+                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count) begin
                         $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
+                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, decoded_vec[i].log_id, 0, "D");
+                        $fdisplay(out_log_ko, "%d L %d %d %x DASM(%x)", clk_ctr, decoded_vec[i].log_id, 0, inst_from_decode.instructions[i].pc, inst_from_decode.instructions[i].instruction);
+                    end
                 `endif
             end
         endmethod

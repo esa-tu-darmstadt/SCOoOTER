@@ -82,14 +82,17 @@ module mkReorderBuffer_in(RobIFC) provisos (
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
         Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
         rule open if (clk_ctr == 0);
             File out_log_l <- $fopen("scoooter.log", "a");
             out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
         endrule
     `endif
 
     // wire to distribute result bus
-    Wire#(Vector#(NUM_FU, Maybe#(FullResult))) result_bus_vec <- mkWire();
+    Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_vec <- mkWire();
 
     //internal storage
     Vector#(ROBDEPTH, Reg#(RobEntry)) internal_store_v <- replicateM(mkRegU());
@@ -103,9 +106,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
     //avoid sacrificing one storage space
     Ehr#(2, Bool) full_r <- mkEhr(False);
 
-    // those functions test if a pending write to memory or CSR space is in the current instruction
-    function Bool pending_write(RobEntry re) = (re.write matches tagged Mem .v ? True : (re.write matches tagged Pending_mem ? True : False)); 
-    function Bool pending_csr(RobEntry re) = (re.write matches tagged Csr .v ? True : False); 
     // helper function to and two bools
     function Bool andd(Bool a, Bool b) = (a && b);
 
@@ -200,7 +200,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
     endfunction
 
     // helper function to check if a result has a certain tag
-    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(FullResult) res)
+    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res)
         = isValid(res) && res.Valid.tag == current_tag;
 
     rule bypass_cdb;
@@ -225,10 +225,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
                 if(produced_result matches tagged Valid .found_result &&&
                    found_result matches tagged Valid .unpacked_result) begin
 
-                    // extract CSR and Mem writes
-                    current_entry.write = (unpacked_result.write matches tagged Mem .v ? tagged Mem v : 
-                                           unpacked_result.write matches tagged Csr .v ? tagged Csr v : tagged None);
-
                     // unpack the result or the exception
                     current_entry.result = case (unpacked_result.result) matches
                         tagged Result .r : tagged Result r;
@@ -241,8 +237,8 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
                     // generate the next pc field from the result
                     current_entry.next_pc = case (unpacked_result.new_pc) matches
-                        tagged Valid .v : v;
-                        tagged Invalid  : (current_entry.pc+4);
+                        tagged Valid .v : truncateLSB(v);
+                        tagged Invalid  : truncateLSB(current_entry.pc+1);
                     endcase;
 
                     // update entry
@@ -250,6 +246,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
                     `ifdef LOG_PIPELINE
                         $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, current_entry.pc, i, current_entry.epoch);
+                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, current_entry.log_id, 0, "E");
                     `endif
                 end
             end
@@ -296,74 +293,9 @@ module mkReorderBuffer_in(RobIFC) provisos (
         insts_passing.deq();
         return tpl_1(insts_passing.first());
     endmethod
-    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
-        let results = tpl_1(res_bus);
-        ResultWrite mem_wr = isValid(tpl_2(res_bus)) ? tagged Mem tpl_2(res_bus).Valid : tagged None;
-        ResultWrite csr_wr = isValid(tpl_3(res_bus)) ? tagged Csr tpl_3(res_bus).Valid : tagged None;
-        Vector#(NUM_FU, ResultWrite) write_result_bus_vec = Vector::append(Vector::replicate(tagged None), vec( // zero out non-mem/csr units
-            mem_wr,
-            csr_wr
-        ));
-        function Maybe#(FullResult) parts_to_full_result(Maybe#(Result) r, ResultWrite w) = isValid(r) ? tagged Valid FullResult {
-            tag : r.Valid.tag,
-            new_pc : r.Valid.new_pc,
-            result : r.Valid.result,
-            write : w
-            `ifdef RVFI
-                , mem_addr : r.Valid.mem_addr
-            `endif
-        } : tagged Invalid;
-        let full_result_bus_vec = Vector::map(uncurry(parts_to_full_result), Vector::zip(results, write_result_bus_vec));
-
-        result_bus_vec._write(full_result_bus_vec); // connect to result bus
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
+        result_bus_vec._write(res_bus); // connect to result bus
     endmethod
-
-    // check if there is a blocking memory write
-    //TODO: can be more efficient if checking for epoch and address
-    interface Server check_pending_memory;
-        interface Put request;
-            // request if this inst is blocked by a mem op
-            method Action put(UInt#(TLog#(ROBDEPTH)) idx) = fwd_test_mem_f.enq(idx);
-        endinterface
-        interface Get response;
-            method ActionValue#(Bool) get();
-                actionvalue
-                    Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);
-                    let idx = fwd_test_mem_f.first(); fwd_test_mem_f.deq();
-                    //rob cannot be empty!
-                    //this slice of ROB cannot be full (since the instruction for which we request is excluded)
-                    Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(False, idx, tail_r), Vector::map(fromInteger, Vector::genVector()));
-                    Vector#(ROBDEPTH, Bool) pending_write_vector = Vector::map(pending_write, local_store);
-                    Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_write_vector));
-                    Bool out = Vector::elem(True, inhibitants_map);
-                    if (valueOf(ROB_LATCH_OUTPUT) == 1) begin 
-                        Vector#(ISSUEWIDTH, Bool) pending_write_rdy_vector = Vector::map(pending_write, tpl_1(insts_passing.first()));
-                        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-                            if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_write_rdy_vector[i] = False;
-                        out = out || Vector::elem(True, pending_write_rdy_vector);
-                    end
-                    return out;
-                endactionvalue
-            endmethod
-        endinterface
-    endinterface
-
-    // check if there is a pending CSR operation
-    method Bool csr_busy();
-        Vector#(ROBDEPTH, RobEntry) local_store = Vector::readVReg(internal_store_v);
-        Vector#(ROBDEPTH, Bool) slice_part_vector = Vector::map(part_of_rob_slice(full_r[0], head_r, tail_r), Vector::map(fromInteger, Vector::genVector()));
-        Vector#(ROBDEPTH, Bool) pending_csr_vector = Vector::map(pending_csr, local_store);
-        Vector#(ROBDEPTH, Bool) inhibitants_map = Vector::map(uncurry(andd), Vector::zip(slice_part_vector, pending_csr_vector));
-        Bool out = Vector::countElem(True, inhibitants_map) >= 1;
-        if (valueOf(ROB_LATCH_OUTPUT) == 1) begin
-            Vector#(ISSUEWIDTH, Bool) pending_csr_rdy_vector = Vector::map(pending_csr, tpl_1(insts_passing.first()));
-            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-                if (fromInteger(i) >= tpl_2(insts_passing.first())) pending_csr_rdy_vector[i] = False;
-            out = out || (Vector::countElem(True, pending_csr_rdy_vector) >= 1);
-        end
-        return out;
-    endmethod
-
     
 endmodule
 

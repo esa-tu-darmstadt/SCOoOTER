@@ -11,6 +11,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import RWire::*;
 import Debug::*;
+import Decode::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -18,7 +19,7 @@ import Debug::*;
 module mkArith(FunctionalUnitIFC);
 
 // FIFOs for input and output
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 FIFO#(Result) out <- mkPipelineFIFO();
 // RWire to always produce an output
 RWire#(Result) out_valid <- mkRWire();
@@ -31,12 +32,13 @@ rule calculate;
 
     let op1 = case (inst.opc)
         LUI: 0;
-        AUIPC: inst.pc;
+        AUIPC: {inst.pc, 2'b00};
         OPIMM, OP: inst.rs1.Operand;
     endcase;
 
     let op2 = case (inst.opc)
-        LUI, AUIPC, OPIMM: inst.imm;
+        LUI, AUIPC: getImmU({inst.remaining_inst, ?});
+        OPIMM: getImmI({inst.remaining_inst, ?});
         OP: inst.rs2.Operand;
     endcase;
 
@@ -77,7 +79,7 @@ rule propagate_result;
 endrule
 
 // in and out functions
-method Action put(Instruction inst) = in.enq(inst);
+method Action put(InstructionIssue inst) = in.enq(inst);
 method Maybe#(Result) get() = out_valid.wget();
 endmodule
 

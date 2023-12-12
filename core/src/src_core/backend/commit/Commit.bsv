@@ -47,11 +47,11 @@ Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch <- replicateM(mkReg(0));
 Vector#(NUM_THREADS, Wire#(Bit#(XLEN))) trap_return_w <- replicateM(mkBypassWire());
 Vector#(NUM_THREADS, Array#(Reg#(Bool))) int_in_process_r <- replicateM(mkCReg(2, False));
 
-Vector#(NUM_THREADS, Array#(Reg#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))))) next_pc_r <- replicateM(mkCRegU(2));
+Vector#(NUM_THREADS, Array#(Reg#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA))))) next_pc_r <- replicateM(mkCRegU(2));
 
-Vector#(NUM_THREADS, FIFO#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc_w <- replicateM(mkBypassFIFO());
-Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc_w_exc <- replicateM(mkRWire());
-Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc_w_out <- replicateM(mkRWire());
+Vector#(NUM_THREADS, FIFO#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc_w <- replicateM(mkBypassFIFO());
+Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc_w_exc <- replicateM(mkRWire());
+Vector#(NUM_THREADS, RWire#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc_w_out <- replicateM(mkRWire());
 
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
 rule fwd_redir;
@@ -60,8 +60,8 @@ rule fwd_redir;
 endrule
 
 Vector#(NUM_THREADS, Wire#(Bit#(XLEN))) tvec <- replicateM(mkBypassWire());
-Vector#(NUM_THREADS, FIFO#(Tuple3#(Bit#(XLEN), Bit#(XLEN), Bit#(XLEN)))) mcause <- replicateM(mkPipelineFIFO());
-Vector#(NUM_THREADS, RWire#(Tuple3#(Bit#(XLEN), Bit#(XLEN), Bit#(XLEN)))) mcause_exc <- replicateM(mkRWire());
+Vector#(NUM_THREADS, FIFO#(Tuple3#(Bit#(XLEN), Bit#(PCLEN), Bit#(XLEN)))) mcause <- replicateM(mkPipelineFIFO());
+Vector#(NUM_THREADS, RWire#(Tuple3#(Bit#(XLEN), Bit#(PCLEN), Bit#(XLEN)))) mcause_exc <- replicateM(mkRWire());
 Vector#(NUM_THREADS, RWire#(TrapDescription)) mcause_out <- replicateM(mkRWire());
 
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
@@ -75,17 +75,7 @@ function Maybe#(a) read_rwire(RWire#(a) r) = r.wget();
 
 Vector#(NUM_THREADS, Wire#(Bit#(3))) int_in <- replicateM(mkBypassWire());
 
-FIFOF#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_rq_out <- mkPipelineFIFOF();
 FIFO#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) branch_train <- mkPipelineFIFO();
-FIFO#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_rq_out <- mkPipelineFIFO();
-
-
-function Maybe#(MemWr) rob_entry_to_memory_write(RobEntry re) = re.epoch == epoch[re.thread_id] &&& re.write matches tagged Mem .v ? tagged Valid v : tagged Invalid; 
-function Maybe#(CsrWrite) rob_entry_to_csr_write(RobEntry re) = re.epoch == epoch[re.thread_id] &&& re.write matches tagged Csr .v ? tagged Valid CsrWrite {addr: v.addr, data: v.data, thread_id: re.thread_id} : tagged Invalid; 
-function Vector#(b, Maybe#(a)) mask_maybes(Vector#(b, Maybe#(a)) m, Bit#(b) f);
-    for(Integer i = 0; i < valueOf(b); i=i+1) if (f[i] == 0) m[i] = tagged Invalid;
-    return m;
-endfunction
 
 function Maybe#(TrainPrediction) rob_entry_to_train(RobEntry re);
     Maybe#(TrainPrediction) out;
@@ -127,7 +117,7 @@ for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
     rule redirect_on_interrupt (int_in[i] != 0 && !int_in_process_r[i][1]);
         epoch[i] <= epoch[i] + 1;
         int_in_process_r[i][1] <= True;
-        redirect_pc_w[i].enq(tuple2(tvec[i], tpl_2(next_pc_r[i][1])));
+        redirect_pc_w[i].enq(tuple2(truncateLSB(tvec[i]), tpl_2(next_pc_r[i][1])));
         mcause[i].enq(tuple3({1'b1, fromInteger(cause_for_int(int_in[i]))}, tpl_1(next_pc_r[i][1]), 0));
         `ifdef RVFI
             first_trap[valueOf(ISSUEWIDTH)] <= False;
@@ -137,16 +127,22 @@ for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
 `ifdef LOG_PIPELINE
     Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
     Reg#(File) out_log <- mkRegU();
+    Reg#(File) out_log_ko <- mkRegU();
     rule count_clk; clk_ctr <= clk_ctr + 1; endrule
     rule open if (clk_ctr == 0);
         File out_log_l <- $fopen("scoooter.log", "a");
         out_log <= out_log_l;
+        File out_log_kol <- $fopen("konata.log", "a");
+        out_log_ko <= out_log_kol;
     endrule
 `endif
 
-function Bool check_entry_for_mem_access(RobEntry entry) = (entry.write matches tagged Mem .v ? True : False);
+function Vector#(b, Maybe#(a)) mask_maybes(Vector#(b, Maybe#(a)) m, Bit#(b) f);
+    for(Integer i = 0; i < valueOf(b); i=i+1) if (f[i] == 0) m[i] = tagged Invalid;
+    return m;
+endfunction
 
-method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) if (memory_rq_out.notFull());
+method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     action
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
@@ -163,7 +159,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
         Bit#(ISSUEWIDTH) committed_mask = 0;
 
         // track next_pc
-        Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA))) next_pc_local = Vector::readVReg(Vector::map(disassemble_creg(0), next_pc_r));
+        Vector#(NUM_THREADS, Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA))) next_pc_local = Vector::readVReg(Vector::map(disassemble_creg(0), next_pc_r));
 
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             let inst_thread_id = instructions[i].thread_id;
@@ -171,19 +167,22 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
             if(instructions[i].epoch == epoch[inst_thread_id] && fromInteger(i) < count) begin
 
                 `ifdef LOG_PIPELINE
-                    if(done[inst_thread_id]) $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                    if(done[inst_thread_id]) begin
+                        $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, {instructions[i].pc, 2'b00}, instructions[i].epoch);
+                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
+                        $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 1);
+                    end
                 `endif
 
                 if(!done[inst_thread_id]) begin
                     // handle exceptions
                     if(instructions[i].result matches tagged Except .e) begin
-                        instructions[i].next_pc = tvec[inst_thread_id];
-                        instructions[i].pred_pc = ~tvec[inst_thread_id]; // force redirect
+                        instructions[i].next_pc = truncateLSB(tvec[inst_thread_id]);
+                        instructions[i].pred_pc = ~truncateLSB(tvec[inst_thread_id]); // force redirect
                         Bit#(31) except_code = extend(pack(e));
                         `ifdef RVFI
                             mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, pack(instructions[i].mem_addr)));
-                        `endif
-                        `ifndef RVFI
+                        `else
                             mcause_exc[inst_thread_id].wset(tuple3( {1'b0, except_code} , instructions[i].pc, 32'hdeadbeef));
                         `endif
                         dbg_print(Commit, $format("EXCEPT: ", fshow(instructions[i])));
@@ -198,25 +197,11 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                                 rvfi_i.trap = (instructions[i].result matches tagged Except .e ? True : False);
                                 rvfi_i.dbg = False;
                                 rvfi_i.mode = 3;
-                                rvfi_i.pc_rdata = instructions[i].pc;
-                                rvfi_i.pc_wdata = instructions[i].next_pc;
+                                rvfi_i.pc_rdata = {instructions[i].pc, 2'b00};
+                                rvfi_i.pc_wdata = {instructions[i].next_pc, 2'b00};
                                 rvfi_i.rd1_addr = 0;
                                 rvfi_i.insn = instructions[i].iword;
                                 rvfi_i.thread_id = instructions[i].thread_id;
-
-                                //mem info - alignment may be wrong since RVFI does not monitor this
-                                if(instructions[i].opc == LOAD) begin
-                                    rvfi_i.mem_rmask = 'hffffffff;
-                                    rvfi_i.mem_addr = instructions[i].mem_addr;
-                                end
-                                if(instructions[i].opc == STORE) begin
-                                    Bit#(XLEN) wmask = 0;
-                                    for(Integer j = 0; j<valueOf(XLEN); j=j+1)
-                                        wmask[j] = instructions[i].write.Mem.store_mask[j/8];
-                                    rvfi_i.mem_wmask = wmask;
-                                    rvfi_i.mem_wdata = instructions[i].write.Mem.data;
-                                    rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
-                                end
 
                                 rvfi[i] <= rvfi_i;
 
@@ -231,14 +216,14 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                     // handle returns
                     if(instructions[i].result matches tagged Result .r &&& 
                     instructions[i].ret) begin
-                        instructions[i].next_pc = trap_return_w[inst_thread_id];
-                        instructions[i].pred_pc = ~trap_return_w[inst_thread_id]; // force redirect
+                        instructions[i].next_pc = truncateLSB(trap_return_w[inst_thread_id]);
+                        instructions[i].pred_pc = ~truncateLSB(trap_return_w[inst_thread_id]); // force redirect
                         int_in_process_r[inst_thread_id][0] <= False;
                     end
 
                     // write registers
                     if(instructions[i].result matches tagged Result .r) begin
-                        dbg_print(Commit, $format(fshow(instructions[i])));
+                        dbg_print(Commit, $format(fshow({instructions[i].pc, 2'b00}), " ", fshow(instructions[i])));
                         temp_requests[i] = tagged Valid RegWrite {addr: instructions[i].destination, data: r, thread_id: inst_thread_id};
 
                         `ifdef RVFI
@@ -250,26 +235,12 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                             rvfi_i.trap = (instructions[i].result matches tagged Except .e ? True : False);
                             rvfi_i.dbg = False;
                             rvfi_i.mode = 3;
-                            rvfi_i.pc_rdata = instructions[i].pc;
-                            rvfi_i.pc_wdata = instructions[i].next_pc;
+                            rvfi_i.pc_rdata = {instructions[i].pc, 2'b00};
+                            rvfi_i.pc_wdata = {instructions[i].next_pc, 2'b00};
                             rvfi_i.rd1_addr = instructions[i].destination;
                             if (rvfi_i.rd1_addr != 0 &&& instructions[i].result matches tagged Result .r) rvfi_i.rd1_wdata = r;
                             rvfi_i.insn = instructions[i].iword;
                             rvfi_i.thread_id = instructions[i].thread_id;
-
-                            //mem info - alignment may be wrong since RVFI does not monitor this
-                            if(instructions[i].opc == LOAD) begin
-                                rvfi_i.mem_rmask = 'hffffffff;
-                                rvfi_i.mem_addr = instructions[i].mem_addr;
-                            end
-                            if(instructions[i].opc == STORE) begin
-                                Bit#(XLEN) wmask = 0;
-                                for(Integer j = 0; j<valueOf(XLEN); j=j+1)
-                                    wmask[j] = instructions[i].write.Mem.store_mask[j/8];
-                                rvfi_i.mem_wmask = wmask;
-                                rvfi_i.mem_wdata = instructions[i].write.Mem.data;
-                                rvfi_i.mem_addr = instructions[i].write.Mem.mem_addr;
-                            end
 
                             rvfi[i] <= rvfi_i;
 
@@ -278,12 +249,14 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                         `endif
 
                         `ifdef LOG_PIPELINE
-                            $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                            $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, {instructions[i].pc, 2'b00}, instructions[i].epoch);
+                            $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
+                            $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 0);
                         `endif
 
                         if(instructions[i].branch == True && 
                             instructions[i].next_pc == instructions[i].pred_pc) begin
-                                if(instructions[i].br) dbg_print(History, $format(" %b %b ", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
+                                if(instructions[i].br) dbg_print(History, $format(" %b %b ", instructions[i].history, {instructions[i].pc, 2'b00}+4 != {instructions[i].next_pc, 2'b00}, fshow(instructions[i])));
                                 `ifdef EVA_BR
                                     if(instructions[i].br)
                                         correct_pred_br_local = correct_pred_br_local + 1;
@@ -298,7 +271,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                         // generate mispredict signal for IFU
                         redirect_pc_w_exc[inst_thread_id].wset(tuple2(instructions[i].next_pc, instructions[i].ras));
                         done[inst_thread_id] = True;
-                        if(instructions[i].br) dbg_print(History, $format(" %b %b ", instructions[i].history, instructions[i].pc+4 != instructions[i].next_pc, fshow(instructions[i])));
+                        if(instructions[i].br) dbg_print(History, $format(" %b %b ", instructions[i].history, instructions[i].pc+1 != instructions[i].next_pc, fshow(instructions[i])));
                         `ifdef EVA_BR
                             if(instructions[i].br)
                                 wrong_pred_br_local = wrong_pred_br_local + 1;
@@ -314,7 +287,9 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
             end 
             `ifdef LOG_PIPELINE
                 else if(fromInteger(i) < count) begin
-                    $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, instructions[i].pc, instructions[i].epoch);
+                    $fdisplay(out_log, "%d FLUSH %x %d", clk_ctr, {instructions[i].pc, 2'b00}, instructions[i].epoch);
+                    $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
+                    $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 1); 
                 end
             `endif
 
@@ -328,17 +303,9 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
         // reg write
         out_buffer.enq(mask_maybes(temp_requests, committed_mask));
 
-        // memory write
-        let writes = Vector::map(rob_entry_to_memory_write, instructions);
-        memory_rq_out.enq(mask_maybes(writes, committed_mask));
-
         // train predictor
         let trains = Vector::map(rob_entry_to_train, instructions);
         branch_train.enq(mask_maybes(trains, committed_mask));
-
-        // csr writes
-        let csrs = Vector::map(rob_entry_to_csr_write, instructions);
-        csr_rq_out.enq(mask_maybes(csrs, committed_mask));
 
         // show prediction performance
         `ifdef EVA_BR
@@ -351,22 +318,8 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
     endaction
 endmethod
 
-interface GetS memory_writes;
-    interface first = memory_rq_out.first();
-    interface deq = memory_rq_out.deq();
-endinterface
-
-interface Get csr_writes = toGet(csr_rq_out);
-
-method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
+method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     return Vector::map(read_rwire, redirect_pc_w_out);
-endmethod
-
-method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
-    actionvalue
-        out_buffer.deq();
-        return out_buffer.first();
-    endactionvalue
 endmethod
 
 
@@ -393,6 +346,14 @@ endmethod
 method Action ext_interrupt_mask(Vector#(NUM_THREADS, Bit#(3)) in);
     Vector::writeVReg(int_in, in);
 endmethod
+
+method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
+    actionvalue
+        out_buffer.deq();
+        return out_buffer.first();
+    endactionvalue
+endmethod
+
 
 `ifdef EVA_BR
     method UInt#(XLEN) correct_pred_br = correct_pred_br_r;

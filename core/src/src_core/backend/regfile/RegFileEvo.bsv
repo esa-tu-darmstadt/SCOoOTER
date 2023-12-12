@@ -20,6 +20,7 @@ import Debug::*;
 import ClientServer::*;
 import GetPut::*;
 import Ehr::*;
+import ArianeEhr::*;
 
 // Union for holding data in the evolving RegFile
 // The evolving RegFile stores which tag corresponds to
@@ -46,7 +47,7 @@ module mkRegFileEvo(RegFileEvoIFC) provisos (
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
 
     //register storage
-    Vector#(NUM_THREADS, Vector#(31, Ehr#(3, EvoEntry))) registers <- replicateM(replicateM(mkEhr(tagged Invalid)));
+    Vector#(NUM_THREADS, Vector#(31, Ehr#(3, EvoEntry))) registers <- replicateM(replicateM(valueOf(REGEVO_LATCH_BASED) == 0 ? mkEhr(tagged Invalid): mkArianeEhr(tagged Invalid)));
     //derived Reg ifaces from CReg
     Vector#(NUM_THREADS, Vector#(31, Reg#(EvoEntry))) registers_port0 = Vector::map(compose(Vector::map, disassemble_ehr)(0), registers);
     Vector#(NUM_THREADS, Vector#(31, Reg#(EvoEntry))) registers_port1 = Vector::map(compose(Vector::map, disassemble_ehr)(1), registers);
@@ -169,3 +170,4 @@ module mkRegFileEvo(RegFileEvoIFC) provisos (
 endmodule
 
 endpackage
+

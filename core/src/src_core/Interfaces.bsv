@@ -11,9 +11,12 @@ import GetPutCustom::*;
 import ClientServer::*;
 
 interface DaveIFC;
-
+    `ifndef SOC
     (* prefix= "axi_master_fetch" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
+        interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
+    `else
+        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
+    `endif
     (* prefix= "axi_master_data" *)
     interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_r;
     (* prefix= "axi_master_data" *)
@@ -69,7 +72,12 @@ endinterface
 
 interface InstArbiterIFC;
     // axi to data memory
-    interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) axi_r;
+    `ifndef SOC
+        interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) axi_r;
+    `else
+        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
+    `endif
+
     interface Vector#(NUM_CPU, Server#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST)))) reads;
 endinterface
 
@@ -79,12 +87,12 @@ interface FetchIFC;
     interface Client#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST))) read;
     // mispredict signal
     (* always_ready, always_enabled *)
-    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) in);
+    method Action redirect(Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) in);
     // output
     interface GetS#(FetchResponse) instructions;
 
-    interface Vector#(IFUINST, Client#(Tuple2#(Bit#(XLEN), Bool), Prediction)) predict_direction;
-    interface Client#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict_target;
+    interface Vector#(IFUINST, Client#(Tuple2#(Bit#(PCLEN), Bool), Prediction)) predict_direction;
+    interface Client#(Bit#(PCLEN), Vector#(IFUINST, Maybe#(Bit#(PCLEN)))) predict_target;
 
     (* always_ready, always_enabled *)
     method UInt#(TLog#(NUM_THREADS)) current_thread();
@@ -116,16 +124,16 @@ interface IssueIFC;
     method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
 
-    method Vector#(NUM_RS, Maybe#(Instruction)) get_issue();
+    method Vector#(NUM_RS, Maybe#(InstructionIssue)) get_issue();
 endinterface
 
 interface ReservationStationPutIFC;
-    interface Put#(Instruction) instruction;
+    interface Put#(InstructionIssue) instruction;
     method Bool can_insert;
 endinterface
 
 interface ReservationStationIFC#(numeric type entries);
-    method ActionValue#(Instruction) get;
+    method ActionValue#(InstructionIssue) get;
     interface ReservationStationPutIFC in;
     (* always_ready, always_enabled *)
     method ExecUnitTag unit_type;
@@ -134,7 +142,7 @@ interface ReservationStationIFC#(numeric type entries);
 endinterface
 
 interface FunctionalUnitIFC;
-    method Action put(Instruction inst);
+    method Action put(InstructionIssue inst);
     (* always_enabled *)
     method Maybe#(Result) get();
 endinterface
@@ -142,19 +150,20 @@ endinterface
 interface CsrIFC;
     interface FunctionalUnitIFC fu;
     interface Client#(CsrRead, Maybe#(Bit#(XLEN))) csr_read;
-    method Action block(Bool b);
-    method Maybe#(CsrWriteResult) write;
+    interface Get#(CsrWrite) write;
+    method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
+    method Action flush(Vector#(NUM_THREADS, Bool) in);
 endinterface
 
 interface MemoryUnitIFC;
     interface FunctionalUnitIFC fu;
-    interface Client#(UInt#(TLog#(ROBDEPTH)), Bool) check_rob;
     interface Client#(UInt#(XLEN), Maybe#(MaskedWord)) check_store_buffer;
     interface Client#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN)) request;
     method Action flush(Vector#(NUM_THREADS, Bool) in);
     method Action current_rob_id(UInt#(TLog#(ROBDEPTH)) idx);
     method Action store_queue_empty(Bool b);
-    method Maybe#(MemWr) write;
+    method Action store_queue_full(Bool b);
+    interface Get#(MemWr) write;
 endinterface
 
 interface RobIFC;
@@ -169,18 +178,13 @@ interface RobIFC;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
-    method Action result_bus(Tuple3#(Vector#(NUM_FU, Maybe#(Result)), Maybe#(MemWr), Maybe#(CsrWriteResult)) res_bus);
-
-    interface Server#(UInt#(TLog#(ROBDEPTH)), Bool) check_pending_memory;
-    method Bool csr_busy();
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
 endinterface
 
 interface CommitIFC;
     method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count);
     method ActionValue#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) get_write_requests;
-    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(XLEN), Bit#(RAS_EXTRA)))) redirect_pc();
-    interface GetS#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
-    interface Get#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) csr_writes;
+    method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     interface Get#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
 
     method Action trap_vectors(Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) vecs);
@@ -218,27 +222,27 @@ interface RegFileEvoIFC;
 endinterface
 
 interface StoreBufferIFC;
-    interface Put#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) memory_writes;
-    method Bool deq_memory_writes();
+    interface Put#(MemWr) memory_write;
     interface Server#(UInt#(XLEN), Maybe#(MaskedWord)) forward;
     interface Client#(MemWr, void) write;
     method Bool empty();
+    method Bool full();
 endinterface
 
 interface BTBIfc;
     interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
-    interface Server#(Bit#(XLEN), Vector#(IFUINST, Maybe#(Bit#(XLEN)))) predict;
+    interface Server#(Bit#(PCLEN), Vector#(IFUINST, Maybe#(Bit#(PCLEN)))) predict;
 endinterface
 
 interface PredIfc;
     interface Put#(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction))) train;
-    interface Vector#(IFUINST, Server#(Tuple2#(Bit#(XLEN),Bool), Prediction)) predict_direction;
+    interface Vector#(IFUINST, Server#(Tuple2#(Bit#(PCLEN),Bool), Prediction)) predict_direction;
     (* always_ready, always_enabled *)
     method Action current_thread(UInt#(TLog#(NUM_THREADS)) thread_id);
 endinterface
 
 interface CsrFileIFC;
-    interface Put#(Vector#(ISSUEWIDTH, Maybe#(CsrWrite))) writes;
+    interface Put#(CsrWrite) write;
     interface Server#(CsrRead, Maybe#(Bit#(XLEN))) read;
     method Vector#(NUM_THREADS, Tuple2#(Bit#(XLEN), Bit#(XLEN))) trap_vectors();
     method Action write_int_data(Vector#(NUM_THREADS, Maybe#(TrapDescription)) in);

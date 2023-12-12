@@ -17,12 +17,12 @@ import Debug::*;
 // the real unit is written below
 
 interface InternalStoreIFC#(numeric type entries);
-    method Action enq(UInt#(TLog#(TAdd#(ISSUEWIDTH, 1))) count, Vector#(ISSUEWIDTH, MemWr) data);
-    method Bool enqReadyN(UInt#(TLog#(TAdd#(ISSUEWIDTH, 1))) count);
+    method Action enq(MemWr data);
     method Action deq();
     method MemWr first();
     method ActionValue#(Maybe#(MaskedWord)) forward(UInt#(XLEN) addr);
     method Bool empty();
+    method Bool full();
 endinterface
 
 module mkInternalStore(InternalStoreIFC#(entries)) provisos (
@@ -60,44 +60,21 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
         tail_r <= tail_r + 1;
     endrule
 
-    // find out how many slots are full
-    function UInt#(amount_t) full_slots;
-        UInt#(amount_t) result;
-
-        //calculate from head and tail pointers
-        if (head_r > tail_r) result = extend(head_r) - extend(tail_r);
-        else if (tail_r > head_r) result = fromInteger(valueOf(entries)) - extend(tail_r) + extend(head_r);
-        // if both pointers are equal, must be full or empty
-        else if (full_r[1]) result = fromInteger(valueOf(entries));
-        else result = 0;
-
-        return result;
-    endfunction
-
-    // calculate how many slots are empty
-    function UInt#(amount_t) empty_slots = fromInteger(valueOf(entries)) - full_slots();
-
     // this limits us to pwr2 depths
     // TODO: fix this
     function UInt#(idx_t) truncate_idx(UInt#(idx_t) a, UInt#(idx_t) b) = a + b;
 
     // enqueue store requests
-    method Action enq(UInt#(issuewidth_log_t) count, Vector#(ISSUEWIDTH, MemWr) data) if (empty_slots > 0);
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i = i+1) begin
-            if(fromInteger(i) < count)
-                storage[truncate_idx(head_r, fromInteger(i))] <= data[i];
-        end
+    method Action enq(MemWr data) if (!full_r[1]);
         // move pointers forward
-        let new_head = truncate_idx(head_r, extend(count));
+        let new_head = truncate_idx(head_r, 1);
         head_r <= new_head;
-        if(count > 0)
-            if (tail_r == new_head) full_r[1] <= True;
-        
+        if (tail_r == new_head) full_r[1] <= True;
+        storage[head_r] <= data;
     endmethod
-    // ready, qeq and first functions similar to MIMO
-    method Bool enqReadyN(UInt#(issuewidth_log_t) count) = (extend(count) <= empty_slots());
-    method Action deq() if (full_slots() > 0) = clear_w.send();
-    method MemWr first() if (full_slots() > 0) = readVReg(storage)[tail_r];
+    // ready, deq and first functions similar to MIMO
+    method Action deq() if ( !(tail_r == head_r && !full_r[0]) ) = clear_w.send();
+    method MemWr first() if ( !(tail_r == head_r && !full_r[0]) ) = readVReg(storage)[tail_r];
     // forward signals - this is used to find data in the buffer to fwd to read operations
     method ActionValue#(Maybe#(MaskedWord)) forward(UInt#(XLEN) addr);
         actionvalue
@@ -116,6 +93,7 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     endmethod
     // test if the store buffer is empty - needed for atomic rl
     method Bool empty() = (tail_r == head_r && !full_r[0]);
+    method Bool full() = full_r[0];
 endmodule
 
 
@@ -131,35 +109,7 @@ module mkStoreBuffer(StoreBufferIFC);
     // FIFO to hold outgoing write requests until they are completed (important for fwd)
     FIFOF#(MemWr) pending_buf <- mkPipelineFIFOF();
     // wire for incoming data
-    Wire#(Vector#(ISSUEWIDTH, Maybe#(MemWr))) incoming_writes_w <- mkWire();
     PulseWire dequeue_incoming_w <- mkPulseWire();
-
-    // flatten incloming buffer such that entries are consecutive
-    rule flatten_incoming;
-
-        // remove empty slots between requests
-        Vector#(ISSUEWIDTH, Maybe#(MemWr)) flattened_maybes = ?;
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            flattened_maybes[i] = find_nth_valid(i, incoming_writes_w);
-        end
-
-        // count number of elements
-        Vector#(ISSUEWIDTH, MemWr) flattened = Vector::map(fromMaybe(?), flattened_maybes);
-        let count = Vector::countIf(isValid, incoming_writes_w);
-
-        // display for debugging
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-            if(fromInteger(i) < count) begin
-                dbg_print(Mem, $format("write: ", fshow(pack(flattened[i].mem_addr)), " ", fshow(pack(flattened[i].data))));
-            end
-        end
-
-        //put into MIMO buffer
-        if(internal_buf.enqReadyN(count)) begin
-            dequeue_incoming_w.send();
-            internal_buf.enq(count, flattened);
-        end
-    endrule
 
     // helper functions: check if addr fits and create a MaskedWord struct from a MemWr struct
     function Bool find_addr(UInt#(XLEN) addr, Maybe#(MemWr) mw) = (mw matches tagged Valid .w ? w.mem_addr == addr : False); 
@@ -194,15 +144,14 @@ module mkStoreBuffer(StoreBufferIFC);
 
                     // check incoming buffer
                     // extract matching data
-                    Maybe#(Maybe#(MemWr)) incoming_resp = Vector::find(find_addr(addr), Vector::reverse(incoming_writes_w));
-                    Maybe#(MaskedWord) incoming_res = isValid(incoming_resp) ? 
-                        tagged Valid mw_from_memory_write(incoming_resp.Valid.Valid) : 
-                        tagged Invalid;
+                    // Maybe#(Maybe#(MemWr)) incoming_resp = Vector::find(find_addr(addr), Vector::reverse(incoming_writes_w));
+                    // Maybe#(MaskedWord) incoming_res = isValid(incoming_resp) ? 
+                    //    tagged Valid mw_from_memory_write(incoming_resp.Valid.Valid) : 
+                    //    tagged Invalid;
 
                     // internal buffer has a higher priority than pending store since those inst were later
                     // incoming buffer is highest priority
-                    let result = (incoming_res matches tagged Valid .vv ? 
-                                  incoming_res : (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res));
+                    let result = (internal_store_res matches tagged Valid .v ? internal_store_res : pending_store_res);
 
                     return result;
                 endactionvalue
@@ -210,11 +159,11 @@ module mkStoreBuffer(StoreBufferIFC);
         endinterface
     endinterface
 
-    method Bool deq_memory_writes() = dequeue_incoming_w;
-
-    // put write requests in from COMMIT
-    interface Put memory_writes;
-        interface put = incoming_writes_w._write();
+    // put write requests in from LSU
+    interface Put memory_write;
+        method Action put(MemWr m);
+            internal_buf.enq(m);
+        endmethod
     endinterface
 
     // interface for write dequeueing
@@ -235,6 +184,7 @@ module mkStoreBuffer(StoreBufferIFC);
         endinterface
     endinterface
     method Bool empty() = internal_buf.empty() && pending_buf.notFull();
+    method Bool full() = internal_buf.full();
 endmodule
 
 endpackage

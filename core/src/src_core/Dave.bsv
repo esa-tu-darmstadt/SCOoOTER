@@ -28,7 +28,11 @@ module mkDave(DaveIFC);
         endrule
     end
 
-    interface imem_axi = inst_arbiter.axi_r;
+    `ifndef SOC
+        interface imem_axi = inst_arbiter.axi_r;
+    `else
+        interface imem_r = inst_arbiter.imem_r;
+    `endif
     interface dmem_axi_r = mem_arbiter.axi_r;
     interface dmem_axi_w = mem_arbiter.axi_w;
 

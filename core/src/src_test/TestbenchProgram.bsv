@@ -79,6 +79,7 @@ package TestbenchProgram;
         // create a fitting BRAM
         BRAM_Configure cfg_i = defaultValue;
         cfg_i.allowWriteResponseBypass = True;
+        cfg_i.memorySize = valueOf(bram_word_num_t);
         cfg_i.loadFormat = tagged Hex imem_file;
         cfg_i.latency = 1;
         BRAM1Port#(Bit#(XLEN), Bit#(ifuwidth)) ibram <- mkBRAM1Server(cfg_i);
@@ -177,6 +178,10 @@ package TestbenchProgram;
                     begin
                         $write("%c", data[7:0]);
                     end
+                `ifdef RVFI
+                    `TOHOST:
+                        $finish();
+                `endif
                 default:
                     if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))
                     begin

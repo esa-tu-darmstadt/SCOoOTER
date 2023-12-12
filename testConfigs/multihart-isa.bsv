@@ -23,6 +23,11 @@ typedef 1 NUM_ALU;
 typedef 1 NUM_MULDIV;
 typedef 1 NUM_BR;
 
+// Regfile as Latches
+typedef 0 REGFILE_LATCH_BASED;
+typedef 0 REGEVO_LATCH_BASED;
+typedef 0 REGCSR_LATCH_BASED;
+
 // rs depths
 typedef 2 RS_DEPTH_ALU;
 typedef 2 RS_DEPTH_MEM;
@@ -32,8 +37,8 @@ typedef 2 RS_DEPTH_BR;
 
 // bus buffering
 typedef 0 RS_LATCH_BUS;
-typedef 1 DECODE_LATCH_OUTPUT;
-typedef 1 ROB_LATCH_OUTPUT;
+typedef 0 DECODE_LATCH_OUTPUT;
+typedef 0 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
 typedef 0 RS_LATCH_INPUT;
 
@@ -54,6 +59,6 @@ typedef 16 RASDEPTH;
 
 typedef 8 STORE_BUF_DEPTH;
 
-typedef 4 NUM_CPU;
+typedef 2 NUM_CPU;
 typedef 2 NUM_THREADS;
 endpackage

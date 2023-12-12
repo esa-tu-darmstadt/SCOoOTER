@@ -25,6 +25,7 @@ import RWire::*;
 import Debug::*;
 import GetPut::*;
 import ClientServer::*;
+import Vector::*;
 
 // CSR operation enum
 typedef enum {
@@ -46,22 +47,33 @@ typedef struct {
     Bool except;
     Bit#(XLEN) operand;
     Bit#(12) addr;
+    UInt#(EPOCH_WIDTH) epoch;
+    UInt#(TLog#(NUM_THREADS)) thread_id;
+    Bool is_readonly_inst;
 } Internal_struct deriving(Bits, FShow);
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkCSR(CsrIFC);
+module mkCSR(CsrIFC) provisos (
+    Log#(ROBDEPTH, rob_idx_t)
+);
+
+// local epoch for tossing wrong-path instructions
+// this reduces bus pressure 
+Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch_r <- replicateM(mkReg(0));
 
 // in, out FIFOS and output wire
-FIFO#(Instruction) in <- mkPipelineFIFO();
+FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 FIFOF#(Result) out <- mkFIFOF();
 RWire#(Result) out_valid <- mkRWire();
 Reg#(Bool) inflight_r <- mkReg(False);
 
 // outgoing csr write
-FIFO#(CsrWriteResult) out_wr <- mkFIFO();
-RWire#(CsrWriteResult) out_wr_valid <- mkRWire();
+FIFO#(CsrWrite) out_wr <- mkFIFO();
+
+// ROB head ID
+Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 
 // req and resp wires for CSR reading
 FIFO#(CsrRead) csr_req <- mkBypassFIFO();
@@ -69,17 +81,14 @@ Wire#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassWire();
 // Buffer between stages
 FIFO#(Internal_struct) stage1 <- mkFIFO();
 
-// wire to propagate if CSR is currently blocked
-Wire#(Bool) blocked <- mkBypassWire();
-
 // request CSR read and enqueue into buffer between stages
-rule get_request if (!blocked && !inflight_r);
+rule get_request if ((!inflight_r) && (valueOf(ROBDEPTH) == 1 || in.first().tag == rob_head));
     let inst = in.first(); in.deq();
 
     inflight_r <= True;
 
-    Bit#(12) csr_addr = inst.imm[31:20];
-    Bit#(5) csr_imm = inst.imm[19:15];
+    Bit#(12) csr_addr = truncateLSB(inst.remaining_inst);
+    Bit#(5) csr_imm = inst.remaining_inst[12:8];
 
     dbg_print(CSR, $format("%x", inst.pc));
 
@@ -109,8 +118,11 @@ rule get_request if (!blocked && !inflight_r);
                 ECALL:   ECALL;
                 EBREAK:  EBREAK;
             endcase,
+        is_readonly_inst: (inst.remaining_inst[12:8] == 5'h0),
         operand: op,
-        addr: csr_addr
+        addr: csr_addr,
+        epoch: inst.epoch,
+        thread_id: inst.thread_id
     });
 endrule
 
@@ -119,9 +131,13 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
     let csr_data = csr_res;
     let internal = stage1.first(); stage1.deq();
     
-    dbg_print(CSR, $format("read: %x %x", internal.addr, csr_data, fshow(blocked)));
+    dbg_print(CSR, $format("read: %x %x", internal.addr, csr_data));
 
     Result res = ?;
+
+    Bool is_readonly_csr = 2'b11 == truncateLSB(internal.addr);
+    Bool is_readonly_inst = (internal.is_readonly_inst) && (internal.op == RS || internal.op == RSI || internal.op == RC || internal.op == RCI);
+    Bool is_invalid_inst = is_readonly_csr && !is_readonly_inst;
 
     // return read data and csr writing request
     if(csr_data matches tagged Valid .data) begin
@@ -132,11 +148,13 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
         endcase;
 
         res = Result {
-            result : tagged Result data,
+            result : (is_invalid_inst ? tagged Except INVALID_INST : tagged Result data),
             new_pc : tagged Invalid,
             tag : internal.tag
         };
-        out_wr.enq(CsrWriteResult {addr: internal.addr, data: out});
+        if (!is_invalid_inst && stage1.first.epoch() == epoch_r[stage1.first().thread_id]) begin
+            out_wr.enq(CsrWrite {addr: internal.addr, data: out, thread_id: internal.thread_id});
+        end
     end else // if no read was returned, the CSR does not exist
         res = Result {
             result : tagged Except INVALID_INST,
@@ -168,11 +186,6 @@ rule propagate_result;
     let res = out.first();
     out_valid.wset(res);
 endrule
-rule propagate_writes;
-    out_wr.deq();
-    let res = out_wr.first();
-    out_wr_valid.wset(res);
-endrule
 
 rule clear_inflight if (inflight_r && out.notEmpty());
     inflight_r <= False;
@@ -180,7 +193,7 @@ endrule
 
 // FU interface
 interface FunctionalUnitIFC fu;
-    method Action put(Instruction inst) = in.enq(inst);
+    method Action put(InstructionIssue inst) = in.enq(inst);
     method Maybe#(Result) get() = out_valid.wget();
 endinterface
 
@@ -192,11 +205,17 @@ interface Client csr_read;
     endinterface
 endinterface
 
-// input from ROB that blocks CSR operations if one is pending
-method Action block(Bool b) = blocked._write(b);
+method Action current_rob_id(UInt#(rob_idx_t) idx) = rob_head._write(idx);
 
-// write req. handling
-method Maybe#(CsrWriteResult) write = out_wr_valid.wget();
+// epoch handling
+method Action flush(Vector#(NUM_THREADS, Bool) flags);
+    for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
+        if(flags[i]) begin
+            epoch_r[i] <= epoch_r[i] + 1;
+        end
+endmethod
+
+interface Get write = toGet(out_wr);
 
 endmodule
 

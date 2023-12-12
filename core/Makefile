@@ -8,8 +8,10 @@ MAIN_MODULE=src_core/Dave
 TESTBENCH_FILE=src/src_test/Testbench.bsv
 
 ifeq ($(SOC), 1)
-	TOP_MODULE=mkExecCore
-	MAIN_MODULE=src_core/exec_core/ExecCore
+	TOP_MODULE=mkSocTop
+	TESTBENCH_MODULE=mkSocTop
+	MAIN_MODULE=src_soc/SocTop
+	TESTBENCH_FILE=src/src_soc/SocTop.bsv
 endif
 
 # Initialize
@@ -43,9 +45,20 @@ endif
 
 # Default flags
 EXTRA_FLAGS= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
-EXTRA_FLAGS+= -show-schedule -D "BSV_TIMESCALE=1ns/1ps -keep-fires"
-EXTRA_FLAGS+= -D $(TB) -D BSV_NO_INITIAL_BLOCKS +RTS -K1G -RTS -D BSV_ASYNC_RESET -D TOHOST=$(TOHOST)
-EXTRA_FLAGS+= -verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" "
+EXTRA_FLAGS+= -show-schedule -D "BSV_TIMESCALE=1ns/1ps"
+EXTRA_FLAGS+= -D $(TB) +RTS -K1G -RTS -D BSV_ASYNC_RESET -D TOHOST=$(TOHOST)
+
+ifeq ($(SOC),)
+	ifeq ($(SIM_TYPE),)
+		EXTRA_FLAGS+=  -keep-fires -D BSV_NO_INITIAL_BLOCKS
+	endif
+else
+		EXTRA_FLAGS+= -D SOC
+endif
+ifeq ($(IP),1)
+EXTRA_FLAGS+= -verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" " -D BSV_NO_INITIAL_BLOCKS
+endif
+
 
 ifeq ($(SYNTH),1)
 	EXTRA_FLAGS+=-D SYNTH_SEPARATE_BLOCKS
@@ -62,6 +75,8 @@ endif
 ifeq ($(RVFI),1)
 	EXTRA_FLAGS+=-D RVFI
 endif
+
+$(shell cp src/BVI/*.v build/verilog)
 
 ###
 # User configuration

@@ -65,8 +65,7 @@ typedef enum {
     ECALL_M = 11,
     INST_PAGE_FAULT = 12,
     LOAD_PAGE_FAULT = 13,
-    AMO_ST_PAGE_FAULT = 15,
-    NONE
+    AMO_ST_PAGE_FAULT = 15
 } ExceptionType deriving(Bits, Eq, FShow);
 
 // known Opcode values
@@ -110,28 +109,18 @@ typedef enum {
 
 // Struct containing all possible fields of an instruction
 typedef struct {
-    Bit#(XLEN) pc;
+    Bit#(PCLEN) pc;
     OpCode opc;
 
     //function fields
     Bit#(7) funct7;
     Bit#(3) funct3;
 
-    //reg fields
-    RADDR rs2;
-    RADDR rs1;
-    RADDR rd;
-
-    //immediate fields
-    Bit#(XLEN) immI;
-    Bit#(XLEN) immS;
-    Bit#(XLEN) immB;
-    Bit#(XLEN) immU;
-    Bit#(XLEN) immJ;
-
     UInt#(EPOCH_WIDTH) epoch;
 
-    Bit#(XLEN) predicted_pc;
+    Bit#(PCLEN) predicted_pc;
+
+    Bit#(25) remaining_inst;
 
     Bit#(BITS_BHR) history;
 
@@ -141,6 +130,10 @@ typedef struct {
 
     `ifdef RVFI
         Bit#(XLEN) iword;
+    `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
     `endif
 } InstructionPredecode deriving(Bits, Eq, FShow);
 
@@ -153,6 +146,10 @@ typedef union tagged {
     UInt#(TLog#(ROBDEPTH)) Tag;
     Bit#(XLEN) Operand;
 } Operand deriving(Bits, Eq, FShow);
+typedef union tagged {
+    UInt#(TLog#(ROBDEPTH)) Tag;
+    Bit#(XLEN) Operand;
+} OperandRS deriving(Bits, Eq, FShow);
 
 // destination of a result
 // can be a register, memory or nothing
@@ -165,35 +162,27 @@ typedef union tagged {
 // struct containing condensed amount of fields
 typedef struct {
     ExecUnitTag eut;
-    Bit#(XLEN) pc;
+    Bit#(PCLEN) pc;
     OpCode opc;
 
     //function fields for R type inst
     OpFunction funct;
 
-    //atomic fields
-    Bool aq;
-    Bool rl;
+    Bit#(25) remaining_inst;
 
     //reg fields
-    Operand rs2;
-    Operand rs1;
-    RADDR rd;
+    Bool has_rs2;
+    Bool has_rs1;
+    Bool has_rd;
 
-    //tag field for ROB
-    UInt#(TLog#(ROBDEPTH)) tag;
-
-    //immediate fields
-    Bit#(XLEN) imm;
-
-    // track an occurred exception
-    Maybe#(ExceptionType) exception;
+    // track an occurred exception (can only be INVALID_INST, hence Bool)
+    Bool exception;
 
     // epoch is used to synchronize all units in case of misprediction
     UInt#(EPOCH_WIDTH) epoch;
 
     // log predicted successor instruction
-    Bit#(XLEN) predicted_pc;
+    Bit#(PCLEN) predicted_pc;
 
     // save history for predictors
     Bit#(BITS_BHR) history;
@@ -205,11 +194,50 @@ typedef struct {
     `ifdef RVFI
         Bit#(XLEN) iword;
     `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
 } Instruction deriving(Bits, Eq, FShow);
 
 instance DefaultValue#(Instruction);
     defaultValue = ?;
 endinstance
+
+// struct containing condensed amount of fields
+typedef struct {
+    Bit#(PCLEN) pc;
+    OpCode opc;
+
+    //function fields for R type inst
+    OpFunction funct;
+
+    //reg fields
+    OperandRS rs2;
+    OperandRS rs1;
+
+    //tag field for ROB
+    UInt#(TLog#(ROBDEPTH)) tag;
+
+    // track an occurred exception
+    Maybe#(ExceptionType) exception;
+
+    // epoch is used to synchronize all units in case of misprediction
+    UInt#(EPOCH_WIDTH) epoch;
+
+    // multithreading
+    UInt#(TLog#(NUM_THREADS)) thread_id;
+
+    Bit#(25) remaining_inst;
+
+    `ifdef RVFI
+        Bit#(XLEN) iword;
+    `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
+} InstructionIssue deriving(Bits, Eq, FShow);
 
 // write accesses to memory
 typedef struct {
@@ -240,25 +268,6 @@ typedef struct {
     `endif
 } Result deriving(Bits, FShow);
 
-// Entire result struct also containing CSR and mem operations
-// the struct is bulkier than required by most units
-typedef union tagged { // writes to mem or csr
-        MemWr Mem;
-        void None;
-        CsrWriteResult Csr;
-} ResultWrite deriving(Bits, FShow);
-
-typedef struct {
-    UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
-    Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
-    ResultOrExcept result;
-    ResultWrite write;
-
-    `ifdef RVFI
-        UInt#(XLEN) mem_addr;
-    `endif
-} FullResult deriving(Bits, FShow);
-
 // reservationStation result bus
 // RSs only require a tagged result. Exceptions and mem/CSR state is superficial here
 typedef struct {
@@ -268,7 +277,7 @@ typedef struct {
 
 // entries to reorder buffer
 typedef struct {
-    Bit#(XLEN) pc; // addr of the instruction
+    Bit#(PCLEN) pc; // addr of the instruction
     RADDR destination; // destination register
     union tagged { // result (or tag identifying producing instruction)
         UInt#(TLog#(ROBDEPTH)) Tag;
@@ -276,15 +285,9 @@ typedef struct {
         ExceptionType Except;
     } result;
     // next real pc and predicted one
-    Bit#(XLEN) next_pc;
-    Bit#(XLEN) pred_pc;
+    Bit#(PCLEN) next_pc;
+    Bit#(PCLEN) pred_pc;
     UInt#(EPOCH_WIDTH) epoch; // epoch to synchronize on misprediction
-    union tagged { // writes to memory or CSRs
-        MemWr Mem;
-        void Pending_mem;
-        void None;
-        CsrWriteResult Csr;
-    } write;
     // identify if the instruction is branching and if it is br or jal
     Bool branch;
     Bool br;
@@ -298,6 +301,10 @@ typedef struct {
         Bit#(XLEN) iword;
         UInt#(XLEN) mem_addr;
         OpCode opc;
+    `endif
+
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
     `endif
 } RobEntry deriving(Bits, FShow);
 
@@ -353,14 +360,17 @@ typedef union tagged {
 
 // instruction right after fetch with metadata
 typedef struct {
-    Bit#(32) instruction;
-    Bit#(32) pc;
+    Bit#(XLEN) instruction;
+    Bit#(PCLEN) pc;
     UInt#(EPOCH_WIDTH) epoch;
     // predictor metadata
-    Bit#(32) next_pc;
+    Bit#(PCLEN) next_pc;
     Bit#(BITS_BHR) history;
     Bit#(RAS_EXTRA) ras;
     UInt#(TLog#(NUM_THREADS)) thread_id;
+    `ifdef LOG_PIPELINE
+        Bit#(XLEN) log_id;
+    `endif
 } FetchedInstruction deriving(Bits, FShow);
 
 // output from fetch stage
@@ -377,9 +387,9 @@ typedef struct {
 
 // training info for predictors
 typedef struct {
-    Bit#(XLEN) pc; // pc of branching inst
+    Bit#(PCLEN) pc; // pc of branching inst
     Bool taken; // was inst taken or untaken?
-    Bit#(XLEN) target; // what is the branch target
+    Bit#(PCLEN) target; // what is the branch target
     Bit#(BITS_BHR) history; // history from BHR
     Bool miss; // was the predictor wrong?
     Bool branch; // was this a br or jal?
@@ -395,7 +405,7 @@ typedef struct {
 // Trap description
 typedef struct {
     Bit#(XLEN) cause;
-    Bit#(XLEN) pc;
+    Bit#(PCLEN) pc;
     Bit#(XLEN) val;
 } TrapDescription deriving(Bits, FShow);
 
