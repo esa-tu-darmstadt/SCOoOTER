@@ -89,5 +89,7 @@ function Bool ispwr2(Integer test);
     return ret.Valid;
 endfunction
 
+function Maybe#(a) get_r_wire(RWire#(a) rw) = rw.wget();
+
 endpackage
 

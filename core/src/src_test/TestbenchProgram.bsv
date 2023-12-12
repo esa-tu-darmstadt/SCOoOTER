@@ -10,6 +10,7 @@ package TestbenchProgram;
     import DefaultValue::*;
     import FIFO::*;
     import SpecialFIFOs::*;
+    import Vector::*;
 
     // RVController emulation defines
     typedef 'h11000010 RV_CONTROLLER_RETURN_ADDRESS;
@@ -65,6 +66,16 @@ package TestbenchProgram;
 
 
         let dut <- mkDave();
+
+        `ifdef DEXIE
+            rule show_dexie;
+                for (Integer i = 0; i < valueOf(NUM_CPU); i=i+1) begin
+                    if (isValid(dut.dexie[0].regw[i])) $display("REG: ", fshow(dut.dexie[0].regw[i]));
+                    if (isValid(dut.dexie[0].cf[i]  )) $display(" CF: ", fshow(dut.dexie[0].cf[i]));
+                end
+                if (isValid(dut.dexie[0].memw  )) $display("MEM: ", fshow(dut.dexie[0].memw));
+            endrule
+        `endif
 
         rule interrupt;
             dut.ext_int(count_r%'h3000 == 0 && count_r%'h6000 != 0 && count_r%'h8000 != 0 ? unpack({1'b1, 0}): unpack(0));

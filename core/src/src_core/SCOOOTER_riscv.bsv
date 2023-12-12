@@ -114,7 +114,13 @@ module mkSCOOOTER_riscv(Top) provisos(
 
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = be.hart_id(in);
 
-
+    `ifdef DEXIE
+        interface DExIETraceIfc dexie;
+            method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw = be.dexie.regw;
+            method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf = be.dexie.cf();
+            interface memw = ec.dexie_memw();
+        endinterface
+    `endif
 
 endmodule
 

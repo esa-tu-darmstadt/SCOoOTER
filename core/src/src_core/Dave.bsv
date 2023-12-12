@@ -28,11 +28,19 @@ module mkDave(DaveIFC);
         endrule
     end
 
+    `ifdef DEXIE
+        Vector#(NUM_CPU, DExIETraceIfc) dexie_loc;
+        for (Integer i = 0; i < valueOf(NUM_CPU); i=i+1)
+            dexie_loc[i] = cores[i].dexie;
+        interface DExIETraceIfc dexie = dexie_loc;
+    `endif
+
     `ifndef SOC
         interface imem_axi = inst_arbiter.axi_r;
     `else
         interface imem_r = inst_arbiter.imem_r;
     `endif
+    
     interface dmem_axi_r = mem_arbiter.axi_r;
     interface dmem_axi_w = mem_arbiter.axi_w;
 

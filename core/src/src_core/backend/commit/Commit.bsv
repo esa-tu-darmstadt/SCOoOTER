@@ -142,6 +142,11 @@ function Vector#(b, Maybe#(a)) mask_maybes(Vector#(b, Maybe#(a)) m, Bit#(b) f);
     return m;
 endfunction
 
+`ifdef DEXIE
+    Vector#(ISSUEWIDTH, RWire#(DexieCF)) dexie_control_flow <- replicateM(mkRWire());
+    Vector#(ISSUEWIDTH, RWire#(DexieReg)) dexie_reg_write <- replicateM(mkRWire());
+`endif
+
 method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
     action
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
@@ -208,6 +213,11 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                                 first_trap[i] <= False;
                                 count_insts[instructions[i].thread_id][i] <= count_insts[instructions[i].thread_id][i]+1;
                             `endif
+
+                            // generate DEXIE trace
+                            `ifdef DEXIE
+                                dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: instructions[i].next_pc});
+                            `endif
                         end
 
                     end else
@@ -252,6 +262,12 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                             $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, {instructions[i].pc, 2'b00}, instructions[i].epoch);
                             $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
                             $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 0);
+                        `endif
+
+                        `ifdef DEXIE
+                            if (instructions[i].dexie_type matches tagged Control) dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: instructions[i].next_pc});
+                            else if (instructions[i].ret) dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: instructions[i].next_pc});
+                            else if (instructions[i].dexie_type matches tagged Register &&& instructions[i].destination != 0) dexie_reg_write[i].wset(DexieReg {pc: instructions[i].pc, destination: instructions[i].destination, data: r});
                         `endif
 
                         if(instructions[i].branch == True && 
@@ -365,6 +381,13 @@ endmethod
 //RVFI
 `ifdef RVFI
     interface rvfi_out = Vector::readVReg(rvfi);
+`endif
+
+`ifdef DEXIE
+    interface DExIETraceIfc dexie;
+        method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf = Vector::map(get_r_wire, dexie_control_flow);
+        method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw = Vector::map(get_r_wire, dexie_reg_write);
+    endinterface
 `endif
 
 endmodule

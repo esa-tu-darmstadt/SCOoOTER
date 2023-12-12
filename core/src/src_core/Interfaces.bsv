@@ -36,6 +36,10 @@ interface DaveIFC;
         method UInt#(XLEN) wrong_pred_j;
     `endif
 
+    `ifdef DEXIE
+        interface Vector#(NUM_CPU, DExIETraceIfc) dexie;
+    `endif
+
 endinterface
 
 // Toplevel interface to external world
@@ -58,6 +62,10 @@ interface Top;
         method UInt#(XLEN) wrong_pred_br;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
+    `endif
+
+    `ifdef DEXIE
+        interface DExIETraceIfc dexie;
     `endif
 endinterface
 
@@ -164,6 +172,10 @@ interface MemoryUnitIFC;
     method Action store_queue_empty(Bool b);
     method Action store_queue_full(Bool b);
     interface Get#(MemWr) write;
+
+    `ifdef DEXIE
+        method Maybe#(DexieMem) dexie_memw;
+    `endif
 endinterface
 
 interface RobIFC;
@@ -201,6 +213,10 @@ interface CommitIFC;
     `ifdef RVFI
         (* always_ready,always_enabled *)
         method Vector#(ISSUEWIDTH, RVFIBus) rvfi_out;
+    `endif
+
+    `ifdef DEXIE
+        interface DExIETraceIfc dexie;
     `endif
 endinterface
 
@@ -249,6 +265,14 @@ interface CsrFileIFC;
     method Vector#(NUM_THREADS, Bit#(3)) ext_interrupt_mask();
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
+endinterface
+
+interface DExIETraceIfc;
+
+    method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
+    method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
+    method Maybe#(DexieMem) memw;
+
 endinterface
 
 endpackage

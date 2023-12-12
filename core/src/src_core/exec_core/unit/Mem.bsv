@@ -16,13 +16,6 @@ import GetPut::*;
 import Vector::*;
 import Decode::*;
 
-// struct for access width
-typedef enum {
-        BYTE,
-        HALF,
-        WORD
-} Width deriving(Bits, Eq, FShow);
-
 // struct for load pipeline stages
 typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag;
@@ -83,6 +76,10 @@ endcase;
 
 // STORE HANDLING
 
+`ifdef DEXIE
+    RWire#(DexieMem) dexie_memw_local <- mkRWire();
+`endif
+
 // single-cycle calculation
 // real write occurs in storebuffer after successful commit
 rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r && (rob_head == in.first().tag || valueOf(ROBDEPTH) == 1) && in.first().epoch == epoch_r[in.first().thread_id]);
@@ -127,6 +124,17 @@ rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r
     if (inst.exception matches tagged Valid .e) local_result.result = tagged Except e;
     out.enq(local_result);
     if (!check_misalign(truncate(pack(final_addr)), width)) out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
+
+
+    `ifdef DEXIE
+        dexie_memw_local.wset(DexieMem {
+            pc:         inst.pc,
+            instruction:{inst.remaining_inst, pack(inst.opc)},
+            mem_addr:   pack(final_addr),
+            size:       width,
+            data:       raw_data
+        } );
+    `endif
 endrule
 
 rule calculate_store_flush if (in.first().opc == STORE && in.first().epoch != epoch_r[in.first().thread_id]);
@@ -469,6 +477,10 @@ method Action store_queue_empty(Bool b) = store_queue_empty_w._write(b);
 method Action store_queue_full(Bool b) = store_queue_full_w._write(b);
 
 interface Get write = toGet(out_wr);
+
+`ifdef DEXIE
+    method Maybe#(DexieMem) dexie_memw = dexie_memw_local.wget();
+`endif
 
 endmodule
 
