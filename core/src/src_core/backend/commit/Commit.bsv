@@ -145,9 +145,14 @@ endfunction
 `ifdef DEXIE
     Vector#(ISSUEWIDTH, RWire#(DexieCF)) dexie_control_flow <- replicateM(mkRWire());
     Vector#(ISSUEWIDTH, RWire#(DexieReg)) dexie_reg_write <- replicateM(mkRWire());
+    Wire#(Bool) dexie_stall_w <- mkBypassWire();
 `endif
 
-method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count);
+method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, UInt#(issuewidth_log_t) count) 
+    `ifdef DEXIE
+        if (!dexie_stall_w)
+    `endif
+;
     action
         Vector#(ISSUEWIDTH, Maybe#(RegWrite)) temp_requests = replicate(tagged Invalid);
 
@@ -388,6 +393,7 @@ endmethod
         method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf = Vector::map(get_r_wire, dexie_control_flow);
         method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw = Vector::map(get_r_wire, dexie_reg_write);
     endinterface
+    method Action dexie_stall(Bool stall) = dexie_stall_w._write(stall);
 `endif
 
 endmodule

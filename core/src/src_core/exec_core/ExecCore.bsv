@@ -60,6 +60,8 @@ interface ExecCoreIFC;
 
     `ifdef DEXIE
         method Maybe#(DexieMem) dexie_memw;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
     `endif
 endinterface
 
@@ -197,6 +199,7 @@ module mkExecCore(ExecCoreIFC);
 
     `ifdef DEXIE
         method Maybe#(DexieMem) dexie_memw = mem.dexie_memw;
+        interface dexie_stall = mem.dexie_stall();
     `endif
 endmodule
 

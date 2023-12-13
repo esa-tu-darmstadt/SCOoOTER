@@ -75,6 +75,12 @@ package TestbenchProgram;
                 end
                 if (isValid(dut.dexie[0].memw  )) $display("MEM: ", fshow(dut.dexie[0].memw));
             endrule
+            
+            Reg#(Bool) stall_lol <- mkReg(False);
+            rule set_dexie_stalls;
+                dut.dexie[0].stall_signals(stall_lol, False);
+                stall_lol <= !stall_lol;
+            endrule
         `endif
 
         rule interrupt;

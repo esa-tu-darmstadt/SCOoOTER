@@ -511,10 +511,4 @@ typedef struct {
     Bit#(XLEN) data;
 } DexieReg deriving(Bits, FShow);
 
-typedef struct {
-    Vector#(ISSUEWIDTH, Maybe#(DexieCF)) control_flow;
-    Maybe#(DexieMem) memory_write;
-    Vector#(ISSUEWIDTH, Maybe#(DexieReg)) register_write;
-} DexieTrace deriving(Bits, FShow);
-
 endpackage

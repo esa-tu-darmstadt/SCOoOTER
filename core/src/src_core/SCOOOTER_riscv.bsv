@@ -96,6 +96,20 @@ module mkSCOOOTER_riscv(Top) provisos(
         be.int_flags(Vector::map(Vector::readVReg,int_mask));
     endrule
 
+    `ifdef DEXIE
+        interface DExIEIfc dexie;
+            method Action stall_signals(Bool control, Bool store);
+                Bool memu_stall = control || store;
+                Bool commit_stall = control;
+                be.dexie_stall(commit_stall);
+                ec.dexie_stall(memu_stall);
+            endmethod
+            method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw = be.dexie.regw;
+            method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf = be.dexie.cf();
+            interface memw = ec.dexie_memw();
+        endinterface
+    `endif
+
     // interrupts
     method Action sw_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][2]._write(b[i]); endmethod
     method Action timer_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][1]._write(b[i]); endmethod
@@ -113,14 +127,6 @@ module mkSCOOOTER_riscv(Top) provisos(
     interface read_i = fe.read_inst;
 
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = be.hart_id(in);
-
-    `ifdef DEXIE
-        interface DExIETraceIfc dexie;
-            method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw = be.dexie.regw;
-            method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf = be.dexie.cf();
-            interface memw = ec.dexie_memw();
-        endinterface
-    `endif
 
 endmodule
 

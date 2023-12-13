@@ -49,6 +49,8 @@ interface BackendIFC;
 
     `ifdef DEXIE
         interface DExIETraceIfc dexie;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
     `endif
 endinterface
 
@@ -132,6 +134,7 @@ module mkBackend(BackendIFC) provisos (
     interface Put csr_write = csrf.write();
     `ifdef DEXIE
         interface dexie = commit.dexie;
+        interface dexie_stall = commit.dexie_stall;
     `endif
 endmodule
 

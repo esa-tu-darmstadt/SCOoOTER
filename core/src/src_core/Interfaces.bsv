@@ -37,7 +37,7 @@ interface DaveIFC;
     `endif
 
     `ifdef DEXIE
-        interface Vector#(NUM_CPU, DExIETraceIfc) dexie;
+        interface Vector#(NUM_CPU, DExIEIfc) dexie;
     `endif
 
 endinterface
@@ -65,7 +65,7 @@ interface Top;
     `endif
 
     `ifdef DEXIE
-        interface DExIETraceIfc dexie;
+        interface DExIEIfc dexie;
     `endif
 endinterface
 
@@ -175,6 +175,8 @@ interface MemoryUnitIFC;
 
     `ifdef DEXIE
         method Maybe#(DexieMem) dexie_memw;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
     `endif
 endinterface
 
@@ -217,6 +219,8 @@ interface CommitIFC;
 
     `ifdef DEXIE
         interface DExIETraceIfc dexie;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
     `endif
 endinterface
 
@@ -269,10 +273,25 @@ endinterface
 
 interface DExIETraceIfc;
 
+    (*always_ready, always_enabled*)
     method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
+    (*always_ready, always_enabled*)
     method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
+    (*always_ready, always_enabled*)
+    method Maybe#(DexieMem) memw;
+endinterface
+
+interface DExIEIfc;
+
+    (*always_ready, always_enabled*)
+    method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
+    (*always_ready, always_enabled*)
+    method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
+    (*always_ready, always_enabled*)
     method Maybe#(DexieMem) memw;
 
+    (*always_ready, always_enabled*)
+    method Action stall_signals(Bool control, Bool store);
 endinterface
 
 endpackage
