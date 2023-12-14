@@ -67,13 +67,12 @@ package SocTop;
     		let r <- dut.imem_r.request.get();
             UInt#(ibram_addr_t) addr = truncate(unpack((pack(tpl_1(r))>>2)/fromInteger(valueOf(IFUINST))));
             // the address must be converted to a word-address
-            let req = BRAMRequestBE {
-                address  : addr,
+            imem.portA.request.put(BRAMRequestBE {
+                address  : extend(addr),
                 datain : 0,
                 writeen    : 0,
                 responseOnWrite: False
-            };
-            imem.portA.request.put(req);
+            });
             read_pend_imem.enq(0);
   	    endrule
 
@@ -86,9 +85,7 @@ package SocTop;
 
         // DATA MEMORY
         AXI4_Slave_Wr#(XLEN, XLEN, cpu_and_amo_idx_t, 0) dram_axi_w <- mkAXI4_Slave_Wr(1, 1, 1);
-        AXI4_Slave_Rd#(XLEN, XLEN, cpu_and_amo_idx_t, 0) dram_axi_r <- mkAXI4_Slave_Rd(1, 1);
         mkConnection(dram_axi_w.fab ,dut.dmem_axi_w);
-        mkConnection(dram_axi_r.fab ,dut.dmem_axi_r);
 
         // create BRAM
         BRAM_Configure cfg_d = defaultValue;
@@ -160,18 +157,19 @@ package SocTop;
 
         // read data
         rule dataread;
-    		let r <- dram_axi_r.request.get();
-            r_id.enq(r.id);
+    		let r <- dut.dmem_r.request.get();
+            r_id.enq(tpl_2(r));
+            let addr = tpl_1(r);
 
-            if(r.addr == fromInteger(valueOf(RV_CONTROLLER_IO_IN_ADDRESS))) io_rd.enq(True);
+            if(addr == fromInteger(valueOf(RV_CONTROLLER_IO_IN_ADDRESS))) io_rd.enq(True);
             else io_rd.enq(False);
 
             // if in DRAM range, send sensible request
-            if(r.addr < fromInteger(2*valueOf(BRAMSIZE)) && r.addr >= fromInteger(valueOf(BRAMSIZE)))
+            if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))
                 dmem.portB.request.put(BRAMRequestBE{
                     writeen: 0,
                     responseOnWrite: True,
-                    address: unpack(truncate((r.addr)>>2)),
+                    address: truncate((addr)>>2),
                     datain: 0
                 });
             // if out of range, send dummy
@@ -183,7 +181,7 @@ package SocTop;
             io_rd.deq();
             r_id.deq();
             let r <- dmem.portB.response.get();
-            dram_axi_r.response.put(AXI4_Read_Rs {data: io_rd.first() ? extend(io_in_v[1]) : r, id: r_id.first(), resp: OKAY, last: True, user: 0});
+            dut.dmem_r.response.put(tuple2(io_rd.first() ? extend(io_in_v[1]) : r, r_id.first()));
         endrule
 
         rule no_int;

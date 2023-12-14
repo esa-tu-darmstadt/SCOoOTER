@@ -12,15 +12,18 @@ import ClientServer::*;
 
 interface DaveIFC;
     `ifndef SOC
-    (* prefix= "axi_master_fetch" *)
+        (* prefix= "axi_master_fetch" *)
         interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
+        (* prefix= "axi_master_data" *)
+        interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_r;
+        (* prefix= "axi_master_data" *)
+        interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_w;
+    
     `else
         interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
+        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TAdd#(1, TLog#(NUM_CPU))))) dmem_r;
+        interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Bit#(TAdd#(1, TLog#(NUM_CPU)))) dmem_w;
     `endif
-    (* prefix= "axi_master_data" *)
-    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_r;
-    (* prefix= "axi_master_data" *)
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_w;
 
     (* always_ready, always_enabled *)
     method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
@@ -71,8 +74,16 @@ endinterface
 
 interface MemoryArbiterIFC;
     // axi to data memory
-    interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_r;
-    interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_w;
+    
+
+    `ifndef SOC
+        interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_r;
+        interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_w;
+    `else
+        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TAdd#(1, TLog#(NUM_CPU))))) dmem_r;
+        interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Bit#(TAdd#(1, TLog#(NUM_CPU)))) dmem_w;
+    `endif
+
     // normal reads/writes
     interface Vector#(NUM_CPU, Server#(MemWr, void)) writes;
     interface Vector#(NUM_CPU, Server#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN))) reads;
