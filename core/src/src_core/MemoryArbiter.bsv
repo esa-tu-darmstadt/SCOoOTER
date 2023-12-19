@@ -37,7 +37,7 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
         AXI4_Master_Wr#(XLEN, XLEN, axi_idx_t, 0) axi_wr <- mkAXI4_Master_Wr(0, 0, 0, False);
     `else
         FIFO#(Tuple2#(UInt#(XLEN), Bit#(axi_idx_t))) req_fifo <- mkPipelineFIFO();
-        FIFO#(Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(axi_idx_t))) res_fifo <- mkPipelineFIFO();
+        FIFO#(Tuple2#(Bit#(XLEN), Bit#(axi_idx_t))) res_fifo <- mkPipelineFIFO();
         
         FIFO#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(axi_idx_t))) req_wr_fifo <- mkPipelineFIFO();
         FIFO#(Bit#(axi_idx_t)) res_wr_fifo <- mkPipelineFIFO();
