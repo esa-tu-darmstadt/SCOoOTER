@@ -75,6 +75,9 @@ endif
 ifeq ($(RVFI),1)
 	EXTRA_FLAGS+=-D RVFI
 endif
+ifeq ($(DEXIE),1)
+	EXTRA_FLAGS+=-D DEXIE
+endif
 
 $(shell cp src/BVI/*.v build/verilog)
 
