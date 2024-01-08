@@ -142,7 +142,7 @@ elif [[ "$list_num" = 95 ]];then
            "riscv_unaligned_load_store_test"
            );
    I=(20 20 20 20);
-if [[ "$list_num" = 96 ]];then
+elif [[ "$list_num" = 96 ]];then
 	TEST_NAME=(
            "riscv_rand_jump_no_cmp_test"
            "riscv_rand_jump_illegal_test"
