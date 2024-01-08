@@ -149,6 +149,7 @@ elif [[ "$list_num" = 96 ]];then
            "riscv_arithmetic_basic_sub_prog_test"
            );
 	I=(20 20 20);
+fi
 
 if [[ "$list_num" != 0 ]];then
 if [[ ${#TEST_NAME[@]} != ${#I[@]} ]];then
