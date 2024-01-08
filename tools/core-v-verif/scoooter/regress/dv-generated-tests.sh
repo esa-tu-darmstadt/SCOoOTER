@@ -113,7 +113,7 @@ elif [[ "$list_num" = 99 ]];then
            "cva6_instr_base_test"
            );
    I=(20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 1);
-if [[ "$list_num" = 91 ]];then
+elif [[ "$list_num" = 91 ]];then
   TEST_NAME=(
            "riscv_arithmetic_basic_loop_test"
            "riscv_arithmetic_basic_test_no_comp"
@@ -142,7 +142,7 @@ elif [[ "$list_num" = 95 ]];then
            "riscv_unaligned_load_store_test"
            );
    I=(20 20 20 20);
-elif [[ "$list_num" = 96 ]];then
+if [[ "$list_num" = 96 ]];then
 	TEST_NAME=(
            "riscv_rand_jump_no_cmp_test"
            "riscv_rand_jump_illegal_test"
