@@ -67,13 +67,12 @@ package SocTop;
     		let r <- dut.imem_r.request.get();
             UInt#(ibram_addr_t) addr = truncate(unpack((pack(tpl_1(r))>>2)/fromInteger(valueOf(IFUINST))));
             // the address must be converted to a word-address
-            let req = BRAMRequestBE {
-                address  : addr,
+            imem.portA.request.put(BRAMRequestBE {
+                address  : extend(addr),
                 datain : 0,
                 writeen    : 0,
                 responseOnWrite: False
-            };
-            imem.portA.request.put(req);
+            });
             read_pend_imem.enq(0);
   	    endrule
 
@@ -81,14 +80,14 @@ package SocTop;
         rule ifuresp;
             read_pend_imem.deq();
             let r <- imem.portA.response.get();
-            dut.imem_r.response.put(tuple2(extend(r), 0));
+            dut.imem_r.response.put(tuple2(r, 0));
         endrule
 
         // DATA MEMORY
-        AXI4_Slave_Wr#(XLEN, XLEN, cpu_and_amo_idx_t, 0) dram_axi_w <- mkAXI4_Slave_Wr(1, 1, 1);
-        AXI4_Slave_Rd#(XLEN, XLEN, cpu_and_amo_idx_t, 0) dram_axi_r <- mkAXI4_Slave_Rd(1, 1);
-        mkConnection(dram_axi_w.fab ,dut.dmem_axi_w);
-        mkConnection(dram_axi_r.fab ,dut.dmem_axi_r);
+        `ifndef SOC
+            AXI4_Slave_Wr#(XLEN, XLEN, cpu_and_amo_idx_t, 0) dram_axi_w <- mkAXI4_Slave_Wr(1, 1, 1);
+            mkConnection(dram_axi_w.fab ,dut.dmem_axi_w);
+        `endif
 
         // create BRAM
         BRAM_Configure cfg_d = defaultValue;
@@ -98,23 +97,38 @@ package SocTop;
 
         let dmem <- mkDMemWrapper();
 
-        // Buffer for write address prior to data arrival
-        FIFO#(AXI4_Write_Rq_Addr#(XLEN, cpu_and_amo_idx_t, 0)) w_request <- mkPipelineFIFO();
 
         FIFO#(Bit#(cpu_and_amo_idx_t)) w_id <- mkPipelineFIFO();
-    
-        // get address requests and store them
-  	    rule handleWriteRequest;
-        	let r <- dram_axi_w.request_addr.get();
-            w_id.enq(r.id);
-        	w_request.enq(r);
-    	endrule
+
+        // Buffer for write address prior to data arrival
+        `ifndef SOC
+            FIFO#(AXI4_Write_Rq_Addr#(XLEN, cpu_and_amo_idx_t, 0)) w_request <- mkPipelineFIFO();
+        `else
+            rule confirm_reite_done;
+                dut.dmem_w.response.put(w_id.first());
+                w_id.deq();
+            endrule
+        `endif
 
         // handle data requests
     	rule returnWriteValue;
-        	let r <- dram_axi_w.request_data.get();
-            let addr = w_request.first().addr; w_request.deq();
-            let data = r.data;
+
+            UInt#(32) addr = ?;
+            Bit#(32) data = ?;
+            Bit#(4) strb = ?;
+
+            `ifndef SOC
+                let r <- dram_axi_w.request_data.get();
+                addr = w_request.first().addr; w_request.deq();
+                data = r.data;
+                strb = r.strb;
+            `else
+                let r <- dut.dmem_w.request.get();
+                addr = tpl_1(r);
+                data = tpl_2(r);
+                strb = tpl_3(r);
+                w_id.enq(tpl_4(r));
+            `endif
             
             // request we will send to BRAM
             let request = BRAMRequestBE{
@@ -143,15 +157,17 @@ package SocTop;
                 default:
                     if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE)))
                     begin
-                        request.writeen = r.strb;
-                        request.address = ((addr-fromInteger(valueOf(BRAMSIZE)))>>2);
+                        request.writeen = strb;
+                        request.address = ((addr)>>2);
                         request.datain = data;
                     end
             endcase
             // send request
-            dmem.portA.request.put(BRAMRequestBE {writeen : r.strb, address: unpack(truncate(addr)), datain : data});
-            w_id.deq();
-            dram_axi_w.response.put(AXI4_Write_Rs {id: w_id.first(), resp: OKAY, user:0});
+            if (strb != 0) dmem.portA.request.put(BRAMRequestBE {writeen : request.writeen, address: truncate(request.address), datain : request.datain});
+            `ifndef SOC
+                w_id.deq();
+                dram_axi_w.response.put(AXI4_Write_Rs {id: w_id.first(), resp: OKAY, user:0});  
+            `endif
     	endrule
 
         FIFO#(Bit#(cpu_and_amo_idx_t)) r_id <- mkPipelineFIFO();
@@ -160,22 +176,23 @@ package SocTop;
 
         // read data
         rule dataread;
-    		let r <- dram_axi_r.request.get();
-            r_id.enq(r.id);
+    		let r <- dut.dmem_r.request.get();
+            r_id.enq(tpl_2(r));
+            let addr = tpl_1(r);
 
-            if(r.addr == fromInteger(valueOf(RV_CONTROLLER_IO_IN_ADDRESS))) io_rd.enq(True);
+            if(addr == fromInteger(valueOf(RV_CONTROLLER_IO_IN_ADDRESS))) io_rd.enq(True);
             else io_rd.enq(False);
 
             // if in DRAM range, send sensible request
-            if(r.addr < fromInteger(2*valueOf(BRAMSIZE)) && r.addr >= fromInteger(valueOf(BRAMSIZE)))
+            if(addr < fromInteger(2*valueOf(BRAMSIZE)) && addr >= fromInteger(valueOf(BRAMSIZE))) begin
                 dmem.portB.request.put(BRAMRequestBE{
                     writeen: 0,
                     responseOnWrite: True,
-                    address: unpack(truncate((r.addr)>>2)),
+                    address: truncate((addr)>>2),
                     datain: 0
                 });
             // if out of range, send dummy
-            else dmem.portB.request.put(BRAMRequestBE{ writeen: 0, responseOnWrite: True, address: 0, datain: 0});
+            end else dmem.portB.request.put(BRAMRequestBE{ writeen: 0, responseOnWrite: True, address: 0, datain: 0});
   	    endrule
 
         // forward reply via AXI
@@ -183,7 +200,8 @@ package SocTop;
             io_rd.deq();
             r_id.deq();
             let r <- dmem.portB.response.get();
-            dram_axi_r.response.put(AXI4_Read_Rs {data: io_rd.first() ? extend(io_in_v[1]) : r, id: r_id.first(), resp: OKAY, last: True, user: 0});
+            
+            dut.dmem_r.response.put(tuple2(r, r_id.first()));
         endrule
 
         rule no_int;

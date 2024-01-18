@@ -25,6 +25,13 @@ typedef enum {
     RW, RS, RC, RWI, RSI, RCI, RET
 } OpFunction deriving(Bits, Eq, FShow);
 
+// struct for access width
+typedef enum {
+        BYTE,
+        HALF,
+        WORD
+} Width deriving(Bits, Eq, FShow);
+
 // Exception enum (maybe move to maybe here?)
 typedef enum {
     ALU,
@@ -275,6 +282,12 @@ typedef struct {
     Bit#(XLEN) result;
 } ResultLoopback deriving(Bits, FShow);
 
+typedef union tagged {
+    void Control;
+    void Memory;
+    void Register;
+} DexieInstType deriving(Bits, FShow);
+
 // entries to reorder buffer
 typedef struct {
     Bit#(PCLEN) pc; // addr of the instruction
@@ -305,6 +318,11 @@ typedef struct {
 
     `ifdef LOG_PIPELINE
         Bit#(XLEN) log_id;
+    `endif
+
+    `ifdef DEXIE
+        DexieInstType dexie_type;
+        Bit#(XLEN) dexie_iword;
     `endif
 } RobEntry deriving(Bits, FShow);
 
@@ -474,7 +492,23 @@ typedef struct {
 } CSRBundle deriving(Bits);
 
 typedef struct {
+    Bit#(PCLEN) pc;
+    Bit#(XLEN) instruction;
+    Bit#(PCLEN) next_pc;
+} DexieCF deriving(Bits, FShow);
 
-} Inst deriving(Bits);
+typedef struct {
+    Bit#(PCLEN) pc;
+    Bit#(XLEN) instruction;
+    Bit#(XLEN) mem_addr;
+    Width size;
+    Bit#(XLEN) data;
+} DexieMem deriving(Bits, FShow);
+
+typedef struct {
+    Bit#(PCLEN) pc;
+    RADDR destination;
+    Bit#(XLEN) data;
+} DexieReg deriving(Bits, FShow);
 
 endpackage

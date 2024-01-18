@@ -32,8 +32,18 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
 );
 
     //AXI modules
-    AXI4_Master_Rd#(XLEN, XLEN, axi_idx_t, 0) axi_rd <- mkAXI4_Master_Rd(0, 1, False);
-    AXI4_Master_Wr#(XLEN, XLEN, axi_idx_t, 0) axi_wr <- mkAXI4_Master_Wr(0, 0, 0, False);
+    `ifndef SOC
+        AXI4_Master_Rd#(XLEN, XLEN, axi_idx_t, 0) axi_rd <- mkAXI4_Master_Rd(0, 1, False);
+        AXI4_Master_Wr#(XLEN, XLEN, axi_idx_t, 0) axi_wr <- mkAXI4_Master_Wr(0, 0, 0, False);
+    `else
+        FIFO#(Tuple2#(UInt#(XLEN), Bit#(axi_idx_t))) req_fifo <- mkPipelineFIFO();
+        FIFO#(Tuple2#(Bit#(XLEN), Bit#(axi_idx_t))) res_fifo <- mkPipelineFIFO();
+        
+        FIFO#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(axi_idx_t))) req_wr_fifo <- mkPipelineFIFO();
+        FIFO#(Bit#(axi_idx_t)) res_wr_fifo <- mkPipelineFIFO();
+    `endif
+    
+    
 
     //request buffers
     Vector#(NUM_CPU, FIFO#(Bit#(XLEN))) mem_rd_resp_f_v <- replicateM(mkPipelineFIFO());
@@ -51,20 +61,42 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
     Wire#(Bit#(XLEN)) result_read <- mkWire();
     Wire#(Bit#(XLEN)) result_amo <- mkWire();
     rule distribute_read_responses;
-        let r <- axi_rd.response.get();
+        Bit#(idx_cpu_t) cpu_id = ?;
+        Bit#(1) amo_id = ?;
+        Bit#(XLEN) data = ?;
+
+        `ifndef SOC
+            let r <- axi_rd.response.get();
+            cpu_id = truncate(r.id);
+            amo_id = truncateLSB(r.id);
+            data = r.data;
+        `else
+            let r = res_fifo.first();
+            res_fifo.deq();
+            cpu_id = truncate(tpl_2(r));
+            amo_id = truncateLSB(tpl_2(r));
+            data = tpl_1(r);
+        `endif
+
         dbg_print(AMO, $format("got AXI response"));
-        Bit#(idx_cpu_t) cpu_id = truncate(r.id);
-        Bit#(1) amo_id = truncateLSB(r.id);
-        if (amo_id == 0) mem_rd_resp_f_v[cpu_id].enq(r.data);
-        else                        result_amo  <= r.data;
+        
+        if (amo_id == 0) mem_rd_resp_f_v[cpu_id].enq(data);
+        else                        result_amo  <= data;
     endrule
 
     Vector#(NUM_CPU, PulseWire) result_writes <- replicateM(mkPulseWire());
     PulseWire write_amo <- mkPulseWire();
     rule distribute_write_responses;
-        let r <- axi_wr.response.get();
-        Bit#(idx_cpu_t) cpu_id = truncate(r.id);
-        Bit#(1) amo_id = truncateLSB(r.id);
+        Bit#(axi_idx_t) r = ?;
+        `ifndef SOC
+            let resp <- axi_wr.response.get();
+            r = resp.id;
+        `else
+            r = res_wr_fifo.first();
+            res_wr_fifo.deq();
+        `endif
+        Bit#(idx_cpu_t) cpu_id = truncate(r);
+        Bit#(1) amo_id = truncateLSB(r);
         if (amo_id == 0) result_writes[cpu_id].send();
         else           write_amo.send();
     endrule
@@ -101,19 +133,23 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
             if(amo_op != SC) begin
                 amo_description.enq(tuple4(in.addr, amo_data, amo_op, in.cpu_id));
 
-                axi_rd.request.put(AXI4_Read_Rq {
-                    id: {1, in.cpu_id},
-                    addr: in.addr,
-                    burst_length: 0,
-                    burst_size: B4,
-                    burst_type: INCR,
-                    lock: NORMAL,
-                    cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
-                    prot: UNPRIV_SECURE_DATA,
-                    qos: 0,
-                    region: 0,
-                    user: 0
-                });
+                `ifndef SOC
+                    axi_rd.request.put(AXI4_Read_Rq {
+                        id: {1, in.cpu_id},
+                        addr: in.addr,
+                        burst_length: 0,
+                        burst_size: B4,
+                        burst_type: INCR,
+                        lock: NORMAL,
+                        cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
+                        prot: UNPRIV_SECURE_DATA,
+                        qos: 0,
+                        region: 0,
+                        user: 0
+                    });
+                `else
+                    req_fifo.enq(tuple2(unpack(in.addr), {1, in.cpu_id}));
+                `endif
 
                 amo_in_progress <= True;
 
@@ -125,25 +161,29 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
                 if(link_lrsc matches tagged Valid .v &&& v == in.addr) begin
                     mem_rd_resp_f_v[in.cpu_id].enq(0);
                     // write
-                    axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
-                        id: {1, in.cpu_id},
-                        addr: in.addr,
-                        burst_length: 0,
-                        burst_size: B1,
-                        burst_type: defaultValue,
-                        lock: defaultValue,
-                        cache: defaultValue,
-                        prot: defaultValue,
-                        qos: 0,
-                        region: 0,
-                        user: 0
-                    });
-                    axi_wr.request_data.put(AXI4_Write_Rq_Data {
-                        data: amo_data,
-                        strb: 'hf,
-                        last: True,
-                        user: 0
-                    });
+                    `ifndef SOC
+                        axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
+                            id: {1, in.cpu_id},
+                            addr: in.addr,
+                            burst_length: 0,
+                            burst_size: B1,
+                            burst_type: defaultValue,
+                            lock: defaultValue,
+                            cache: defaultValue,
+                            prot: defaultValue,
+                            qos: 0,
+                            region: 0,
+                            user: 0
+                        });
+                        axi_wr.request_data.put(AXI4_Write_Rq_Data {
+                            data: amo_data,
+                            strb: 'hf,
+                            last: True,
+                            user: 0
+                        });
+                    `else
+                        req_wr_fifo.enq(tuple4(unpack(in.addr), amo_data, 'hf, {1, in.cpu_id}));
+                    `endif
 
                     amo_in_progress <= True;
                 end else begin
@@ -155,19 +195,24 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
                 link_lrsc <= tagged Invalid;
             end
         end else begin // normal operation
-            axi_rd.request.put(AXI4_Read_Rq {
-                id: {0, in.cpu_id},
-                addr: in.addr,
-                burst_length: 0,
-                burst_size: B4,
-                burst_type: INCR,
-                lock: NORMAL,
-                cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
-                prot: UNPRIV_SECURE_DATA,
-                qos: 0,
-                region: 0,
-                user: 0
-            });
+            `ifndef SOC
+                axi_rd.request.put(AXI4_Read_Rq {
+                    id: {0, in.cpu_id},
+                    addr: in.addr,
+                    burst_length: 0,
+                    burst_size: B4,
+                    burst_type: INCR,
+                    lock: NORMAL,
+                    cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
+                    prot: UNPRIV_SECURE_DATA,
+                    qos: 0,
+                    region: 0,
+                    user: 0
+                });
+            `else
+                req_fifo.enq(tuple2(unpack(in.addr), {0, in.cpu_id}));
+            `endif
+            
         end
     endrule
 
@@ -199,7 +244,8 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
         mem_rd_resp_f_v[tpl_4(amo_description.first())].enq(read_data);
 
         if (tpl_3(amo_description.first()) != LR) begin
-            axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
+            `ifndef SOC
+                axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
                         id: {1, tpl_4(amo_description.first())},
                         addr: tpl_1(amo_description.first()),
                         burst_length: 0,
@@ -212,12 +258,15 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
                         region: 0,
                         user: 0
                     });
-                    axi_wr.request_data.put(AXI4_Write_Rq_Data {
+                axi_wr.request_data.put(AXI4_Write_Rq_Data {
                         data: write_data,
                         strb: 'hf,
                         last: True,
                         user: 0
                     });
+            `else
+                req_wr_fifo.enq(tuple4(unpack(tpl_1(amo_description.first())), write_data, 'hf, {1, tpl_4(amo_description.first())}));
+            `endif
             dbg_print(AMOTrace, $format("AMO: ", fshow(tpl_1(amo_description.first())), " ", fshow(tpl_3(amo_description.first())), " ", fshow(read_data), " ", fshow(mod_data), " ", fshow(write_data)));
         end else begin
             amo_in_progress <= False;
@@ -246,8 +295,8 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
         store_queue.deq(1);
 
         dbg_print(WriteTrace, $format("%x STORE: ", tpl_1(in).mem_addr, fshow(in)));
-        
-        axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
+        `ifndef SOC
+            axi_wr.request_addr.put(AXI4_Write_Rq_Addr {
                     id: {0, cpu_id},
                     addr: pack(write.mem_addr),
                     burst_length: 0,
@@ -260,15 +309,18 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
                     region: 0,
                     user: 0
                 });
-                axi_wr.request_data.put(AXI4_Write_Rq_Data {
+            axi_wr.request_data.put(AXI4_Write_Rq_Data {
                     data: write.data,
                     strb: write.store_mask,
                     last: True,
                     user: 0
                 });
+            `else
+                req_wr_fifo.enq(tuple4(write.mem_addr, write.data, write.store_mask, {0, cpu_id}));
+            `endif
 
-                if(link_lrsc matches tagged Valid .v &&& v == pack(write.mem_addr))
-                    link_lrsc <= tagged Invalid;
+            if(link_lrsc matches tagged Valid .v &&& v == pack(write.mem_addr))
+                link_lrsc <= tagged Invalid;
     endrule
 
     // read request interface
@@ -308,8 +360,20 @@ module mkMemoryArbiter(MemoryArbiterIFC) provisos (
     interface writes = writes_loc;
 
     // axi to data memory
-    interface axi_r = axi_rd.fab();
-    interface axi_w  = axi_wr.fab();
+        // axi to data memory
+    `ifndef SOC
+        interface axi_r = axi_rd.fab();
+        interface axi_w = axi_wr.fab();
+    `else
+        interface Client dmem_r;
+            interface Get request = toGet(req_fifo);
+            interface Put response = toPut(res_fifo);
+        endinterface
+        interface Client dmem_w;
+            interface Get request = toGet(req_wr_fifo);
+            interface Put response = toPut(res_wr_fifo);
+        endinterface
+    `endif
 
 endmodule
 

@@ -48,12 +48,12 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
     Wire#(Bit#(XLEN)) result_read <- mkWire();
     rule distribute_read_responses;
         `ifndef SOC
-        let r <- axi_rd.response.get();
-        mem_rd_resp_f_v[r.id].enq(r.data);
+            let r <- axi_rd.response.get();
+            mem_rd_resp_f_v[r.id].enq(r.data);
         `else
-        let r = res_fifo.first();
-        res_fifo.deq();
-        mem_rd_resp_f_v[tpl_2(r)].enq(tpl_1(r));
+            let r = res_fifo.first();
+            res_fifo.deq();
+            mem_rd_resp_f_v[tpl_2(r)].enq(tpl_1(r));
         `endif
         
     endrule
@@ -75,21 +75,21 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
         load_queue.deq(1);
         
             `ifndef SOC
-            axi_rd.request.put(AXI4_Read_Rq {
-                id: in.cpu_id,
-                addr: in.addr,
-                burst_length: 0,
-                burst_size: B4,
-                burst_type: INCR,
-                lock: NORMAL,
-                cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
-                prot: UNPRIV_SECURE_DATA,
-                qos: 0,
-                region: 0,
-                user: 0
-            });
+                axi_rd.request.put(AXI4_Read_Rq {
+                    id: in.cpu_id,
+                    addr: in.addr,
+                    burst_length: 0,
+                    burst_size: B4,
+                    burst_type: INCR,
+                    lock: NORMAL,
+                    cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
+                    prot: UNPRIV_SECURE_DATA,
+                    qos: 0,
+                    region: 0,
+                    user: 0
+                });
             `else
-            req_fifo.enq(tuple2(unpack(in.addr), in.cpu_id));
+                req_fifo.enq(tuple2(unpack(in.addr), in.cpu_id));
             `endif
     endrule
 

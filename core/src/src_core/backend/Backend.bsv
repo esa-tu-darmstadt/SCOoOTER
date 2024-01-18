@@ -46,6 +46,12 @@ interface BackendIFC;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
     `endif
+
+    `ifdef DEXIE
+        interface DExIETraceIfc dexie;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
+    `endif
 endinterface
 
 `ifdef SYNTH_SEPARATE
@@ -126,6 +132,10 @@ module mkBackend(BackendIFC) provisos (
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = csrf.hart_id(in);
 
     interface Put csr_write = csrf.write();
+    `ifdef DEXIE
+        interface dexie = commit.dexie;
+        interface dexie_stall = commit.dexie_stall;
+    `endif
 endmodule
 
 endpackage

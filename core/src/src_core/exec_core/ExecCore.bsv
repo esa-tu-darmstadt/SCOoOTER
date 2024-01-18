@@ -57,6 +57,12 @@ interface ExecCoreIFC;
 
     // result bus output
     method Vector#(NUM_FU, Maybe#(Result)) res_bus;
+
+    `ifdef DEXIE
+        method Maybe#(DexieMem) dexie_memw;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
+    `endif
 endinterface
 
 `ifdef SYNTH_SEPARATE_BLOCKS
@@ -190,6 +196,11 @@ module mkExecCore(ExecCoreIFC);
     interface Client csr_read = csr.csr_read;
     interface write = store_buf.write;
     interface Get csr_write = csr.write;
+
+    `ifdef DEXIE
+        method Maybe#(DexieMem) dexie_memw = mem.dexie_memw;
+        interface dexie_stall = mem.dexie_stall();
+    `endif
 endmodule
 
 endpackage

@@ -94,11 +94,17 @@ module mkCSRFile(CsrFileIFC) provisos (
         method Action put(CsrWrite request);
             let ehr_maybe = get_csr_wr(request.addr, request.thread_id);
                 if (ehr_maybe matches tagged Valid .r) begin
-                    Bit#(XLEN) wr_data = request.data;
-                    if (request.addr == 'h300) begin
-                        let current_mstatus = r[0];
-                        wr_data = {1'b0, request.data[30:23], 0, 2'b11, request.data[10:9], 1'b0, /*current_mstatus[7]*/ 1'b1, request.data[6], 2'b0, request.data[3:2], 2'b00};
-                    end
+                
+                    let current_value = r[0];
+
+                    // do not write to disallowed fields
+                    Bit#(XLEN) wr_data = case (request.addr)
+                        'h300: {1'b0, request.data[30:23], 0, 2'b11, request.data[10:9], 1'b0, /*current_mstatus[7]*/ 1'b1, request.data[6], 2'b0, request.data[3:2], 2'b00};
+                        'h304: {0, request.data[11], 3'b0, request.data[7], 3'b0, request.data[3], 3'b0};
+                        'h341: {truncateLSB(request.data), 2'b00};
+                        default: request.data;
+                    endcase;
+
                     r[0] <= wr_data;
                     dbg_print(CSRFile, $format("writing %x to %x", request.data, request.addr));
                 end

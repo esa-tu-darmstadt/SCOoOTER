@@ -9,7 +9,7 @@ import Vector::*;
 import Config::*;
 import Types::*;
 
-(* synthesize *)
+(* synthesize, clock_prefix = "clk_i" *)
 module mkDave(DaveIFC);
     
 
@@ -28,13 +28,22 @@ module mkDave(DaveIFC);
         endrule
     end
 
+    `ifdef DEXIE
+        Vector#(NUM_CPU, DExIEIfc) dexie_loc;
+        for (Integer i = 0; i < valueOf(NUM_CPU); i=i+1)
+            dexie_loc[i] = cores[i].dexie;
+        interface DExIEIfc dexie = dexie_loc;
+    `endif
+
     `ifndef SOC
         interface imem_axi = inst_arbiter.axi_r;
+        interface dmem_axi_r = mem_arbiter.axi_r;
+        interface dmem_axi_w = mem_arbiter.axi_w;
     `else
         interface imem_r = inst_arbiter.imem_r;
+        interface dmem_r = mem_arbiter.dmem_r;
+        interface dmem_w = mem_arbiter.dmem_w;
     `endif
-    interface dmem_axi_r = mem_arbiter.axi_r;
-    interface dmem_axi_w = mem_arbiter.axi_w;
 
     method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b); for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) cores[i].sw_int(b[i]); endmethod
     method Action timer_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b); for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) cores[i].timer_int(b[i]); endmethod
