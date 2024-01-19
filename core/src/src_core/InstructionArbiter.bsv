@@ -30,13 +30,9 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
     Mul#(XLEN, IFUINST, ifuwidth)
 );
 
-    //AXI modules
-    `ifndef SOC
-    AXI4_Master_Rd#(XLEN, ifuwidth, idx_cpu_t, 0) axi_rd <- mkAXI4_Master_Rd(0, 0, False);
-    `else
     FIFO#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU)))) req_fifo <- mkPipelineFIFO();
     FIFO#(Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) res_fifo <- mkPipelineFIFO();
-    `endif
+
 
     //request buffers
     Vector#(NUM_CPU, FIFO#(Bit#(XLEN))) mem_rd_req_f_v <- replicateM(mkPipelineFIFO());
@@ -47,15 +43,9 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
 
     Wire#(Bit#(XLEN)) result_read <- mkWire();
     rule distribute_read_responses;
-        `ifndef SOC
-            let r <- axi_rd.response.get();
-            mem_rd_resp_f_v[r.id].enq(r.data);
-        `else
-            let r = res_fifo.first();
-            res_fifo.deq();
-            mem_rd_resp_f_v[tpl_2(r)].enq(tpl_1(r));
-        `endif
-        
+        let r = res_fifo.first();
+        res_fifo.deq();
+        mem_rd_resp_f_v[tpl_2(r)].enq(tpl_1(r));
     endrule
 
     //read/AMO pipe
@@ -73,24 +63,7 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
     rule compute_input;
         let in = load_queue.first()[0];
         load_queue.deq(1);
-        
-            `ifndef SOC
-                axi_rd.request.put(AXI4_Read_Rq {
-                    id: in.cpu_id,
-                    addr: in.addr,
-                    burst_length: 0,
-                    burst_size: B4,
-                    burst_type: INCR,
-                    lock: NORMAL,
-                    cache: NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
-                    prot: UNPRIV_SECURE_DATA,
-                    qos: 0,
-                    region: 0,
-                    user: 0
-                });
-            `else
-                req_fifo.enq(tuple2(unpack(in.addr), in.cpu_id));
-            `endif
+        req_fifo.enq(tuple2(unpack(in.addr), in.cpu_id));
     endrule
 
     for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) begin
@@ -119,14 +92,10 @@ module mkInstructionArbiter(InstArbiterIFC) provisos (
     interface reads = reads_loc;
 
     // axi to data memory
-    `ifndef SOC
-        interface axi_r = axi_rd.fab();
-    `else
         interface Client imem_r;
             interface Get request = toGet(req_fifo);
             interface Put response = toPut(res_fifo);
         endinterface
-    `endif
 
 endmodule
 

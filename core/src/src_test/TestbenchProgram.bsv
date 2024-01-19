@@ -1,6 +1,6 @@
 package TestbenchProgram;
     import StmtFSM :: *;
-    import Dave :: *;
+    import IDMemAdapter :: *;
     import Interfaces :: *;
     import Types :: *;
     import BlueAXI :: *;
@@ -10,6 +10,7 @@ package TestbenchProgram;
     import DefaultValue::*;
     import FIFO::*;
     import SpecialFIFOs::*;
+    import BRamImem::*;
     import Vector::*;
 
     // RVController emulation defines
@@ -65,23 +66,7 @@ package TestbenchProgram;
         Reg#(UInt#(XLEN)) count_r <- mkReg(0);
 
 
-        let dut <- mkDave();
-
-        `ifdef DEXIE
-            rule show_dexie;
-                for (Integer i = 0; i < valueOf(NUM_CPU); i=i+1) begin
-                    if (isValid(dut.dexie[0].regw[i])) $display("REG: ", fshow(dut.dexie[0].regw[i]));
-                    if (isValid(dut.dexie[0].cf[i]  )) $display(" CF: ", fshow(dut.dexie[0].cf[i]));
-                end
-                if (isValid(dut.dexie[0].memw  )) $display("MEM: ", fshow(dut.dexie[0].memw));
-            endrule
-            
-            Reg#(Bool) stall_lol <- mkReg(False);
-            rule set_dexie_stalls;
-                dut.dexie[0].stall_signals(stall_lol, False);
-                stall_lol <= !stall_lol;
-            endrule
-        `endif
+        let dut <- mkIDMemAdapter();
 
         rule interrupt;
             dut.ext_int(count_r%'h3000 == 0 && count_r%'h6000 != 0 && count_r%'h8000 != 0 ? unpack({1'b1, 0}): unpack(0));
@@ -90,38 +75,8 @@ package TestbenchProgram;
         endrule
 
         // INSTRUCTION MEMORY
-        AXI4_Slave_Rd#(XLEN, ifuwidth, cpu_idx_t, 0) iram_axi <- mkAXI4_Slave_Rd(0, 0);
-        mkConnection(iram_axi.fab ,dut.imem_axi);
-
-        // create a fitting BRAM
-        BRAM_Configure cfg_i = defaultValue;
-        cfg_i.allowWriteResponseBypass = True;
-        cfg_i.memorySize = valueOf(bram_word_num_t);
-        cfg_i.loadFormat = tagged Hex imem_file;
-        cfg_i.latency = 1;
-        BRAM1Port#(Bit#(XLEN), Bit#(ifuwidth)) ibram <- mkBRAM1Server(cfg_i);
-
-        FIFO#(Bit#(cpu_idx_t)) inflight_ids_inst <- mkSizedFIFO(16);
-
-        // handle read requests
-        rule ifuread if (start_r && !done_r && count_r <= fromInteger(max_ticks));
-    		let r <- iram_axi.request.get();
-            // the address must be converted to a word-address
-            ibram.portA.request.put(BRAMRequest{
-                write: False,
-                responseOnWrite: False,
-                address: (r.addr>>2)/fromInteger(valueOf(IFUINST)),
-                datain: ?
-            });
-            inflight_ids_inst.enq(r.id);
-  	    endrule
-
-        // pass BRAM response to DUT via AXI
-        rule ifuresp;
-            let r <- ibram.portA.response.get();
-            inflight_ids_inst.deq();
-            iram_axi.response.put(AXI4_Read_Rs {data: r, id: inflight_ids_inst.first(), resp: OKAY, last: True, user: 0});
-        endrule
+        let imem <- mkBramImem(imem_file);
+        mkConnection(imem.mem, dut.imem_r);
 
         // DATA MEMORY
         AXI4_Slave_Wr#(XLEN, XLEN, cpu_and_amo_idx_t, 0) dram_axi_w <- mkAXI4_Slave_Wr(0, 0, 0);

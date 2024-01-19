@@ -35,15 +35,9 @@ module mkDave(DaveIFC);
         interface DExIEIfc dexie = dexie_loc;
     `endif
 
-    `ifndef SOC
-        interface imem_axi = inst_arbiter.axi_r;
-        interface dmem_axi_r = mem_arbiter.axi_r;
-        interface dmem_axi_w = mem_arbiter.axi_w;
-    `else
-        interface imem_r = inst_arbiter.imem_r;
-        interface dmem_r = mem_arbiter.dmem_r;
-        interface dmem_w = mem_arbiter.dmem_w;
-    `endif
+    interface imem_r = inst_arbiter.imem_r;
+    interface dmem_axi_r = mem_arbiter.axi_r;
+    interface dmem_axi_w = mem_arbiter.axi_w;
 
     method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b); for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) cores[i].sw_int(b[i]); endmethod
     method Action timer_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b); for(Integer i = 0; i < valueOf(NUM_CPU); i=i+1) cores[i].timer_int(b[i]); endmethod
