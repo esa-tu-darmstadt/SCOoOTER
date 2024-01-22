@@ -11,6 +11,7 @@ import FIFO::*;
 import SpecialFIFOs::*;
 import GetPut::*;
 import RVController::*;
+import CWire::*;
 
 
 interface MemBusIFC;
@@ -39,7 +40,7 @@ interface MemBusIFC;
     method Bool done; 
 endinterface
 
-module mkMemCon#(FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) r_rq, FIFO#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) w_rq, MemMappedIFC#(a) dev, DaveIFC core, UInt#(32) base_addr, UInt#(32) addr_space)(Empty) provisos (
+module mkMemCon#(FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) r_rq, FIFO#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) w_rq, MemMappedIFC#(a) dev, DaveIFC core, UInt#(32) base_addr, UInt#(32) addr_space, Reg#(Bool) sched_rd, Reg#(Bool) sched_wr)(Empty) provisos (
     Add#(a__, a, 32)
 );
 
@@ -48,9 +49,10 @@ module mkMemCon#(FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) r_r
         dev.mem_r.request.put(tuple2(truncate(tpl_1(r_rq.first)), tpl_2(r_rq.first)));
     endrule
 
-    rule rd_response;
+    rule rd_response if (sched_rd);
         let r <- dev.mem_r.response.get();
         core.dmem_r.response.put(r);
+        sched_rd <= False;
     endrule
 
     rule wr_request if (decodeAddressRange(tpl_1(w_rq.first), base_addr, base_addr+addr_space));
@@ -58,15 +60,19 @@ module mkMemCon#(FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) r_r
         dev.mem_w.request.put(tuple4(truncate(tpl_1(w_rq.first)), tpl_2(w_rq.first), tpl_3(w_rq.first), tpl_4(w_rq.first)));
     endrule
 
-    rule wr_response;
+    rule wr_response if (sched_wr);
         let r <- dev.mem_w.response.get();
         core.dmem_w.response.put(r);
+        sched_wr <= False;
     endrule
 
 endmodule
 
 (*synthesize*)
-module mkIDMemAdapter(MemBusIFC);
+module mkIDMemAdapter(MemBusIFC) provisos (
+    Div#(SIZE_DMEM, 4, dmem_word_num_t),
+    Log#(dmem_word_num_t, dmem_addr_len_t)
+);
 
     // instantiate core
     let core <- mkDave();
@@ -74,11 +80,15 @@ module mkIDMemAdapter(MemBusIFC);
     /////////////////////
     // dmem bus and periphery
 
+    // scheduling via revertingVirtualRegs
+    Ehr#(3, Bool) sched_helper_rd <- mkCWire(True);
+    Ehr#(3, Bool) sched_helper_wr <- mkCWire(True);
+
     // gather requests
     FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))))                      dmem_r_rq <- mkPipelineFIFO();
     FIFO#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_w_rq <- mkPipelineFIFO();
 
-
+    // get requests
     rule connect_dmem_rd;
         let rq <- core.dmem_r.request.get();
         dmem_r_rq.enq(rq);
@@ -92,14 +102,14 @@ module mkIDMemAdapter(MemBusIFC);
 
     // CLINT
     let clint <- mkCLINT();
-    let con_clint <- mkMemCon(dmem_r_rq, dmem_w_rq, clint.memory_bus, core, 32'h40000000, 32'h1000);
+    let con_clint <- mkMemCon(dmem_r_rq, dmem_w_rq, clint.memory_bus, core, 32'h40000000, 32'h1000, sched_helper_rd[1], sched_helper_wr[1]);
     rule set_int_flags;
         core.timer_int(unpack(pack(clint.timer_interrupts())));
     endrule
 
     //RVController
     let rvcontroller <- mkRVController();
-    let con_rvcontroller <- mkMemCon(dmem_r_rq, dmem_w_rq, rvcontroller.memory_bus, core, 32'h11000000, 32'h10000);
+    let con_rvcontroller <- mkMemCon(dmem_r_rq, dmem_w_rq, rvcontroller.memory_bus, core, 32'h11000000, 32'h10000, sched_helper_rd[2], sched_helper_wr[2]);
     method Bit#(XLEN) retval = rvcontroller.retval();
     method Bool done = rvcontroller.done();
 
@@ -107,30 +117,34 @@ module mkIDMemAdapter(MemBusIFC);
     interface Client dmem_r;
         interface Get request;
             // if condition checks whether the address is in dmem range
-            method ActionValue#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_r_rq.first), fromInteger(valueOf(BRAMSIZE)), fromInteger(valueOf(BRAMSIZE)*2)));
+            method ActionValue#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_r_rq.first), fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM))));
                 dmem_r_rq.deq();
-                return dmem_r_rq.first();
+                let r = dmem_r_rq.first();
+                return tuple2((tpl_1(r)), tpl_2(r)); 
             endmethod
         endinterface
         interface Put response;
             // if condition checks whether the address is in dmem range
-            method Action put(Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))) r);
+            method Action put(Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))) r) if (sched_helper_rd[0]);
                  core.dmem_r.response.put(r);
+                 sched_helper_rd[0] <= False;
             endmethod
         endinterface
     endinterface
     interface Client dmem_w;
         interface Get request;
             // if condition checks whether the address is in dmem range
-            method ActionValue#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_w_rq.first), fromInteger(valueOf(BRAMSIZE)), fromInteger(valueOf(BRAMSIZE)*2)));
+            method ActionValue#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_w_rq.first), fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM))));
                 dmem_w_rq.deq();
-                return dmem_w_rq.first();
+                let r = dmem_w_rq.first();
+                return tuple4((tpl_1(r)), tpl_2(r), tpl_3(r), tpl_4(r)); 
             endmethod
         endinterface
         interface Put response;
             // if condition checks whether the address is in dmem range
-            method Action put(Bit#(TAdd#(TLog#(NUM_CPU), 1)) r);
+            method Action put(Bit#(TAdd#(TLog#(NUM_CPU), 1)) r)  if (sched_helper_wr[0]);
                  core.dmem_w.response.put(r);
+                 sched_helper_wr[0] <= False;
             endmethod
         endinterface
     endinterface
