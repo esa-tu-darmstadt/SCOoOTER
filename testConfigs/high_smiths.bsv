@@ -4,7 +4,11 @@ typedef 4 IFUINST;
 typedef 4 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
-typedef 'h10000 BRAMSIZE;
+
+typedef 'h10000 BASE_DMEM;
+typedef 'h10000 SIZE_DMEM;
+typedef 'h00000 BASE_IMEM;
+typedef 'h10000 SIZE_IMEM;
 
 // must be at least as big as the issuewidth
 typedef 16 ROBDEPTH;
