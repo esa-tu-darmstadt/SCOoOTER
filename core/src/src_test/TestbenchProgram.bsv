@@ -78,9 +78,9 @@ package TestbenchProgram;
         mkConnection(dmem.memory_bus.mem_w, dut.dmem_w);
 
         `ifdef CUSTOM_TB
-            rule end_exec if (state_r != None);
+            rule end_exec if (dut.done() || state_r == Hangs);
                 $display("Took: ", fshow(count_r));
-                $display("result: ", fshow(return_r));
+                $display("result: ", fshow(dut.retval()));
                 `ifdef EVA_BR
                     $display("correct pred (br): ", dut.correct_pred_br);
                     $display("wrong pred (br): ", dut.wrong_pred_br);
