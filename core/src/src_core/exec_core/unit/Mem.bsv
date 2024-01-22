@@ -15,8 +15,14 @@ import ClientServer::*;
 import GetPut::*;
 import Vector::*;
 import Decode::*;
-import ConfigReg::*;
-import Ehr::*;
+import MemoryDecoder::*;
+
+// struct for access width
+typedef enum {
+        BYTE,
+        HALF,
+        WORD
+} Width deriving(Bits, Eq, FShow);
 
 // struct for load pipeline stages
 typedef struct {
@@ -66,7 +72,7 @@ Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 
 
 // Aq / Rl handling
-Ehr#(2, Bool) aq_r <- mkEhr(False);
+Reg#(Bool) aq_r <- mkReg(False);
 Wire#(Bool) store_queue_empty_w <- mkBypassWire();
 Wire#(Bool) store_queue_full_w <- mkBypassWire();
 
@@ -76,21 +82,13 @@ function Bool check_misalign(Bit#(2) mask, Width width) = case (width)
     WORD: (mask != 0);
 endcase;
 
-// STORE HANDLING
+function Bool is_speculative_region(UInt#(32) addr) = decodeAddressRange(addr, fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM)));
 
-`ifdef DEXIE
-    RWire#(DexieMem) dexie_memw_local <- mkRWire();
-    Wire#(Bool) dexie_stall_w <- mkBypassWire();
-    FIFO#(MemWr) dexie_write_byp <- mkBypassFIFO();
-`endif
+// STORE HANDLING
 
 // single-cycle calculation
 // real write occurs in storebuffer after successful commit
-rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r[0] && (rob_head == in.first().tag || valueOf(ROBDEPTH) == 1) && in.first().epoch == epoch_r[in.first().thread_id]
-    `ifdef DEXIE
-        && !dexie_stall_w
-    `endif
-);
+rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r && (rob_head == in.first().tag || valueOf(ROBDEPTH) == 1) && in.first().epoch == epoch_r[in.first().thread_id]);
     let inst = in.first(); in.deq();
 
     // calculate final access address
@@ -130,34 +128,9 @@ rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r
         `endif
         };
     if (inst.exception matches tagged Valid .e) local_result.result = tagged Except e;
-
     out.enq(local_result);
-
-    if (!check_misalign(truncate(pack(final_addr)), width)) 
-    `ifndef DEXIE
-        out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
-    `else
-        dexie_write_byp.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
-    `endif
-
-
-    `ifdef DEXIE
-        dexie_memw_local.wset(DexieMem {
-            pc:         inst.pc,
-            instruction:{inst.remaining_inst, pack(inst.opc)},
-            mem_addr:   pack(final_addr),
-            size:       width,
-            data:       raw_data
-        } );
-    `endif
+    if (!check_misalign(truncate(pack(final_addr)), width)) out_wr.enq(MemWr {mem_addr : axi_addr, data : wr_data, store_mask : mask});
 endrule
-
-`ifdef DEXIE
-    rule fwd_dexie_write if (!dexie_stall_w);
-        let write = dexie_write_byp.first(); dexie_write_byp.deq();
-        out_wr.enq(write);
-    endrule
-`endif
 
 rule calculate_store_flush if (in.first().opc == STORE && in.first().epoch != epoch_r[in.first().thread_id]);
     let inst = in.first(); in.deq();
@@ -198,16 +171,20 @@ FIFO#(Bit#(XLEN)) mem_rd_or_amo_response <- mkBypassFIFO();
 
 // inter-clock buffers
 Wire#(LoadPipe) stage1_internal <- mkWire();
+Wire#(UInt#(TLog#(ROBDEPTH))) request_ROB <- mkWire();
+Wire#(Bool) response_ROB <- mkWire();
 //output to next stage
 FIFO#(LoadPipe) stage1 <- mkPipelineFIFO();
-Wire#(UInt#(XLEN)) request_sb <- mkWire();
-rule calc_addr if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id] && !aq_r[0]);
+
+rule calc_addr_and_check_ROB_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id] && !aq_r);
 
     // get instruction, do not deq here as we do this only on success for ROB request
     let inst = in.first();
     // calculate address to which the store is pending
     let imm = (inst.opc == AMO ? 0 : getImmI({inst.remaining_inst, ?}));
     UInt#(XLEN) final_addr = unpack(inst.rs1.Operand + imm);
+    // send a request to ROB (this will be acknowledged in the same clock cycle)
+    request_ROB <= inst.tag;
 
     // calculate load mask
     Bit#(TDiv#(XLEN, 8)) mask = case (inst.funct)
@@ -217,7 +194,7 @@ rule calc_addr if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.firs
     endcase;
 
     // fill internal data structure for load pipeline
-    stage1.enq(LoadPipe {
+    stage1_internal <= LoadPipe {
         tag: inst.tag,
         result: tagged None,
         addr: inst.opc == AMO ? unpack(inst.rs1.Operand) : final_addr,
@@ -236,16 +213,21 @@ rule calc_addr if ( (in.first().opc == LOAD || in.first().opc == AMO) && in.firs
         rl: unpack(inst.remaining_inst[18]),
         mispredicted: False,
         thread_id: inst.thread_id
-    });
-    if ((inst.opc == AMO)) aq_r[1] <= unpack(inst.remaining_inst[19]);
-    request_sb <= unpack({pack(inst.opc == AMO ? unpack(inst.rs1.Operand) : final_addr)[31:2], 2'b00});
-    in.deq();
+    };
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
 endrule
 
 // check ROB response, if the instruction is clear, commence execution
 // otherwise do not dequeue it and try again next cycle
-
+Wire#(UInt#(XLEN)) request_sb <- mkWire();
+rule check_rob_response if (((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch == epoch_r[in.first().thread_id]));
+    let internal_state = stage1_internal;
+    in.deq();
+    stage1.enq(internal_state);
+    dbg_print(AMO, $format("rob passed:  ", fshow(internal_state)));
+    if (internal_state.amo) aq_r <= internal_state.aq;
+    request_sb <= unpack({pack(internal_state.addr)[31:2], 2'b00});
+endrule
 
 // toss instructions with wrong epoch
 rule flush_invalid_loads if ((in.first().opc == LOAD || in.first().opc == AMO) && in.first().epoch != epoch_r[in.first().thread_id]);
@@ -286,7 +268,7 @@ endrule
 // remove wrong-epoch instructions from pipeline
 rule flush_invalid_fwds if (stage1.first().epoch != epoch_r[stage1.first().thread_id] || stage1.first().mispredicted);
     let internal_struct = stage1.first(); stage1.deq();
-    if(internal_struct.aq) aq_r[0] <= False;
+    if(internal_struct.aq) aq_r <= False;
     internal_struct.mispredicted = True;
     stage2.enq(tuple2(internal_struct, ?));
 endrule
@@ -301,11 +283,7 @@ rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r[tpl_1(stag
     let struct_internal = tpl_1(stage2.first());
     let fwd = tpl_2(stage2.first());
 
-    if(!struct_internal.amo && (
-        valueOf(ROBDEPTH) == 1 || rob_head == struct_internal.tag || //if instruction is known to be committed
-        // or if the read address is in the data memory region, we may speculatively read
-        (struct_internal.addr >= fromInteger(valueOf(BRAMSIZE)) && struct_internal.addr < fromInteger(2*valueOf(BRAMSIZE)))
-    )) begin
+    if(!struct_internal.amo) begin
         // use fwd path if matching
         if(fwd matches tagged Valid .mw) begin
             stage2.deq();
@@ -313,7 +291,9 @@ rule request_axi_if_needed if (tpl_1(stage2.first()).epoch == epoch_r[tpl_1(stag
             stage3.enq(struct_internal);
         end else
         // ask AXI if no fwd
-        if(fwd matches tagged Invalid) begin
+        if(fwd matches tagged Invalid &&&
+            (rob_head == struct_internal.tag || valueOf(ROBDEPTH) == 1 || is_speculative_region(struct_internal.addr))  // wait until we are sure read is correct-path or is in specualtive region
+        ) begin
             stage2.deq();
             stage3.enq(struct_internal);
             let addr = struct_internal.addr & 'hfffffffc;
@@ -334,7 +314,7 @@ endrule
 // remove wrong-epoch instructions
 rule flush_invalid_axi_rq if (tpl_1(stage2.first()).epoch != epoch_r[tpl_1(stage2.first()).thread_id] || tpl_1(stage2.first()).mispredicted);
     let internal_struct = tpl_1(stage2.first()); stage2.deq();
-    if(internal_struct.aq) aq_r[0] <= False;
+    if(internal_struct.aq) aq_r <= False;
     internal_struct.mispredicted = True;
     stage3.enq(internal_struct);
 endrule
@@ -398,7 +378,7 @@ rule collect_result_read if(stage3.first().result matches tagged None &&& !stage
     let resp = pack(mem_rd_or_amo_response.first());
     let internal_struct = stage3.first();
 
-    if(internal_struct.aq && internal_struct.amo) aq_r[0] <= False;
+    if(internal_struct.aq && internal_struct.amo) aq_r <= False;
 
     let result = internal_struct_and_data_to_result(internal_struct, resp);
 
@@ -422,7 +402,7 @@ endrule
 rule collect_result_mispredict if(stage3.first().mispredicted);
     stage3.deq();
     let internal_struct = stage3.first();
-    if(internal_struct.aq) aq_r[0] <= False;
+    if(internal_struct.aq) aq_r <= False;
 
     //RVFI
     out.enq(Result {
@@ -438,6 +418,10 @@ endrule
 // generate output (and define in which urgency results shall be propagated)
 (* preempts="calculate_store, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
 (* preempts="calculate_store_flush, (collect_result_mispredict, collect_result_read, collect_result_read_bypass)" *)
+(* mutually_exclusive = "flush_invalid_axi_rq, check_rob_response" *)
+(* mutually_exclusive = "collect_result_mispredict, check_rob_response" *)
+(* mutually_exclusive = "collect_result_read, check_rob_response" *)
+(* mutually_exclusive = "flush_invalid_fwds, check_rob_response" *)
 
 rule propagate_result;
     out.deq();
@@ -488,11 +472,6 @@ method Action store_queue_empty(Bool b) = store_queue_empty_w._write(b);
 method Action store_queue_full(Bool b) = store_queue_full_w._write(b);
 
 interface Get write = toGet(out_wr);
-
-`ifdef DEXIE
-    method Maybe#(DexieMem) dexie_memw = dexie_memw_local.wget();
-    method Action dexie_stall(Bool stall) = dexie_stall_w._write(stall);
-`endif
 
 endmodule
 

@@ -13,7 +13,7 @@ endinterface
 module mkBramImem#(String contentPreload)(ImemIFC) provisos (
         Mul#(XLEN, IFUINST, ifuwidth),
         // BRAMs are word addressed, thus we calculate the size in words
-        Div#(BRAMSIZE, 4, bram_logical_word_num_t),
+        Div#(SIZE_IMEM, 4, bram_logical_word_num_t),
         Div#(bram_logical_word_num_t, IFUINST, bram_physical_word_num_t),
         Log#(bram_physical_word_num_t, bram_addrwidth_t),
         Log#(NUM_CPU, cpu_idx_t)

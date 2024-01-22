@@ -20,8 +20,8 @@ interface MemBusIFC;
     interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
 
     //outgoing simple dmem ifaces
-    interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_r;
-    interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) dmem_w;
+    interface Client#(Tuple2#(UInt#(TLog#(SIZE_DMEM)), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_r;
+    interface Client#(Tuple4#(UInt#(TLog#(SIZE_DMEM)), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) dmem_w;
 
     //periphery/test signals
     (* always_ready, always_enabled *)
@@ -117,10 +117,10 @@ module mkIDMemAdapter(MemBusIFC) provisos (
     interface Client dmem_r;
         interface Get request;
             // if condition checks whether the address is in dmem range
-            method ActionValue#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_r_rq.first), fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM))));
+            method ActionValue#(Tuple2#(UInt#(TLog#(SIZE_DMEM)), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_r_rq.first), fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM))));
                 dmem_r_rq.deq();
                 let r = dmem_r_rq.first();
-                return tuple2((tpl_1(r)), tpl_2(r)); 
+                return tuple2(truncate(tpl_1(r)), tpl_2(r)); 
             endmethod
         endinterface
         interface Put response;
@@ -134,10 +134,10 @@ module mkIDMemAdapter(MemBusIFC) provisos (
     interface Client dmem_w;
         interface Get request;
             // if condition checks whether the address is in dmem range
-            method ActionValue#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_w_rq.first), fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM))));
+            method ActionValue#(Tuple4#(UInt#(TLog#(SIZE_DMEM)), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get() if (decodeAddressRange(tpl_1(dmem_w_rq.first), fromInteger(valueOf(BASE_DMEM)), fromInteger(valueOf(BASE_DMEM)+valueOf(SIZE_DMEM))));
                 dmem_w_rq.deq();
                 let r = dmem_w_rq.first();
-                return tuple4((tpl_1(r)), tpl_2(r), tpl_3(r), tpl_4(r)); 
+                return tuple4(truncate(tpl_1(r)), tpl_2(r), tpl_3(r), tpl_4(r)); 
             endmethod
         endinterface
         interface Put response;

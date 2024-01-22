@@ -50,7 +50,7 @@ package TestbenchProgram;
         // the instruction bus is as wide as the number of instructions fetched per cycle times the width of an instruction
         Mul#(XLEN, IFUINST, ifuwidth),
         // BRAMs are word addressed, thus we calculate the size in words
-        Div#(BRAMSIZE, 4, bram_word_num_t),
+        Div#(SIZE_DMEM, 4, bram_word_num_t),
         Log#(NUM_CPU, cpu_idx_t),
         Add#(cpu_idx_t, 1, cpu_and_amo_idx_t)
     );
@@ -74,8 +74,8 @@ package TestbenchProgram;
 
         // DATA MEMORY
         let dmem <- mkBramDmem(dmem_file);
-        mkConnection(dmem.mem_r, dut.dmem_r);
-        mkConnection(dmem.mem_w, dut.dmem_w);
+        mkConnection(dmem.memory_bus.mem_r, dut.dmem_r);
+        mkConnection(dmem.memory_bus.mem_w, dut.dmem_w);
 
         `ifdef CUSTOM_TB
             rule end_exec if (state_r != None);
