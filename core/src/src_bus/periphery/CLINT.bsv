@@ -24,8 +24,8 @@ module mkCLINT(CLINTIFC) provisos (
     // register state
     // the memory map first houses the lower bits and afterwards the upper bits!
     // mtime is a single 64b register while mtimecmp is a 64b register per hart
-    Vector#(2, Reg#(Bit#(32))) mtime <- replicateM(mkRegU());
-    Vector#(num_mtimecmp, Reg#(Bit#(32))) mtimecmp <- replicateM(mkRegU());
+    Vector#(2, Reg#(Bit#(32))) mtime <- replicateM(mkReg(0));
+    Vector#(num_mtimecmp, Reg#(Bit#(32))) mtimecmp <- replicateM(mkReg('hffffffff));
     //register map
     let register_map_bus = Vector::append(mtime, mtimecmp);
 
@@ -33,6 +33,15 @@ module mkCLINT(CLINTIFC) provisos (
     FIFO#(Bit#(amo_cpu_idx_t)) inflight_ids_r_fifo <- mkSizedFIFO(4);
     FIFO#(Bit#(amo_cpu_idx_t)) inflight_ids_w_fifo <- mkSizedFIFO(4);
     Reg#(Bit#(32)) read_val <- mkRegU();
+
+    // scheduling
+    PulseWire write_or_increment <- mkPulseWire();
+
+    rule increment if (!write_or_increment);
+        let new_val = {mtime[1], mtime[0]} + 1;
+        mtime[1] <= truncateLSB(new_val);
+        mtime[0] <= truncate(new_val);
+    endrule
 
     // connection to memory bus
     interface MemMappedIFC memory_bus;
@@ -64,6 +73,8 @@ module mkCLINT(CLINTIFC) provisos (
                         if(tpl_3(req)[i] == 1) current_value[i] = write_value[i];
                     // write result
                     register_map_bus[tpl_1(req)>>2] <= pack(current_value);
+                    // fix scheduling by preempting increment when writing mtime
+                    if ((tpl_1(req)>>2) < 2) write_or_increment.send();
                     // save id
                     inflight_ids_w_fifo.enq(tpl_4(req));
                 endmethod
