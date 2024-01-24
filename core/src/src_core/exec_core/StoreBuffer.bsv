@@ -116,7 +116,7 @@ module mkStoreBuffer(StoreBufferIFC);
     function MaskedWord mw_from_memory_write(MemWr in) = MaskedWord {data: in.data, store_mask: in.store_mask};
     
     // forward memory data - create a wire which holds pending requests or a default value
-    Reg#(UInt#(XLEN)) forward_test_addr_w <- mkRegU();
+    Wire#(UInt#(XLEN)) forward_test_addr_w <- mkBypassWire();
     Wire#(MemWr) forward_pending <- mkDWire(MemWr {mem_addr: 0, store_mask: ?, data: ?});
     rule fwd_pend;
         forward_pending <= pending_buf.first();
