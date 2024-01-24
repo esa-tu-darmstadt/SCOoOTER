@@ -12,6 +12,7 @@ import SpecialFIFOs::*;
 import GetPut::*;
 import RVController::*;
 import CWire::*;
+import PLIC::*;
 
 
 interface MemBusIFC;
@@ -26,8 +27,6 @@ interface MemBusIFC;
     //periphery/test signals
     (* always_ready, always_enabled *)
     method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
-    (* always_ready, always_enabled *)
-    method Action ext_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
@@ -81,8 +80,8 @@ module mkIDMemAdapter(MemBusIFC) provisos (
     // dmem bus and periphery
 
     // scheduling via revertingVirtualRegs
-    Ehr#(3, Bool) sched_helper_rd <- mkCWire(True);
-    Ehr#(3, Bool) sched_helper_wr <- mkCWire(True);
+    Ehr#(4, Bool) sched_helper_rd <- mkCWire(True);
+    Ehr#(4, Bool) sched_helper_wr <- mkCWire(True);
 
     // gather requests
     FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))))                      dmem_r_rq <- mkPipelineFIFO();
@@ -103,13 +102,23 @@ module mkIDMemAdapter(MemBusIFC) provisos (
     // CLINT
     let clint <- mkCLINT();
     let con_clint <- mkMemCon(dmem_r_rq, dmem_w_rq, clint.memory_bus, core, 32'h40000000, 32'h1000, sched_helper_rd[1], sched_helper_wr[1]);
-    rule set_int_flags;
+    rule set_int_flags_timer;
         core.timer_int(unpack(pack(clint.timer_interrupts())));
+    endrule
+
+    //PLIC
+    PLICIFC#(4, 8) plic <- mkPLIC();
+    let con_plic <- mkMemCon(dmem_r_rq, dmem_w_rq, plic.memory_bus, core, 32'h50000000, 32'h400000, sched_helper_rd[2], sched_helper_wr[2]);
+    rule set_plic_int_in;
+        plic.interrupts_in(unpack(3));
+    endrule
+    rule set_int_flags_ext;
+        core.ext_int(unpack(pack(plic.ext_interrupts_out())));
     endrule
 
     //RVController
     let rvcontroller <- mkRVController();
-    let con_rvcontroller <- mkMemCon(dmem_r_rq, dmem_w_rq, rvcontroller.memory_bus, core, 32'h11000000, 32'h10000, sched_helper_rd[2], sched_helper_wr[2]);
+    let con_rvcontroller <- mkMemCon(dmem_r_rq, dmem_w_rq, rvcontroller.memory_bus, core, 32'h11000000, 32'h10000, sched_helper_rd[3], sched_helper_wr[3]);
     method Bit#(XLEN) retval = rvcontroller.retval();
     method Bool done = rvcontroller.done();
 
@@ -157,7 +166,6 @@ module mkIDMemAdapter(MemBusIFC) provisos (
 
     // forward periphery signals
     method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in) = core.sw_int(in);
-    method Action ext_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in) = core.ext_int(in);
 
     // export branch prediction performance tracking
     `ifdef EVA_BR

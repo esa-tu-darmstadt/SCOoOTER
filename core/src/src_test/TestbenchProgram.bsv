@@ -64,7 +64,6 @@ package TestbenchProgram;
         let dut <- mkIDMemAdapter();
 
         rule interrupt;
-            dut.ext_int(count_r%'h3000 == 0 && count_r%'h6000 != 0 && count_r%'h8000 != 0 ? unpack({1'b1, 0}): unpack(0));
             dut.sw_int(count_r%'h8000 == 0 ? unpack({1'b1, 0}): unpack(0));
         endrule
 
