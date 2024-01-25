@@ -63,6 +63,11 @@ module mkBramDmem#(String contentPreload)(DmemIFC) provisos (
                         datain: tpl_2(req)
                     });
                     inflight_ids_w_fifo.enq(tpl_4(req));
+                    `ifdef RVFI
+                        UInt#(32) host_addr = `TOHOST;
+                        if (tpl_1(req) == truncate(host_addr))
+                            $finish();
+                        `endif
                 endmethod
             endinterface
             interface Get response;

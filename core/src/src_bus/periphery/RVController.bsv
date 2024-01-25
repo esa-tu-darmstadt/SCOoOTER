@@ -75,10 +75,6 @@ module mkRVController(RVCIFC) provisos (
                             begin
                                 $write("%c", tpl_2(req)[7:0]);
                             end
-                        `ifdef RVFI
-                            `TOHOST:
-                                $finish();
-                        `endif
                     endcase
                     inflight_ids_w_fifo.enq(tpl_4(req));
                 endmethod
