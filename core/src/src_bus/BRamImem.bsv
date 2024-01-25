@@ -35,7 +35,7 @@ module mkBramImem#(String contentPreload)(ImemIFC) provisos (
                 ibram.portA.request.put(BRAMRequest{
                     write: False,
                     responseOnWrite: False,
-                    address: (truncate(tpl_1(req))>>2)/fromInteger(valueOf(IFUINST)),
+                    address: truncate((tpl_1(req))>>2)/fromInteger(valueOf(IFUINST)),
                     datain: ?
                 });
                 inflight_ids_inst.enq(tpl_2(req));
