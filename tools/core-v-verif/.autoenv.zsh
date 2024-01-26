@@ -4,7 +4,7 @@ export QUESTA_HOME=/eda/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasi
 export PROJECT_ROOT=$(pwd)
 export ROOT_PROJECT=$(pwd)
 
-export RISCV=/scratch/ms/TOOLCHAIN_DV/
+export RISCV=/scratch/ms/tools/RV-Toolchain-multilib/inst/
 export RISCV_PREFIX=/scratch/ms/TOOLCHAIN_DV/bin/riscv64-unknown-elf-
 export RISCV_OBJCOPY=/scratch/ms/TOOLCHAIN_DV/bin/riscv64-unknown-elf-objcopy
 export RISCV_GCC=/scratch/ms/TOOLCHAIN_DV/bin/riscv64-unknown-elf-gcc

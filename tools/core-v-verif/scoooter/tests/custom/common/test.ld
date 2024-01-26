@@ -27,7 +27,7 @@ SECTIONS
   .text : { *(.text) }
 
   /* data segment */
-  . = 0x320000;
+  . = 0x400000;
   
   .tohost : { *(.tohost) }
   .rodata : { *(.rodata) }
@@ -63,7 +63,7 @@ SECTIONS
   _end = .;
   
   .fill : { FILL(0x00); }
-  . = 0x63ffff;
+  . = 0x7fffff;
   .fill_end : { BYTE(0x00); }
 }
 
