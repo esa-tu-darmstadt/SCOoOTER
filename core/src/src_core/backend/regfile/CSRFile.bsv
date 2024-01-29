@@ -99,7 +99,7 @@ module mkCSRFile(CsrFileIFC) provisos (
 
                     // do not write to disallowed fields
                     Bit#(XLEN) wr_data = case (request.addr)
-                        'h300: {1'b0, request.data[30:23], 0, 2'b11, request.data[10:9], 1'b0, /*current_mstatus[7]*/ 1'b1, request.data[6], 2'b0, request.data[3:2], 2'b00};
+                        'h300: {0, 2'b11, 3'b0,     /*current_mstatus[7]*/ 1'b1, 3'b0,     request.data[3], 3'b00};
                         'h304: {0, request.data[11], 3'b0, request.data[7], 3'b0, request.data[3], 3'b0};
                         'h341: {truncateLSB(request.data), 2'b00};
                         default: request.data;
