@@ -438,6 +438,13 @@ class cva6_asm_program_gen_c extends riscv_asm_program_gen;
       instr_stream.push_back({indent, "wfi"});
    endfunction
 
+  // Dump all GPR to the starting point of the program
+  // TB can check the GPR value for this memory location to compare with expected value generated
+  // by the ISA simulator. If the processor doesn't have a good tracer unit, it might not be
+  // possible to compare the GPR value after each instruction execution.
+  virtual function void gen_register_dump(ref string instr[$]);
+  endfunction
+
 endclass : cva6_asm_program_gen_c
 
 `endif // __CVA6_ASM_PROGRAM_GEN_SV__

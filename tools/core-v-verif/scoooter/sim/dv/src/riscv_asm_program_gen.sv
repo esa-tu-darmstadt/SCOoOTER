@@ -1149,7 +1149,7 @@ class riscv_asm_program_gen extends uvm_object;
   virtual function void gen_ecall_handler(int hart);
     string instr[$];
     dump_perf_stats(instr);
-    gen_register_dump(instr);
+    //gen_register_dump(instr);
     instr.push_back($sformatf("la x%0d, write_tohost", cfg.scratch_reg));
     instr.push_back($sformatf("jalr x0, x%0d, 0", cfg.scratch_reg));
     gen_section(get_label("ecall_handler", hart), instr);
