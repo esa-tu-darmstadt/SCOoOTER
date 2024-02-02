@@ -869,7 +869,8 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
     state.pc = !nmie ? rnmi_trap_handler_address : trap_handler_address;
     state.mepc->write(epc);
     state.mcause->write(t.cause());
-    state.mtval->write(t.get_tval());
+    if (t.cause() == 4 || t.cause() == 6)
+      state.mtval->write(t.get_tval());
     state.mtval2->write(t.get_tval2());
     state.mtinst->write(t.get_tinst());
 
