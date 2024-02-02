@@ -131,17 +131,17 @@ rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r
     // word provided for storage
     let raw_data = inst.rs2.Operand;
 
-    // move bytes and half-words to the correct position in the memory word (sepending on where they should be written)
+    // move bytes and half-words to the correct position in the memory word
     Bit#(XLEN) wr_data = case (inst.funct)
         W: raw_data;
-        H: (raw_data << (pack(final_addr)[1] == 0 ? 0 : 16));
-        B: (raw_data << (pack(final_addr)[1] == 0 ? 0 : 16) << (pack(final_addr)[0] == 0 ? 0 : 8));
+        H: pack(replicate(raw_data[15:0]));
+        B: pack(replicate(raw_data[7:0]));
     endcase;
 
     // calculate store mask for strobing of a full word
     Bit#(TDiv#(XLEN, 8)) mask = case (inst.funct)
         W: 'b1111;
-        H: ('b0011 << (pack(final_addr)[1] == 0 ? 0 : 2));
+        H: (pack(final_addr)[1] == 0 ? 'b0011 : 'b1100);
         B: (1 << pack(final_addr)[1:0]);
     endcase;
 
@@ -205,7 +205,7 @@ rule calc_addr_load if ( (in.first().opc == LOAD || in.first().opc == AMO) && in
     // calculate load mask
     Bit#(TDiv#(XLEN, 8)) mask = case (inst.funct)
         W: 'b1111;
-        H, HU: ('b0011 << (pack(final_addr)[1] == 0 ? 0 : 2));
+        H, HU: (pack(final_addr)[1] == 0 ? 'b0011 : 'b1100);
         B, BU: (1 << pack(final_addr)[1:0]);
     endcase;
 
