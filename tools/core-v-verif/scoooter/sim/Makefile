@@ -109,7 +109,7 @@ endif
 # Spike specific commands, variables
 ###############################################################################
 spike:
-	$(tool_path)/spike $(spike_stepout) $(spike_extension) --pmpregions=0 --priv=m --log-commits --isa=$(variant) -l -m0x2000:0x640000 $(elf) 
+	$(tool_path)/spike $(spike_stepout) $(spike_extension) --pmpregions=0 --priv=m --log-commits --isa=$(variant) -l -m0x2000:0x800000 $(elf) 
 	cp $(log).iss $(log)
 
 ###############################################################################
