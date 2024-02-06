@@ -210,7 +210,7 @@ def process_spike_sim_log(spike_log, csv, full_trace=0):
             # We say that an instruction caused an architectural update if either we
             # saw a commit line (in which case, entry.gpr will contain a single
             # entry) or the instruction was 'wfi' or 'ecall'.
-            if not (full_trace or entry.gpr or entry.instr_str in ['wfi',
+            if illegal or not (full_trace or entry.gpr or entry.instr_str in ['wfi',
                                                                    'ecall']):
                 continue
 
