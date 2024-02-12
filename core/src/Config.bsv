@@ -4,7 +4,7 @@ typedef 1 IFUINST;
 typedef 1 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
-typedef 'h10000 BRAMSIZE;
+typedef 'h20000 BRAMSIZE;
 
 // must be at least as big as the issuewidth
 typedef 2 ROBDEPTH;
