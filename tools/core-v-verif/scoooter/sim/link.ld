@@ -20,7 +20,7 @@ SECTIONS
   . = 0x2000;
   .text.init : { *(.text.init) }
   .text : { *(.text) }
-  . = 0x320000;
+  . = 0x400000;
   .tohost : { *(.tohost) }
   .page_table : { *(.page_table) }
   .user_stack : { *(.user_stack) }
@@ -32,5 +32,5 @@ SECTIONS
   .fill : { FILL(0xcccccccc); }
   . = 0x63ffff;
   .fill_end : { BYTE(0xcc); }
-  . = 0x640000;
+  . = 0x800000;
 }

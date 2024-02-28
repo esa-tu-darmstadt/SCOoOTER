@@ -4,9 +4,12 @@
 
 int cnt = 0;
 volatile int cnt_ints = 0;
+volatile uint64_t* mtime    = 0x40000000;
+volatile uint64_t* mtimecmp = 0x40000008;
 
 __attribute__((interrupt))
 void trap_handler() {
+	*mtime = 0;
 	print("hi mom!\n");
 	uint_xlen_t cause = csr_read_mcause()&~0x80000000;
 	char buf[9];
@@ -18,9 +21,10 @@ void trap_handler() {
 }
 
 int main() {
+	*mtime = 0;
+	*mtimecmp = 0x10000;
 	print("GuMo!\n");
 	csr_write_mtvec(trap_handler);
-	csr_write_mie(1<<11);
 	int test = 0;
 	char buf[9];
 	while(1) {

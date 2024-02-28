@@ -6,7 +6,7 @@ SECTIONS
   . = 0x2000;
   .text.init : { *(.text.init) }
   .text : { *(.text) }
-  . = 0x320000;
+  . = 0x400000;
   .tohost : { *(.tohost) }
   .data : { *(.data) }
   .data.string : { *(.data.string)}
