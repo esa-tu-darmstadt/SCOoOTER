@@ -13,6 +13,8 @@ import GetPut::*;
 import RVController::*;
 import CWire::*;
 import PLIC::*;
+import AxiAdapter::*;
+import AxiLiteAdapter::*;
 
 
 interface MemBusIFC;
@@ -23,6 +25,12 @@ interface MemBusIFC;
     //outgoing simple dmem ifaces
     interface Client#(Tuple2#(UInt#(TLog#(SIZE_DMEM)), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_r;
     interface Client#(Tuple4#(UInt#(TLog#(SIZE_DMEM)), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) dmem_w;
+
+    // outgoing periphery AXI full + lite
+    interface AXI4_Master_Rd_Fab#(30, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) axif_rd;
+    interface AXI4_Master_Wr_Fab#(30, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) axif_wr;
+    interface AXI4_Lite_Master_Rd_Fab#(30, XLEN) axil_rd;
+    interface AXI4_Lite_Master_Wr_Fab#(30, XLEN) axil_wr;
 
     //periphery/test signals
     (* always_ready, always_enabled *)
@@ -80,8 +88,8 @@ module mkIDMemAdapter(MemBusIFC) provisos (
     // dmem bus and periphery
 
     // scheduling via revertingVirtualRegs
-    Ehr#(4, Bool) sched_helper_rd <- mkCWire(True);
-    Ehr#(4, Bool) sched_helper_wr <- mkCWire(True);
+    Ehr#(6, Bool) sched_helper_rd <- mkCWire(True);
+    Ehr#(6, Bool) sched_helper_wr <- mkCWire(True);
 
     // gather requests
     FIFO#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))))                      dmem_r_rq <- mkPipelineFIFO();
@@ -119,8 +127,24 @@ module mkIDMemAdapter(MemBusIFC) provisos (
     //RVController
     let rvcontroller <- mkRVController();
     let con_rvcontroller <- mkMemCon(dmem_r_rq, dmem_w_rq, rvcontroller.memory_bus, core, 32'h11000000, 32'h10000, sched_helper_rd[3], sched_helper_wr[3]);
+
+    //AXI_Full
+    AxiAdapterIFC#(30) axifull <- mkAxiAdapter();
+    let con_axifull <- mkMemCon(dmem_r_rq, dmem_w_rq, axifull.memory_bus, core, 32'h80000000, 32'h10000000, sched_helper_rd[4], sched_helper_wr[4]);
+    
+    //AXI_Lite
+    AxiLiteAdapterIFC#(30) axilite <- mkAxiLiteAdapter();
+    let con_axilite <- mkMemCon(dmem_r_rq, dmem_w_rq, axilite.memory_bus, core, 32'hA0000000, 32'h10000000, sched_helper_rd[5], sched_helper_wr[5]);
+    
+
+    // connect wires of periphery
     method Bit#(XLEN) retval = rvcontroller.retval();
     method Bool done = rvcontroller.done();
+    
+    interface axif_wr = axifull.wr;
+    interface axif_rd = axifull.rd;
+    interface axil_wr = axilite.wr;
+    interface axil_rd = axilite.rd;
 
     // dmem
     interface Client dmem_r;

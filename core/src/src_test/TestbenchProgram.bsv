@@ -63,6 +63,16 @@ package TestbenchProgram;
 
         let dut <- mkIDMemAdapter();
 
+        // outgoing periphery AXI tieoff with dummy ifaces
+        AXI4_Slave_Rd#(30, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) axif_dummy_rd <- mkAXI4_Slave_Rd_Dummy();
+        AXI4_Slave_Wr#(30, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) axif_dummy_wr <- mkAXI4_Slave_Wr_Dummy();
+        AXI4_Lite_Slave_Rd#(30, XLEN) axil_dummy_rd <- mkAXI4_Lite_Slave_Rd_Dummy();
+        AXI4_Lite_Slave_Wr#(30, XLEN) axil_dummy_wr <- mkAXI4_Lite_Slave_Wr_Dummy();
+        mkConnection(axif_dummy_rd.fab, dut.axif_rd);
+        mkConnection(axif_dummy_wr.fab, dut.axif_wr);
+        mkConnection(axil_dummy_rd.fab, dut.axil_rd);
+        mkConnection(axil_dummy_wr.fab, dut.axil_wr);
+
         rule interrupt;
             dut.sw_int(count_r%'h8000 == 0 ? unpack({1'b1, 0}): unpack(0));
         endrule

@@ -1,44 +1,51 @@
-package AxiAdapter;
+package AxiLiteAdapter;
 
 import BlueAXI::*;
 import Types::*;
 import Interfaces::*;
 import GetPut::*;
 import ClientServer::*;
+import FIFO::*;
 
-interface AxiAdapterIFC#(numeric type aw);
+interface AxiLiteAdapterIFC#(numeric type aw);
     interface MemMappedIFC#(aw) memory_bus;
-    interface AXI4_Master_Rd_Fab#(aw, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) rd;
-    interface AXI4_Master_Wr_Fab#(aw, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) wr;
+    interface AXI4_Lite_Master_Rd_Fab#(aw, XLEN) rd;
+    interface AXI4_Lite_Master_Wr_Fab#(aw, XLEN) wr;
 endinterface
 
-module mkAxiAdapter(AxiAdapterIFC#(aw)) provisos (
+module mkAxiLiteAdapter(AxiLiteAdapterIFC#(aw)) provisos (
     Mul#(NUM_HARTS, 2, num_mtimecmp),
     Log#(NUM_CPU, cpu_idx_t),
     Add#(1, cpu_idx_t, amo_cpu_idx_t)
 );
 
-    AXI4_Master_Rd#(aw, XLEN, amo_cpu_idx_t, 0) rd_inst <- mkAXI4_Master_Rd(1, 1, False);
-    AXI4_Master_Wr#(aw, XLEN, amo_cpu_idx_t, 0) wr_inst <- mkAXI4_Master_Wr(1, 1, 1, False);
+    AXI4_Lite_Master_Rd#(aw, XLEN) rd_inst <- mkAXI4_Lite_Master_Rd(1);
+    AXI4_Lite_Master_Wr#(aw, XLEN) wr_inst <- mkAXI4_Lite_Master_Wr(1);
 
-    interface AXI4_Master_Rd_Fab rd = rd_inst.fab;
-    interface AXI4_Master_Wr_Fab wr = wr_inst.fab;
+    FIFO#(Bit#(amo_cpu_idx_t)) inflight_ids_r_fifo <- mkSizedFIFO(2);
+    FIFO#(Bit#(amo_cpu_idx_t)) inflight_ids_w_fifo <- mkSizedFIFO(2);
+
+    interface AXI4_Lite_Master_Rd_Fab rd = rd_inst.fab;
+    interface AXI4_Lite_Master_Wr_Fab wr = wr_inst.fab;
 
     // reading registers
     interface MemMappedIFC memory_bus;
         interface Server mem_r;
             interface Put request;
                 method Action put(Tuple2#(UInt#(aw), Bit#(TAdd#(TLog#(NUM_CPU), 1))) req);
-                    AXI4_Read_Rq#(aw, amo_cpu_idx_t, 0) rq = defaultValue;
-                    rq.id = tpl_2(req);
+                    AXI4_Lite_Read_Rq_Pkg#(aw) rq;
                     rq.addr = pack(tpl_1(req));
+                    rq.prot = UNPRIV_SECURE_DATA;
                     rd_inst.request.put(rq);
+
+                    inflight_ids_r_fifo.enq(tpl_2(req));
                 endmethod
             endinterface
             interface Get response;
                 method ActionValue#(Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) get();
                     let rs <- rd_inst.response.get();
-                    return tuple2(rs.data, rs.id);
+                    inflight_ids_r_fifo.deq();
+                    return tuple2(rs.data, inflight_ids_r_fifo.first());
                 endmethod
             endinterface
         endinterface
@@ -47,22 +54,22 @@ module mkAxiAdapter(AxiAdapterIFC#(aw)) provisos (
         interface Server mem_w;
             interface Put request;
                 method Action put(Tuple4#(UInt#(aw), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))) req);
-                    AXI4_Write_Rq_Addr#(aw, amo_cpu_idx_t, 0) rq_a = defaultValue;
-                    AXI4_Write_Rq_Data#(XLEN, 0) rq_d = defaultValue;
+                    AXI4_Lite_Write_Rq_Pkg#(aw, XLEN) rq;
 
-                    rq_a.id = tpl_4(req);
-                    rq_a.addr = pack(tpl_1(req));
-                    rq_d.data = tpl_2(req);
-                    rq_d.strb = tpl_3(req);
+                    inflight_ids_w_fifo.enq(tpl_4(req));
+                    rq.addr = pack(tpl_1(req));
+                    rq.data = tpl_2(req);
+                    rq.strb = tpl_3(req);
+                    rq.prot = UNPRIV_SECURE_DATA;
 
-                    wr_inst.request_addr.put(rq_a);
-                    wr_inst.request_data.put(rq_d);
+                    wr_inst.request.put(rq);
                 endmethod
             endinterface
             interface Get response;
                 method ActionValue#(Bit#(TAdd#(TLog#(NUM_CPU), 1))) get();
                     let rs <- wr_inst.response.get();
-                    return rs.id;
+                    inflight_ids_w_fifo.deq();
+                    return inflight_ids_w_fifo.first();
                 endmethod
             endinterface
         endinterface
