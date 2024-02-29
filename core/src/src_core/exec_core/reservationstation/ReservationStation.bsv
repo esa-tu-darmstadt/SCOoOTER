@@ -110,7 +110,8 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     function UInt#(size_logidx_t) increment_index(UInt#(size_logidx_t) new_idx);
         UInt#(size_logidx_t) output_idx;
         //if DEPTH is not a pwr of two, explicitly implement rollover
-        if( !ispwr2(valueOf(entries)) ) begin
+        Bit#(entries) dummy = 0;
+        if( !ispwr2(dummy) ) begin
             output_idx = (new_idx == fromInteger(valueOf(entries)-1) ? 0 : (new_idx + 1));
         // if depth is power of two, the index will roll over naturally
         end else output_idx = new_idx + 1;

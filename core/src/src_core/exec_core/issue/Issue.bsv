@@ -17,6 +17,7 @@ import GetPut::*;
 import ClientServer::*;
 import ReorderBuffer::*;
 import TestFunctions::*;
+import BUtils::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -68,7 +69,7 @@ Wire#(MIMO::LUInt#(ISSUEWIDTH)) inst_in_cnt <- mkWire();
 
 //wires to transport data from ROB
 Wire#(UInt#(TLog#(TAdd#(ROBDEPTH,1)))) rob_free_w <- mkBypassWire();
-Wire#(UInt#(TLog#(ROBDEPTH))) rob_idx_w <- mkBypassWire();
+Reg#(UInt#(TLog#(ROBDEPTH))) rob_idx_w <- mkReg(0);
 
 //wires to transport signals from RS
 Wire#(Vector#(NUM_RS, Bool)) rdy_inst_vec <- mkWire();
@@ -345,11 +346,20 @@ rule assemble_instructions;
     //dbg_print(Issue, $format("Issue_bus ", fshow(instructions_rs)));
 endrule
 
+rule advance_issue_idx if (valueOf(ROBDEPTH) != 1);
+    Bit#(ROBDEPTH) dummy = 0;
+    if (ispwr2(dummy))
+        rob_idx_w <= rob_idx_w + cExtend(possible_issue_amount);
+    else begin
+        UInt#(TAdd#(1, TLog#(ROBDEPTH))) rob_idx_w_ext = extend(rob_idx_w) + extend(possible_issue_amount);
+        rob_idx_w <= (rob_idx_w_ext >= fromInteger(valueOf(ROBDEPTH)) ? truncate(rob_idx_w_ext - fromInteger(valueOf(ROBDEPTH))) : truncate(rob_idx_w_ext));
+    end
+endrule
+
 // return issue bus
 method Vector#(NUM_RS, Maybe#(InstructionIssue)) get_issue() = instructions_rs_v;
 // inputs from ROB
 method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free) = rob_free_w._write(free);
-method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx) = rob_idx_w._write(idx);
 // reserve space in ROB
 method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t)) get_reservation() 
     = tuple2(rob_entry_wire, possible_issue_amount);

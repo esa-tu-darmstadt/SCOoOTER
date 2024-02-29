@@ -115,8 +115,6 @@ interface IssueIFC;
 
     (* always_ready, always_enabled *)
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
-    (* always_ready, always_enabled *)
-    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
 
     method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
@@ -167,8 +165,6 @@ endinterface
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
-    (* always_enabled, always_ready *)
-    method UInt#(TLog#(ROBDEPTH)) current_idx;
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
 

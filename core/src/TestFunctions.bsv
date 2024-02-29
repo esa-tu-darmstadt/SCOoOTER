@@ -71,15 +71,8 @@ function String select_fitting_sram_byte(Integer bnum);
     endcase;
 endfunction
 
-// check if a value is a power of two
-function Bool ispwr2(Integer test);
-    Maybe#(Bool) ret = tagged Invalid;
-    while (!isValid(ret)) begin
-        if (test == 1) ret = tagged Valid True;
-        else if (test%2 != 0) ret = tagged Valid False;
-        test = test/2;
-    end
-    return ret.Valid;
+function Bool ispwr2(Bit#(test) t_in);
+    return (valueOf(TExp#(TLog#(test))) == valueOf(test));
 endfunction
 
 // get the value of an RWire

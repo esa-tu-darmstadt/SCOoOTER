@@ -69,7 +69,7 @@ module mkFetch(FetchIFC) provisos(
     // local epoch for flushing erroneously-fetched instructions
     Vector#(NUM_THREADS, Reg#(UInt#(3))) local_epoch <- replicateM(mkReg(0));
     FIFOF#(UInt#(3)) inflight_local_epoch <- mkSizedFIFOF(8);
-    //holds outbound Instruction s and count
+    //holds outbound Instructions and count
     FIFOF#(Vector#(IFUINST, FetchedInstruction)) fetched_inst <- mkPipelineFIFOF();
     FIFOF#(MIMO::LUInt#(IFUINST)) fetched_amount <- mkPipelineFIFOF();
 
@@ -83,7 +83,8 @@ module mkFetch(FetchIFC) provisos(
     // change thread to fetch for every cycle
     Reg#(UInt#(thread_id_t)) current_thread_r <- mkReg(0);
     rule advance_thread;
-        if (ispwr2(valueOf(NUM_THREADS)))
+        Bit#(NUM_THREADS) dummy = 0;
+        if (ispwr2(dummy))
             current_thread_r <= current_thread_r+1;
         else
             current_thread_r <= (current_thread_r == fromInteger(valueOf(NUM_THREADS)-1) ? 0 : (current_thread_r+1));
@@ -103,7 +104,8 @@ module mkFetch(FetchIFC) provisos(
         // request target prediction
         target_request_f.enq(pc[current_thread_r][0]);
         // advance PC
-        if (ispwr2(valueOf(IFUINST)))
+        Bit#(IFUINST) dummy = 0;
+        if (ispwr2(dummy))
             pc[current_thread_r][0] <= (pc[current_thread_r][0] & ~(fromInteger(valueOf(IFUINST)-1))) + fromInteger(valueOf(IFUINST));
         else begin
             let overlap = (pc[current_thread_r][0])%fromInteger(valueOf(IFUINST));

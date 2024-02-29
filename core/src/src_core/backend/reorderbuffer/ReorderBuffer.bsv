@@ -283,7 +283,6 @@ module mkReorderBuffer_in(RobIFC) provisos (
 
     method UInt#(issuewidth_log_t) available = tpl_2(insts_passing.first()); // how many inst can be dequeued?
     method UInt#(size_log_t) free = empty_slots(); // how many inst can be enqueued?
-    method UInt#(size_logidx_t) current_idx = head_r; // head ptr for idx generation
     method UInt#(size_logidx_t) current_tail_idx = (valueOf(ROB_LATCH_OUTPUT) == 1 ? tail_delay_r : tail_r); // tail ptr for atomic predication
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issuewidth_log_t) num)
         = reserve_data_w._write(tuple2(data, num)); // put instructions into ROB

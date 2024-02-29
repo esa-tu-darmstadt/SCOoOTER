@@ -31,8 +31,6 @@ interface BackendIFC;
     method Action int_flags(Vector#(NUM_THREADS, Vector#(3, Bool)) int_mask);
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     (* always_enabled, always_ready *)
-    method UInt#(TLog#(ROBDEPTH)) current_idx;
-    (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
@@ -119,7 +117,6 @@ module mkBackend(BackendIFC) provisos (
     endmethod
 
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc() = commit.redirect_pc;
-    method UInt#(TLog#(ROBDEPTH)) current_idx = rob.current_idx();
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num) = rob.reserve(data, num);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free = rob.free();
