@@ -292,11 +292,7 @@ typedef union tagged {
 typedef struct {
     Bit#(PCLEN) pc; // addr of the instruction
     RADDR destination; // destination register
-    union tagged { // result (or tag identifying producing instruction)
-        UInt#(TLog#(ROBDEPTH)) Tag;
-        Bit#(XLEN) Result;
-        ExceptionType Except;
-    } result;
+    ResultOrExcept result;
     // next real pc and predicted one
     Bit#(PCLEN) next_pc;
     Bit#(PCLEN) pred_pc;

@@ -52,11 +52,16 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
     Integer rob_id = base_id + id_inc * pos;
 
     // real instruction entry
-    Reg#(RobEntry) entry_r <- mkRegU();
+    Reg#(RobEntry) entry_r <- mkRegU;
+    Reg#(ResultOrExcept) result_r <- mkRegU;
+    Reg#(Bit#(PCLEN)) next_pc_r <- mkRegU;
+    `ifdef RVFI
+        Reg#(UInt#(XLEN)) mem_addr_r <- mkRegU;
+    `endif
 
     // status flags
-    Reg#(Bool) occupied_r <- mkReg(False);
-    Reg#(Bool) ready_r <- mkReg(False);
+    Reg#(Bool) occupied_r[2] <- mkCReg(2, False);
+    Reg#(Bool) ready_r[2] <- mkCReg(2, False);
 
     // needed for schedule
     PulseWire schedulingFix <- mkPulseWire();
@@ -74,32 +79,24 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
 
         // if found
         if (fitting_result matches tagged Valid .v) begin
-            ready_r <= True; // set entry as ready
-            let local_entry = entry_r;
+            ready_r[0] <= True; // set entry as ready
 
-            // update entry with result
-            local_entry.result = case (v.Valid.result) matches
-                tagged Result .r : tagged Result r;
-                tagged Except .e : tagged Except e;
-            endcase;
+            result_r <= v.Valid.result;
 
             `ifdef RVFI // for testing, expose memory address
-                local_entry.mem_addr = v.Valid.mem_addr;
+                mem_addr_r <= v.Valid.mem_addr;
             `endif
 
             // generate the next pc field from the result
-            local_entry.next_pc = case (v.Valid.new_pc) matches
+            next_pc_r <= case (v.Valid.new_pc) matches
                 tagged Valid .n : truncateLSB(n);
-                tagged Invalid  : truncateLSB(local_entry.pc+1);
+                tagged Invalid  : truncateLSB(entry_r.pc+1);
             endcase;
-
-            // write modified entry back
-            entry_r <= local_entry;
 
             // write info for pipeline viewer
             `ifdef LOG_PIPELINE
-                $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, local_entry.pc, i, local_entry.epoch);
-                $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, local_entry.log_id, 0, "E");
+                $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, entry_r.pc, i, entry_r.epoch);
+                $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, entry_r.log_id, 0, "E");
             `endif
         end
     endrule
@@ -107,24 +104,30 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
     // store a new instruction
     method Action put(RobEntry re);
         entry_r <= re;
-        occupied_r <= True;
-        ready_r <= False;
+        occupied_r[1] <= True;
+        ready_r[1] <= False;
         schedulingFix.send();
     endmethod
 
     // get stored instruction
     method RobEntry first();
-        return entry_r;
+        let entry = entry_r;
+        entry.next_pc = next_pc_r;
+        entry.result = result_r;
+        `ifdef RVFI // for testing, expose memory address
+            entry.mem_addr = mem_addr_r;
+        `endif
+        return entry;
     endmethod
     // dequeue stored instruction
-    method Action deq() = occupied_r._write(False);
+    method Action deq() = occupied_r[0]._write(False);
 
     // get result bus
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus) = result_bus_w._write(res_bus);
     
     // report status
-    method Bool empty() = !occupied_r;
-    method Bool ready() = occupied_r && ready_r;
+    method Bool empty() = !occupied_r[0];
+    method Bool ready() = occupied_r[0] && ready_r[0];
 
 endmodule
 

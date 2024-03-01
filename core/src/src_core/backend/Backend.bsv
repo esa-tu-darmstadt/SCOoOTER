@@ -13,7 +13,6 @@ import Inst_Types::*;
 import Types::*;
 import GetPut::*;
 import Interfaces::*;
-import ReorderBuffer::*;
 import ReorderBufferNew::*;
 import Commit::*;
 import RegFileArch::*;
