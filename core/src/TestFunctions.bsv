@@ -8,6 +8,7 @@ import Types :: *;
 import Inst_Types :: *;
 import Vector::*;
 import Ehr::*;
+import BUtils::*;
 
 // get a reg interface from a creg/EHR. The interface implements one port of the CReg/EHR.
 function a disassemble_creg(Integer num, Array#(a) creg);
@@ -77,6 +78,23 @@ endfunction
 
 // get the value of an RWire
 function Maybe#(a) get_r_wire(RWire#(a) rw) = rw.wget();
+
+function UInt#(x) rollover_add(Bit#(test) t_in, UInt#(x) a, UInt#(x) b) provisos (
+    Add#(x, 1, x_ext)
+);
+    if (ispwr2(t_in)) begin
+        return a + b;
+    end else begin 
+        UInt#(x_ext) a_ext = cExtend(a);
+        UInt#(x_ext) b_ext = cExtend(b);
+        UInt#(x_ext) result_noroll = a_ext + b_ext;
+        UInt#(x_ext) limit = fromInteger(valueOf(test));
+        UInt#(x_ext) result_ext = (result_noroll >= limit ? result_noroll - limit : result_noroll);
+        return cExtend(result_ext);
+    end
+    
+
+endfunction
 
 endpackage
 

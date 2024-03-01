@@ -14,6 +14,7 @@ import Types::*;
 import GetPut::*;
 import Interfaces::*;
 import ReorderBuffer::*;
+import ReorderBufferNew::*;
 import Commit::*;
 import RegFileArch::*;
 import CSRFile::*;
@@ -62,7 +63,7 @@ module mkBackend(BackendIFC) provisos (
 
     // instantiate units
     let csrf <- mkCSRFile();
-    RobIFC rob <- mkReorderBuffer();
+    RobIFC rob <- mkReorderBufferNew();
     CommitIFC commit <- mkCommit();
     RegFileIFC regfile_arch <- valueOf(REGFILE_LATCH_BASED) == 0 ? mkRegFile() : mkRegFileAriane();
 
