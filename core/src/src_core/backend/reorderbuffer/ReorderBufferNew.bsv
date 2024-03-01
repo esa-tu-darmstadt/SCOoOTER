@@ -102,8 +102,6 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
 endmodule
 
 
-typedef 2 ROB_TST_AMT;
-
 interface RobBankIFC;
 
     (* always_ready, always_enabled *)
@@ -116,21 +114,19 @@ interface RobBankIFC;
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
 
-    method UInt#(TLog#(ROB_TST_AMT)) current_tail_idx;
+    method UInt#(TLog#(ROB_BANK_DEPTH)) current_tail_idx;
 endinterface
 
 
 
 module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) provisos (
-    Log#(ROB_TST_AMT, local_idx)
+    Log#(ROB_BANK_DEPTH, local_idx)
 );
 
     Reg#(UInt#(local_idx)) local_head <- mkReg(0);
     Reg#(UInt#(local_idx)) local_tail <- mkReg(0);
 
-    Vector#(ROB_TST_AMT, RobRowIFC) rows <- genWithM(mkReorderBufferRow(base_id, id_inc));
-
-
+    Vector#(ROB_BANK_DEPTH, RobRowIFC) rows <- genWithM(mkReorderBufferRow(base_id, id_inc));
 
     method Bool ready_enq() = rows[local_head].empty();
     method Bool ready_deq() = rows[local_tail].ready();
@@ -147,11 +143,11 @@ module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) proviso
     endmethod
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
-        for (Integer i = 0; i < valueOf(ROB_TST_AMT); i=i+1)
+        for (Integer i = 0; i < valueOf(ROB_BANK_DEPTH); i=i+1)
             rows[i].result_bus(res_bus);
     endmethod
 
-    method UInt#(TLog#(ROB_TST_AMT)) current_tail_idx = local_tail;
+    method UInt#(TLog#(ROB_BANK_DEPTH)) current_tail_idx = local_tail;
 endmodule
 
 
@@ -163,22 +159,33 @@ endmodule
 
 
 module mkReorderBufferNew(RobIFC) provisos (
-    Log#(ISSUEWIDTH, issue_idx_t)
+    Log#(ISSUEWIDTH, issue_idx_t),
+    Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
+    Log#(issuewidth_pad_t, issue_amt_t)
 );
     Vector#(ISSUEWIDTH, RobBankIFC) robbank <- genWithM(flip(mkReorderBufferBank)(valueOf(ISSUEWIDTH)));
 
     Reg#(UInt#(issue_idx_t)) head_bank_r <- mkReg(0);
     Reg#(UInt#(issue_idx_t)) tail_bank_r <- mkReg(0);
 
-    method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available = (robbank[tail_bank_r].ready_deq() ? 1 : 0);
-    method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free = (robbank[head_bank_r].ready_enq() ? 1 : 0);
+    function Bool get_rdy_enq(RobBankIFC rb) = rb.ready_enq();
+
+    method UInt#(issue_amt_t) available = (robbank[tail_bank_r].ready_deq() ? 1 : 0);
+    method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free = extend(countElem(True, map(get_rdy_enq, robbank)));
 
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = extend(tail_bank_r) + extend(robbank[tail_bank_r].current_tail_idx())*fromInteger(valueOf(ISSUEWIDTH));
 
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
-        if (num == 1) begin
-            robbank[head_bank_r].put(data[0]);
-        end
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issue_amt_t) num);
+        let enq_data = rotateBy(data, head_bank_r);
+
+        if (num > 1) $display("DANKE MERKEL");
+
+        function Bool should_fire(Integer i) = fromInteger(i) < num;
+        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(genWith(should_fire), head_bank_r);
+
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+            if (enq_fire[i]) robbank[i].put(enq_data[i]);
+
 
         Bit#(ISSUEWIDTH) dummy = 0;
         head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(num));
