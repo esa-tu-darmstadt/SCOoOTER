@@ -11,7 +11,7 @@ typedef 'h00000 BASE_IMEM;
 typedef 'h10000 SIZE_IMEM;
 
 // must be at least as big as the issuewidth
-typedef 1 ROBDEPTH;
+typedef 1 ROB_BANK_DEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)

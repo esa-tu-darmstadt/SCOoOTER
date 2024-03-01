@@ -237,11 +237,7 @@ module mkReorderBufferNew(RobIFC) provisos (
     Reg#(Vector#(ISSUEWIDTH, RobEntry)) out_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkRegU : mkBypassWire());
     
     rule calc_amt;
-        if (valueOf(ISSUEWIDTH) == 1)
-            amt_out_r <= unpack(pack(robbank[0].ready_deq())); // if only one bank
-        else
-            // if multiple banks
-            amt_out_r <= foldr(fold_rdy_deq_amt, 0, rotateBy(map(get_rdy_deq, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)}))));
+        amt_out_r <= foldr(fold_rdy_deq_amt, 0, rotateBy(map(get_rdy_deq, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)}))));
     endrule
 
     rule calc_insts;
