@@ -36,40 +36,54 @@ interface RobRowIFC;
     method Bool ready();
 
     method Action put(RobEntry re);
-    method ActionValue#(RobEntry) get();
+    method RobEntry first();
+    method Action deq();
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
 endinterface
 
+// single entry inside the ROB
+// the entry can get an instruction and a ready instruction may be dequeued
+// an instruction is ready, once the result is known
+// an entry has a fixed ID and matches the result bus for that fixed ID
 module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowIFC);
 
+    // fixed ID of this entry
     Integer rob_id = base_id + id_inc * pos;
 
+    // real instruction entry
     Reg#(RobEntry) entry_r <- mkRegU();
+
+    // status flags
     Reg#(Bool) occupied_r <- mkReg(False);
     Reg#(Bool) ready_r <- mkReg(False);
 
+    // needed for schedule
     PulseWire schedulingFix <- mkPulseWire();
     Wire#(Vector#(NUM_FU, Maybe#(Result))) result_bus_w <- mkBypassWire();
 
+    // helper function to test for found result
     function Bool fits_id(Maybe#(Result) result) = (isValid(result) && result.Valid.tag == fromInteger(rob_id));
 
-    
-
+    // check result bus for fitting result
     rule consume_result_bus;
         let res_bus = result_bus_w;
 
+        // use helper function
         let fitting_result = find(fits_id, res_bus);
 
+        // if found
         if (fitting_result matches tagged Valid .v) begin
-            ready_r <= True;
+            ready_r <= True; // set entry as ready
             let local_entry = entry_r;
+
+            // update entry with result
             local_entry.result = case (v.Valid.result) matches
                 tagged Result .r : tagged Result r;
                 tagged Except .e : tagged Except e;
             endcase;
 
-            `ifdef RVFI
+            `ifdef RVFI // for testing, expose memory address
                 local_entry.mem_addr = v.Valid.mem_addr;
             `endif
 
@@ -79,10 +93,18 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
                 tagged Invalid  : truncateLSB(local_entry.pc+1);
             endcase;
 
+            // write modified entry back
             entry_r <= local_entry;
+
+            // write info for pipeline viewer
+            `ifdef LOG_PIPELINE
+                $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, local_entry.pc, i, local_entry.epoch);
+                $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, local_entry.log_id, 0, "E");
+            `endif
         end
     endrule
 
+    // store a new instruction
     method Action put(RobEntry re);
         entry_r <= re;
         occupied_r <= True;
@@ -90,18 +112,24 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
         schedulingFix.send();
     endmethod
 
-    method ActionValue#(RobEntry) get();
-        occupied_r <= False;
+    // get stored instruction
+    method RobEntry first();
         return entry_r;
     endmethod
+    // dequeue stored instruction
+    method Action deq() = occupied_r._write(False);
 
+    // get result bus
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus) = result_bus_w._write(res_bus);
+    
+    // report status
     method Bool empty() = !occupied_r;
     method Bool ready() = occupied_r && ready_r;
 
 endmodule
 
 
+// A ROB bank is an assembly of multiple ROB entries. A ROB bank has a single enq and deq port.
 interface RobBankIFC;
 
     (* always_ready, always_enabled *)
@@ -110,128 +138,62 @@ interface RobBankIFC;
     method Bool ready_deq();
 
     method Action put(RobEntry re);
-    method ActionValue#(RobEntry) get();
+    method RobEntry first();
+    method Action deq();
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
 
     method UInt#(TLog#(ROB_BANK_DEPTH)) current_tail_idx;
 endinterface
 
-
-
 module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) provisos (
     Log#(ROB_BANK_DEPTH, local_idx)
 );
 
+    // state, which entry is head and which one is tail
     Reg#(UInt#(local_idx)) local_head <- mkReg(0);
     Reg#(UInt#(local_idx)) local_tail <- mkReg(0);
 
+    // instantiate multiple rows
     Vector#(ROB_BANK_DEPTH, RobRowIFC) rows <- genWithM(mkReorderBufferRow(base_id, id_inc));
 
+    // return correct ready and empty signals, depending on head
     method Bool ready_enq() = rows[local_head].empty();
     method Bool ready_deq() = rows[local_tail].ready();
 
+    // enqueue instruction
     method Action put(RobEntry re);
         rows[local_head].put(re);
         local_head <= local_head + 1;
     endmethod
 
-    method ActionValue#(RobEntry) get();
+    // get current tail instruction
+    method RobEntry first() = rows[local_tail].first();
+
+    // dequeue instruction
+    method Action deq();
         local_tail <= local_tail + 1;
-        let r <- rows[local_tail].get();
-        return r;
+        rows[local_tail].deq();
     endmethod
 
+    // get result bus
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
         for (Integer i = 0; i < valueOf(ROB_BANK_DEPTH); i=i+1)
             rows[i].result_bus(res_bus);
     endmethod
 
+    // return current tail id
     method UInt#(TLog#(ROB_BANK_DEPTH)) current_tail_idx = local_tail;
 endmodule
-
-
-
-
-
-
-
-
-
-module mkReorderBufferNew(RobIFC) provisos (
-    Log#(ISSUEWIDTH, issue_idx_t),
-    Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
-    Log#(issuewidth_pad_t, issue_amt_t)
-);
-    Vector#(ISSUEWIDTH, RobBankIFC) robbank <- genWithM(flip(mkReorderBufferBank)(valueOf(ISSUEWIDTH)));
-
-    Reg#(UInt#(issue_idx_t)) head_bank_r <- mkReg(0);
-    Reg#(UInt#(issue_idx_t)) tail_bank_r <- mkReg(0);
-
-    function Bool get_rdy_enq(RobBankIFC rb) = rb.ready_enq();
-
-    method UInt#(issue_amt_t) available = (robbank[tail_bank_r].ready_deq() ? 1 : 0);
-    method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free = extend(countElem(True, map(get_rdy_enq, robbank)));
-
-    method UInt#(TLog#(ROBDEPTH)) current_tail_idx = extend(tail_bank_r) + extend(robbank[tail_bank_r].current_tail_idx())*fromInteger(valueOf(ISSUEWIDTH));
-
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issue_amt_t) num);
-        let enq_data = rotateBy(data, head_bank_r);
-
-        if (num > 1) $display("DANKE MERKEL");
-
-        function Bool should_fire(Integer i) = fromInteger(i) < num;
-        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(genWith(should_fire), head_bank_r);
-
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-            if (enq_fire[i]) robbank[i].put(enq_data[i]);
-
-
-        Bit#(ISSUEWIDTH) dummy = 0;
-        head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(num));
-    endmethod
-
-    method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get() if (robbank[tail_bank_r].ready_deq());
-        let r <- robbank[tail_bank_r].get();
-
-        Bit#(ISSUEWIDTH) dummy = 0;
-        tail_bank_r <= rollover_add(dummy, tail_bank_r, 1);
-        return replicate(r);
-    endmethod
-
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-            robbank[i].result_bus(res_bus);
-    endmethod
-endmodule
-
-
-
-
-
-/*
-
 
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkReorderBuffer(RobIFC);
-    let m <- mkReorderBuffer_in();
-    return m;
-endmodule
-
-module mkReorderBuffer_in(RobIFC) provisos (
-    // create types to track instruction amounts
+module mkReorderBufferNew(RobIFC) provisos (
+    Log#(ISSUEWIDTH, issue_idx_t),
     Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
-    Log#(issuewidth_pad_t, issuewidth_log_t),
-    // create types to track entries in ROB
-    Add#(ROBDEPTH, 1, size_pad_t),
-    Log#(size_pad_t, size_log_t),
-    Log#(ROBDEPTH, size_logidx_t),
-    //the depth of the ROB must be deeper than the issuewidth
-    Add#(__a, issuewidth_log_t, size_log_t),
-    Max#(issuewidth_log_t, size_logidx_t, count_width_t)
+    Log#(issuewidth_pad_t, issue_amt_t)
 );
 
     `ifdef LOG_PIPELINE
@@ -247,161 +209,82 @@ module mkReorderBuffer_in(RobIFC) provisos (
         endrule
     `endif
 
-    //find out how many slots are empty
-    function UInt#(size_log_t) empty_slots = fromInteger(valueOf(ROBDEPTH)) - full_slots();
+    // needed as input for truncated add function
+    // such that the ISSUEWIDTH is transported to the function
+    // this variable is never used
+    Bit#(ISSUEWIDTH) dummy = 0;
 
-    // reserve space in the ROB
-    // this means, enqueue new instructions
-    // called from ISSUE
-    // caller has to guard that buffer does not overflow!
-    Wire#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) reserve_data_w <- mkWire();
-    rule reserve_fun;
-            let new_entries = tpl_1(reserve_data_w);
-            let count = tpl_2(reserve_data_w);
-            // print an error in simulation if the buffer is too full to hold the new instructions
-            if(empty_slots() < extend(count)) begin
-                err_print(ROB, $format("Error while insert - inserting too much! - free: ", empty_slots, " in: ", count));
-            end
+    // generate ROB banks and initialize each ROB row with its accompanying index
+    Vector#(ISSUEWIDTH, RobBankIFC) robbank <- genWithM(flip(mkReorderBufferBank)(valueOf(ISSUEWIDTH)));
 
-            // loop over elements
-            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                // calculate idx of insertion
-                let new_idx = truncate_index(head_r, fromInteger(i));
-                if(fromInteger(i) < count)
-                    internal_store_v[new_idx] <= new_entries[i]; // insert entry
-            end
+    // track which bank has next enq/deq operation
+    Reg#(UInt#(issue_idx_t)) head_bank_r <- mkReg(0);
+    Reg#(UInt#(issue_idx_t)) tail_bank_r <- mkReg(0);
 
-            // update pointers
-            UInt#(count_width_t) count_ext = extend(count);
-            // calculate new head
-            head_r <= truncate_index(head_r, truncate(count_ext));
-            // set full flag if full
-            if(count > 0 && tail_r == truncate_index(head_r, truncate(count_ext))) full_r[0] <= True;
-    endrule
+    // helper functions to extract signals from a bank
+    function Bool get_rdy_enq(RobBankIFC rb) = rb.ready_enq();
+    function Bool get_rdy_deq(RobBankIFC rb) = rb.ready_deq();
+    function RobEntry get_entry(RobBankIFC rb) = rb.first();
 
-    // take functions out of the ROB
-    // called from Commit
-    // provides at most ISSUEWIDTH entries
-    // does not update the pointers, think of first() compared to deq()
-    function Vector#(ISSUEWIDTH, RobEntry) retrieve_fun();
-            Vector#(ISSUEWIDTH, RobEntry) tmp_res;
+    // function needed for counting ready instructions
+    function UInt#(issue_amt_t) fold_rdy_deq_amt(Bool in, UInt#(issue_amt_t) cnt) = unpack(pack(cnt + 1) & replicate_bit(pack(in)));
 
-            for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
-                let deq_idx = truncate_index(tail_r, fromInteger(i));
-                tmp_res[i] = internal_store_v[deq_idx];
-            end
-
-            return tmp_res;
-    endfunction
-
-    // dequeue instructions from ROB
-    // move tail pointer to exclude count instructions
-    function Action deq_instructions(UInt#(issuewidth_log_t) count);
-        action
-            // calculate new tail
-            UInt#(count_width_t) count_ext = extend(count);
-            tail_r <= truncate_index(tail_r, truncate(count_ext));
-            if(count > 0) full_r[1] <= False;
-        endaction
-    endfunction
-
-    // helper function to check if a result has a certain tag
-    function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(Result) res)
-        = isValid(res) && res.Valid.tag == current_tag;
-
-    rule bypass_cdb;
-        internal_store_preread_v <= Vector::readVReg(internal_store_v);
-    endrule
-    // read the result bus
-    (* conflict_free="reserve_fun,read_cdb" *)
-    rule read_cdb;
-        // debug print
-        dbg_print(ROB, $format("result_bus: ", fshow(result_bus_vec)));
-
-        // for every ROB entry
-        for(Integer i = 0; i < valueOf(ROBDEPTH); i=i+1) begin
-            let current_entry = internal_store_preread_v[i];
-
-            // check if the entry is tagged
-            if(current_entry.result matches tagged Tag .tag) begin
-                // look for a fitting result
-                let produced_result = Vector::find(test_result(tag), result_bus_vec);
-
-                // unpack the result if it was found
-                if(produced_result matches tagged Valid .found_result &&&
-                   found_result matches tagged Valid .unpacked_result) begin
-
-                    // unpack the result or the exception
-                    current_entry.result = case (unpacked_result.result) matches
-                        tagged Result .r : tagged Result r;
-                        tagged Except .e : tagged Except e;
-                    endcase;
-
-                    `ifdef RVFI
-                        current_entry.mem_addr = unpacked_result.mem_addr;
-                    `endif
-
-                    // generate the next pc field from the result
-                    current_entry.next_pc = case (unpacked_result.new_pc) matches
-                        tagged Valid .v : truncateLSB(v);
-                        tagged Invalid  : truncateLSB(current_entry.pc+1);
-                    endcase;
-
-                    // update entry
-                    internal_store_v[i] <= current_entry;
-
-                    `ifdef LOG_PIPELINE
-                        $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, current_entry.pc, i, current_entry.epoch);
-                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, current_entry.log_id, 0, "E");
-                    `endif
-                end
-            end
-        end
-    endrule
-
-    // print rob content for debugging
-    rule debug_print_full_contents;
-        Bool done = False;
-        for(Integer i = 0; i<valueOf(ROBDEPTH); i=i+1) begin
-            let current_ptr = truncate_index(tail_r, fromInteger(i));
-
-            if( (current_ptr != head_r || full_r[0]) && !done )
-                dbg_print(ROB, $format("Stored ", i, " ", fshow(internal_store_v[current_ptr])));
-            else done = True;
-        end
-    endrule
-
-    // propagate count and instructions
-    Wire#(UInt#(issuewidth_log_t)) deq_bypass <- mkWire();
-    rule dequeue_insts;
-        deq_instructions(deq_bypass);
-    endrule
-    FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) insts_passing <-
-        (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
-    Reg#(UInt#(size_logidx_t)) tail_delay_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ?  mkReg(0) : mkWire());
-    rule collect_instructions;
-        if (valueOf(ROB_LATCH_OUTPUT) == 1) deq_bypass <= ready();
-        insts_passing.enq(tuple2(retrieve_fun(), ready())); // look at first avail. inst
-        tail_delay_r <= tail_r;
-    endrule
-
-    // used to bypass request/response pairs in server
-    FIFO#(UInt#(TLog#(ROBDEPTH))) fwd_test_mem_f <- mkBypassFIFO();
-
-    method UInt#(issuewidth_log_t) available = tpl_2(insts_passing.first()); // how many inst can be dequeued?
-    method UInt#(size_log_t) free = empty_slots(); // how many inst can be enqueued?
-    method UInt#(size_logidx_t) current_tail_idx = (valueOf(ROB_LATCH_OUTPUT) == 1 ? tail_delay_r : tail_r); // tail ptr for atomic predication
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issuewidth_log_t) num)
-        = reserve_data_w._write(tuple2(data, num)); // put instructions into ROB
-    method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
-        if (valueOf(ROB_LATCH_OUTPUT) == 0) deq_bypass <= ready();
-        insts_passing.deq();
-        return tpl_1(insts_passing.first());
-    endmethod
-    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
-        result_bus_vec._write(res_bus); // connect to result bus
-    endmethod
+    // output buffering
+    Reg#(UInt#(issue_amt_t)) amt_out_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkReg(0) : mkBypassWire());
+    Reg#(Vector#(ISSUEWIDTH, RobEntry)) out_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkRegU : mkBypassWire());
     
-endmodule*/
+    rule calc_amt;
+        if (valueOf(ISSUEWIDTH) == 1)
+            amt_out_r <= unpack(pack(robbank[0].ready_deq())); // if only one bank
+        else
+            // if multiple banks
+            amt_out_r <= foldr(fold_rdy_deq_amt, 0, rotateBy(map(get_rdy_deq, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)}))));
+    endrule
+
+    rule calc_insts;
+        let amt_current = foldr(fold_rdy_deq_amt, 0, rotateBy(map(get_rdy_deq, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)}))));
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+            if (fromInteger(i) < amt_current)
+                robbank[rollover_add(dummy, tail_bank_r, fromInteger(i))].deq();
+
+
+        tail_bank_r <= rollover_add(dummy, tail_bank_r, cExtend(amt_current));
+        out_r <= rotateBy(map(get_entry, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)})));
+    endrule
+
+    // count how many instructions at the ROB head are ready
+    method UInt#(issue_amt_t) available = amt_out_r;
+
+    // count how many instructions could be enqueued
+    method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free = extend(countElem(True, map(get_rdy_enq, robbank)));
+
+    // inform execution units of next committed instruction
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx = extend(tail_bank_r) + extend(robbank[tail_bank_r].current_tail_idx())*cExtend(fromInteger(valueOf(ISSUEWIDTH)));
+
+    // get instructions from issue
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issue_amt_t) num);
+        let enq_data = rotateBy(data, head_bank_r);
+
+        function Bool should_fire(Integer i) = fromInteger(i) < num;
+        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(genWith(should_fire), head_bank_r);
+
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+            if (enq_fire[i]) robbank[i].put(enq_data[i]);
+
+
+        head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(num));
+    endmethod
+
+    method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
+        return out_r;
+    endmethod
+
+    method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+            robbank[i].result_bus(res_bus);
+    endmethod
+endmodule
+
+
 
 endpackage

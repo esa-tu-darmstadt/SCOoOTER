@@ -96,5 +96,12 @@ function UInt#(x) rollover_add(Bit#(test) t_in, UInt#(x) a, UInt#(x) b) provisos
 
 endfunction
 
+function Bit#(x) replicate_bit(Bit#(1) b);
+    Bit#(x) out = 0;
+    for (Integer i = 0; i < valueOf(x); i=i+1)
+        out[i] = b;
+    return out;
+endfunction
+
 endpackage
 
