@@ -237,9 +237,10 @@ module mkReorderBufferNew(RobIFC) provisos (
     // output buffering
     Reg#(UInt#(issue_amt_t)) amt_out_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkReg(0) : mkBypassWire());
     Reg#(Vector#(ISSUEWIDTH, RobEntry)) out_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkRegU : mkBypassWire());
-    
-    rule calc_amt;
-        amt_out_r <= foldr(fold_rdy_deq_amt, 0, rotateBy(map(get_rdy_deq, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)}))));
+    Reg#(UInt#(TLog#(ROBDEPTH))) tail_out_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkReg(0) : mkBypassWire());
+
+    rule fwd_tail;
+        tail_out_r <= extend(tail_bank_r) + extend(robbank[tail_bank_r].current_tail_idx())*cExtend(fromInteger(valueOf(ISSUEWIDTH)));
     endrule
 
     rule calc_insts;
@@ -250,6 +251,7 @@ module mkReorderBufferNew(RobIFC) provisos (
 
 
         tail_bank_r <= rollover_add(dummy, tail_bank_r, cExtend(amt_current));
+        amt_out_r <= amt_current;
         out_r <= rotateBy(map(get_entry, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)})));
     endrule
 
@@ -260,7 +262,7 @@ module mkReorderBufferNew(RobIFC) provisos (
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free = extend(countElem(True, map(get_rdy_enq, robbank)));
 
     // inform execution units of next committed instruction
-    method UInt#(TLog#(ROBDEPTH)) current_tail_idx = extend(tail_bank_r) + extend(robbank[tail_bank_r].current_tail_idx())*cExtend(fromInteger(valueOf(ISSUEWIDTH)));
+    method UInt#(TLog#(ROBDEPTH)) current_tail_idx = tail_out_r;
 
     // get instructions from issue
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issue_amt_t) num);
