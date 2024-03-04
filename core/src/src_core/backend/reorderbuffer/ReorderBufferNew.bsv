@@ -153,6 +153,8 @@ module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) proviso
     Log#(ROB_BANK_DEPTH, local_idx)
 );
 
+    Bit#(ROB_BANK_DEPTH) dummy = 0;
+
     // state, which entry is head and which one is tail
     Reg#(UInt#(local_idx)) local_head <- mkReg(0);
     Reg#(UInt#(local_idx)) local_tail <- mkReg(0);
@@ -167,7 +169,7 @@ module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) proviso
     // enqueue instruction
     method Action put(RobEntry re);
         rows[local_head].put(re);
-        local_head <= local_head + 1;
+        local_head <= rollover_add(dummy, local_head, 1); 
     endmethod
 
     // get current tail instruction
@@ -175,8 +177,8 @@ module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) proviso
 
     // dequeue instruction
     method Action deq();
-        local_tail <= local_tail + 1;
-        rows[local_tail].deq();
+        local_tail <= rollover_add(dummy, local_tail, 1);
+        rows[local_tail].deq(); 
     endmethod
 
     // get result bus

@@ -78,7 +78,7 @@ Wire#(Vector#(NUM_RS, ExecUnitTag)) op_type_vec <- mkWire();
 let rs_free_type_vec = Vector::zip(op_type_vec, rdy_inst_vec);
 
 //get next indices
-Bit#(ISSUEWIDTH) dummy = 0;
+Bit#(ROBDEPTH) dummy = 0;
 function UInt#(rob_addr_t) generate_tag(UInt#(rob_addr_t) base, Integer i) = rollover_add(dummy, base, fromInteger(i));
 Vector#(ISSUEWIDTH, UInt#(size_logidx_t)) rob_entry_idx_v = Vector::genWith(generate_tag(rob_idx_w));
 
@@ -250,9 +250,9 @@ function InstructionIssue map_to_issued(Inst_Types::Instruction inst);
 
         funct : inst.funct,
 
+        // dummy values
         rs1 : ?,
         rs2 : ?,
-
         tag : ?,
 
         remaining_inst: inst.remaining_inst,
