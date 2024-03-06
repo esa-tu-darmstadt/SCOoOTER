@@ -345,8 +345,8 @@ module mkDecode(DecodeIFC);
     // select correct MIMO
     // the pipelined mimo schedules deq() prior to first() and enq() - therefore a circular dependency occurs if the output is not buffered
     // therefore the normal esamimo is used instead if no bufering is enabled, which schedules {first, enq} > deq
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkESAMIMO_pipeline() : mkESAMIMO());
-    Reg#(DecodeResponse) buffer_output <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkReg(DecodeResponse {count: 0, instructions: ?}) : mkBypassWire());
+    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO_banks();
+    Reg#(DecodeResponse) buffer_output <- mkBypassWire();
 
     // get data from instruction MIMO and store it for returning to next stage
     (* fire_when_enabled,no_implicit_conditions *)
