@@ -26,4 +26,10 @@ For more information on the implementation details, refer to the developer guide
 
 ## Memory arbitration
 
+If multiple cores are used, main memory access must be arbitrated. In future versions, a caching system should deal with arbitration. In the meantime, the __Data Arbitration and atomic ordering Verification Engine (DAVE)__ arbitrates access. The DAVE consists of two arbitrators - one for data memory and one for instruction memory. Requests from the cores are held in a queue. Whenever the bus is free, a request gets dequeued and handled. Atomic ordering of AMO instructions is also handled here. Additionally, the link register needed for lr/sc-Instructions is implemented here (refer to the RISC-V spec for more information).
+
+![](../fig/arbit.png)
+
 ## Uncore bus system
+
+Apart from the core, an SoC is composed of periphery components. SCOoOTER uses a custom memory bus for integrated periphery and provides adapters to AXI4 and AXI4 Lite. Provided periphery components are memories (IMEM and DMEM), interrupt infrastructure (PLIC and CLINT) and the mentioned adapters. Memory decoders are used to route requests towards the correct component.

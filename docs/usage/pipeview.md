@@ -12,7 +12,7 @@ make TB=CUSTOM_TB LOG=1
 
 ## Using Konata for viewing
 
-[](Konata) is a graphical pipeline viewer. SCOoOTER can generate Konata-compliant logs. After generating an execution log as described above, you may generate a konata log by executing the python-script in the root of the repository:
+[Konata](https://github.com/shioyadan/Konata) is a graphical pipeline viewer. SCOoOTER can generate Konata-compliant logs. After generating an execution log as described above, you may generate a konata log by executing the python-script in the root of the repository:
 
 ```
 python3 extract_konata_log.py

@@ -14,6 +14,7 @@ Welcome to SCOoOTER's documentation!
    usage/quickstart
    usage/pipeview
    architecture/overview
+   developer_guide/code_overview
 
 
 Indices and tables
