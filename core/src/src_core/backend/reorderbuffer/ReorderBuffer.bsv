@@ -25,7 +25,6 @@ import ClientServer::*;
 import BuildVector::*;
 import Ehr::*;
 import FIFOF::*;
-import WireFIFO::*;
 
 //allow the index to wrap around
 //only needed if size is not pwr2, as the index can naturally overflow here
@@ -271,7 +270,7 @@ module mkReorderBuffer_in(RobIFC) provisos (
         deq_instructions(deq_bypass);
     endrule
     FIFOF#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issuewidth_log_t))) insts_passing <-
-        (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
+        (valueOf(ROB_LATCH_OUTPUT) == 1 ? mkPipelineFIFOF() : mkBypassFIFOF());
     Reg#(UInt#(size_logidx_t)) tail_delay_r <- (valueOf(ROB_LATCH_OUTPUT) == 1 ?  mkReg(0) : mkWire());
     rule collect_instructions;
         if (valueOf(ROB_LATCH_OUTPUT) == 1) deq_bypass <= ready();

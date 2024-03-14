@@ -17,8 +17,8 @@ import Debug::*;
 import ArianeEhr::*;
 
 module mkCSRFile(CsrFileIFC) provisos (
-    Log#(NUM_CPU, cpu_idx_t),
-    Log#(NUM_THREADS, thread_idx_t)
+    Log#(NUM_CPU, cpu_idx_t), // since each CPU has its own state, we need an ID type to select the core
+    Log#(NUM_THREADS, thread_idx_t) // since each HART has its own state, we need an ID type to select the HART per core
 );
 
     // select latch or flip-flop based implementation
@@ -146,6 +146,7 @@ module mkCSRFile(CsrFileIFC) provisos (
             end
     endmethod
 
+    // get HART id for reg files from outside world
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
         for (Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
             mhartid[i][1] <= extend(in) + fromInteger(i);

@@ -183,6 +183,8 @@ module mkStoreBuffer(StoreBufferIFC);
             endmethod
         endinterface
     endinterface
+
+    // signal empty/full buffer to outside
     method Bool empty() = internal_buf.empty() && pending_buf.notFull();
     method Bool full() = internal_buf.full();
 endmodule

@@ -1,4 +1,11 @@
 package TestsMulti;
+    
+    /*
+    
+    Execute multiple test binaries / entire test suites
+    
+    */
+
     import StmtFSM::*;
     import TestbenchProgram::*;
     import BlueLibTests :: *;
@@ -7,6 +14,7 @@ package TestsMulti;
     import BuildList::*;
     import TestFunctions::*;
 
+    // struct to store info about test
     typedef struct {
 	    String name_unit;
 	    String isa;
@@ -15,6 +23,8 @@ package TestsMulti;
     (* synthesize *)
     module mkTestsISA(Empty) provisos(
     );
+
+        // helper functions to map test name to instance
 
         function inst_test_priv(String name_unit) = mkTestProgram("../../testPrograms/priv/bsv_hex/"+name_unit+"_"+ select_fitting_prog_binary(valueOf(IFUINST)) + ".bsv", 
 		    "../../testPrograms/priv/bsv_hex/"+name_unit+"-data_32.bsv", 
@@ -45,6 +55,11 @@ package TestsMulti;
 		    name_unit,
 		    'hffffffff-1,
             'h00000800);
+
+
+        // depending on selected test suite, generate TestbenchProgram instances with all cases
+        // inst_test_modules will contain one TestbenchProgram instance per test case
+        
 
 
         `ifdef ISA_TB
@@ -191,24 +206,23 @@ package TestsMulti;
 
         `endif
 
-        
-
-        List#(List#(TestProgIFC)) test_lists = Nil;
-        test_lists = List::cons(inst_test_modules, test_lists);
-        List#(TestProgIFC) tests = List::concat(test_lists);
-
-        Integer testAmount = List::length(tests);
+        // get amount of tests
+        Integer testAmount = List::length(inst_test_modules);
+        // counter registers for running, passed, failed and timeouted tests
         Reg#(Int#(32)) left <- mkReg(fromInteger(testAmount));
         Reg#(Int#(32)) pass <- mkReg(0);
         Reg#(Int#(32)) fail <- mkReg(0);
         Reg#(Int#(32)) hang <- mkReg(0);
+        // one bool per test to signify if it is running
         List#(Reg#(Bool)) notFinished <- List::replicateM(testAmount, mkReg(True));
 
+        // launch all tests
         rule start_tests;
             for(Integer i = 0; i < testAmount; i=i+1)
-                tests[i].go();
+                inst_test_modules[i].go();
         endrule
 
+        // end simulation if all tests are done
         rule stop_test(left == 0);
             $display("Elapsed %0d tests", testAmount);
             $display("Passed: %0d Broken: %0d Stuck: %0d", pass, fail, hang);
@@ -217,6 +231,7 @@ package TestsMulti;
             $finish();
         endrule
 
+        // evaluate state of all tests
         rule evaluate_results;
             $fflush();
             Int#(32) left_l = left;
@@ -225,28 +240,30 @@ package TestsMulti;
             Int#(32) hang_l = hang;
             for(Integer testCounter = 0;
                 testCounter < testAmount;
-                testCounter = testCounter + 1)
+                testCounter = testCounter + 1) // loop through tests
                     begin
-                        if(tests[testCounter].done() && notFinished[testCounter]) begin
-                            notFinished[testCounter] <= False;
-                            left_l = left_l - 1;
-                            if (tests[testCounter].state() == Finished) begin
-                                if(tests[testCounter].return_value == tests[testCounter].return_value_exp) begin
+                        if(inst_test_modules[testCounter].done() && notFinished[testCounter]) begin // if the test is done but has not been handled yet
+                            notFinished[testCounter] <= False; // set flag that test was handled
+                            left_l = left_l - 1; // secrement amount of remaining tests
+                            if (inst_test_modules[testCounter].state() == Finished) begin // if the test finished gracefully
+                                // check return value and print pass/fail message
+                                if(inst_test_modules[testCounter].return_value == inst_test_modules[testCounter].return_value_exp) begin
                                     `ifdef EVA_BR
-                                        printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + " took: %8d ticks correct BP (br): %d wrong BP (br): %d correct BP (j): %d wrong BP (j): %d " + tests[testCounter].test_name, left_l, tests[testCounter].count(), tests[testCounter].correct_pred_br(), tests[testCounter].wrong_pred_br(), tests[testCounter].correct_pred_j(), tests[testCounter].wrong_pred_j()));
+                                        printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + " took: %8d ticks correct BP (br): %d wrong BP (br): %d correct BP (j): %d wrong BP (j): %d " + inst_test_modules[testCounter].test_name, left_l, inst_test_modules[testCounter].count(), inst_test_modules[testCounter].correct_pred_br(), inst_test_modules[testCounter].wrong_pred_br(), inst_test_modules[testCounter].correct_pred_j(), inst_test_modules[testCounter].wrong_pred_j()));
                                     `else
-                                        printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + tests[testCounter].test_name + " took: %8d ticks", left_l, tests[testCounter].count()));
+                                        printColor(BLUE, $format("%3d [TB] +++ PASSED +++ " + inst_test_modules[testCounter].test_name + " took: %8d ticks", left_l, inst_test_modules[testCounter].count()));
                                     `endif
                                     pass_l = pass_l + 1;
                                     end
                                 else begin
-                                    printColor(RED, $format("%3d [TB] +++ FAILED +++ " + tests[testCounter].test_name + " took: %8d ticks Exp: %0d Got: %0d", left_l, tests[testCounter].count(), tests[testCounter].return_value_exp, tests[testCounter].return_value));
+                                    printColor(RED, $format("%3d [TB] +++ FAILED +++ " + inst_test_modules[testCounter].test_name + " took: %8d ticks Exp: %0d Got: %0d", left_l, inst_test_modules[testCounter].count(), inst_test_modules[testCounter].return_value_exp, inst_test_modules[testCounter].return_value));
                                     fail_l = fail_l + 1;
                                 end
                             end else begin
-                                printColor(RED, $format("%3d [TB] +++ HANGS  +++ " + tests[testCounter].test_name + " ", left_l));
+                                // if test did not finish gracefully, treat it as hung up
+                                printColor(RED, $format("%3d [TB] +++ HANGS  +++ " + inst_test_modules[testCounter].test_name + " ", left_l));
                                 hang_l = hang_l + 1;
-                                end
+                            end
                         end				
                     end
             left <= left_l;

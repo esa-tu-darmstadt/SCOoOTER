@@ -13,6 +13,8 @@ import ClientServer::*;
 import GetPut::*;
 import ArianeRegFile::*;
 
+// LATCH-based implementation - smaller footprint
+
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
@@ -28,7 +30,7 @@ module mkRegFileAriane(RegFileIFC) provisos (
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), UInt#(TLog#(NUM_THREADS)))) tid_bypass <- mkBypassWire();
 
 
-    //writing to registers
+    //writing to registers - needs no response
     method Action write(Vector#(ISSUEWIDTH, Maybe#(RegWrite)) requests);
         action
             for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
@@ -47,6 +49,7 @@ module mkRegFileAriane(RegFileIFC) provisos (
             method Action put(Vector#(TMul#(2, ISSUEWIDTH), RegRead) req);
                 Vector#(TMul#(2, ISSUEWIDTH), UInt#(TLog#(NUM_THREADS))) tids = ?;
 
+                // start request
                 for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
                     regfile[req[i].thread_id].rd[i].request(req[i].addr);
                     tids[i] = req[i].thread_id;
@@ -61,6 +64,7 @@ module mkRegFileAriane(RegFileIFC) provisos (
                 actionvalue
                     Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN)) response;
 
+                    // get result
                     for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
                         response[i] = regfile[tid_bypass[i]].rd[i].response();
                     end
@@ -74,15 +78,7 @@ module mkRegFileAriane(RegFileIFC) provisos (
 endmodule
 
 
-
-
-
-
-
-
-
-
-
+// FLIPFLOP based implementation
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -123,6 +119,7 @@ module mkRegFile(RegFileIFC) provisos (
             method Action put(Vector#(TMul#(2, ISSUEWIDTH), RegRead) req);
                 Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN)) response;
 
+                // gather result and buffer it
                 for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
                     let reg_addr = req[i].addr;
                     let thread_id = req[i].thread_id;
@@ -136,6 +133,7 @@ module mkRegFile(RegFileIFC) provisos (
         interface Get response;
             method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) get();
                 actionvalue
+                    // return results
                     return register_responses_w;
                 endactionvalue
             endmethod

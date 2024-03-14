@@ -1,4 +1,13 @@
 package TestbenchProgram;
+    
+    
+    /*
+    
+    Execute single test binary
+    
+    */
+    
+    
     import StmtFSM :: *;
     import IDMemAdapter :: *;
     import Interfaces :: *;
@@ -103,7 +112,7 @@ package TestbenchProgram;
         
         // HOUSEKEEPING
 
-        // increment counter
+        // increment counter for cutoff in case CPU hangs
         rule increment_count if (count_r <= fromInteger(max_ticks));
             count_r <= count_r + 1;
         endrule
