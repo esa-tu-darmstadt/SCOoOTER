@@ -35,11 +35,7 @@ typedef union tagged {
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkRegFileEvo(RegFileEvoIFC) provisos (
-    Log#(NUM_THREADS, thread_idx_t),
-    Log#(32, reg_addr_t),
-    Add#(thread_idx_t, reg_addr_t, treg_addr_t)
-);
+module mkRegFileEvo(RegFileEvoIFC);
 
     // wire for distributing the result bus
     Wire#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkWire();
@@ -59,6 +55,7 @@ module mkRegFileEvo(RegFileEvoIFC) provisos (
     //helper function: tests if a result matches a given tag
     function Bool test_result(UInt#(TLog#(ROBDEPTH)) current_tag, Maybe#(ResultLoopback) res)
         = (isValid(res) && res.Valid.tag == current_tag);
+    
     //evaluate result bus
     rule result_bus_r;
 
@@ -162,6 +159,7 @@ module mkRegFileEvo(RegFileEvoIFC) provisos (
                     end
                 end
 
+                // write data back
                 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1)
                     Vector::writeVReg(registers_port1[i], local_entries[i]);
             endaction

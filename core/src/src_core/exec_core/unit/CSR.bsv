@@ -67,12 +67,14 @@ Vector#(NUM_THREADS, Reg#(UInt#(EPOCH_WIDTH))) epoch_r <- replicateM(mkReg(0));
 FIFO#(InstructionIssue) in <- mkPipelineFIFO();
 FIFOF#(Result) out <- mkFIFOF();
 RWire#(Result) out_valid <- mkRWire();
+
+// CSR operations should be kept atomic - stall until previous op is done
 Reg#(Bool) inflight_r <- mkReg(False);
 
 // outgoing csr write
 FIFO#(CsrWrite) out_wr <- mkFIFO();
 
-// ROB head ID
+// ROB head ID - check if current instruction should be committed
 Wire#(UInt#(rob_idx_t)) rob_head <- mkBypassWire();
 
 // req and resp wires for CSR reading
@@ -82,28 +84,32 @@ Wire#(Maybe#(Bit#(XLEN))) csr_res <- mkBypassWire();
 FIFO#(Internal_struct) stage1 <- mkFIFO();
 
 // request CSR read and enqueue into buffer between stages
+// wait for previous operation and make sure that current operation should be commited
 rule get_request if ((!inflight_r) && (valueOf(ROBDEPTH) == 1 || in.first().tag == rob_head));
     let inst = in.first(); in.deq();
 
+    // flag unit as busy
     inflight_r <= True;
 
+    // generate address and immediate value
     Bit#(12) csr_addr = truncateLSB(inst.remaining_inst);
     Bit#(5) csr_imm = inst.remaining_inst[12:8];
 
     dbg_print(CSR, $format("%x", inst.pc));
 
-    // request
+    // request csr read
     if(inst.funct != RET &&
        inst.funct != ECALL &&
        inst.funct != EBREAK
        ) csr_req.enq(CsrRead {addr: csr_addr, thread_id: inst.thread_id});
 
-    //operand
+    // build operand to be applied
     let op = case (inst.funct)
         RW,  RS,  RC:  inst.rs1.Operand;
         RWI, RSI, RCI: zeroExtend(csr_imm);
     endcase;
 
+    // store data for next stage
     stage1.enq(Internal_struct {
         tag: inst.tag,
         except: isValid(inst.exception),
@@ -133,20 +139,25 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
     
     dbg_print(CSR, $format("read: %x %x", internal.addr, csr_data));
 
-    Result res = ?;
+    // variable to hold outgoing result
+    Result res = unpack(0);
 
+    // find out if the CSR is readonly, if the instruction matches the CSR type and whether the instruction is invalid
     Bool is_readonly_csr = 2'b11 == truncateLSB(internal.addr);
     Bool is_readonly_inst = (internal.is_readonly_inst) && (internal.op == RS || internal.op == RSI || internal.op == RC || internal.op == RCI);
     Bool is_invalid_inst = is_readonly_csr && !is_readonly_inst;
 
     // return read data and csr writing request
     if(csr_data matches tagged Valid .data) begin
+
+        // modify data
         let out = case (internal.op)
             RW, RWI: internal.operand;
             RS, RSI: (data | internal.operand);
             RC, RCI: (data & ~internal.operand);
         endcase;
 
+        // produce outgoing result for result bus
         res = Result {
             result : (is_invalid_inst ? tagged Except INVALID_INST : tagged Result data),
             new_pc : tagged Invalid,
@@ -156,6 +167,7 @@ rule read_modify (stage1.first().op != RET && stage1.first().op != ECALL && stag
             out_wr.enq(CsrWrite {addr: internal.addr, data: out, thread_id: internal.thread_id});
         end
     end else // if no read was returned, the CSR does not exist
+        // non-existing CSR - dummy result
         res = Result {
             result : tagged Except INVALID_INST,
             new_pc : tagged Invalid,
@@ -187,6 +199,7 @@ rule propagate_result;
     out_valid.wset(res);
 endrule
 
+// make sure next operation can start
 rule clear_inflight if (inflight_r && out.notEmpty());
     inflight_r <= False;
 endrule
@@ -205,6 +218,7 @@ interface Client csr_read;
     endinterface
 endinterface
 
+// input from ROB
 method Action current_rob_id(UInt#(rob_idx_t) idx) = rob_head._write(idx);
 
 // epoch handling

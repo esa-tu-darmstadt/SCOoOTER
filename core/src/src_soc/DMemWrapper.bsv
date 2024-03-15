@@ -1,5 +1,13 @@
 package DMemWrapper;
 
+
+/*
+
+SRAM macro wrapper for DMEM
+
+*/
+
+
 import BRAM::*;
 import IN22FDX_SDPV_NPVG_W08192B016M16C064::*;
 

@@ -1,9 +1,17 @@
 package RVFITracer;
 
+/*
+
+Write RVFI information to a trace file for Core-V-Verif.
+
+*/
+
 import Vector::*;
 import Types::*;
 import Inst_Types::*;
 
+
+// interface just gets trace info
 interface RVFITraceIFC;
 method Action rvfi_in(Vector#(ISSUEWIDTH, RVFIBus) rvfi);
 endinterface
@@ -11,10 +19,13 @@ endinterface
 
 module mkRVFITracer(RVFITraceIFC);
 
+    // addr to which tests write on completion
     UInt#(XLEN) tohost_addr = `TOHOST;
 
+    // one log per thread
     Vector#(NUM_THREADS, Reg#(File)) out_log <- replicateM(mkRegU());
     
+    // open log files for writing
     Reg#(Bool) opened <- mkReg(False);
     rule open_files (!opened);
         opened <= True;
@@ -23,6 +34,7 @@ module mkRVFITracer(RVFITraceIFC);
             out_log[i] <= out_log_loc;
         end
 
+        // warn if tohost is not set
         if (tohost_addr == 0) begin
             $display("*** [rvf_tracer] WARNING: No valid address of 'tohost' (tohost == 0x%h)\n", tohost_addr);
         end
@@ -30,6 +42,7 @@ module mkRVFITracer(RVFITraceIFC);
     endrule
     
 
+    // consume trace info
     method Action rvfi_in(Vector#(ISSUEWIDTH, RVFIBus) rvfi);
 
         for(Integer i = 0; i<valueOf(ISSUEWIDTH);i=i+1) begin

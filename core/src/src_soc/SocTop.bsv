@@ -1,5 +1,7 @@
 package SocTop;
 
+    // SOC top module - not yet ready for use
+
     import SCOOOTER_riscv::*;
     import Interfaces :: *;
     import Types :: *;

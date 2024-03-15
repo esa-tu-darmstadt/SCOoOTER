@@ -1,5 +1,12 @@
 package Debug;
 
+/*
+
+Library for debug prints in SCOoOTER
+If you require further messages, add the required tags to the list below
+
+*/
+
 import List::*;
 import BuildList::*;
 import BlueLibTests :: *;

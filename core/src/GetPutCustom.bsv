@@ -1,5 +1,11 @@
 package GetPutCustom;
 
+/*
+
+Custom GetPut interfaces and connectable instances. Used for dequeueing by amount.
+
+*/
+
 import Connectable :: *;
 
 //own GetPut extension for deq with value

@@ -18,7 +18,6 @@ import GetPut::*;
 import Ehr::*;
 import FIFOF::*;
 import FIFO::*;
-import WireFIFO::*;
 import SpecialFIFOs::*;
 
 // interface for the wrappers
@@ -209,7 +208,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
         endrule
     `endif
 
-    FIFOF#(InstructionIssue) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF());
+    FIFOF#(InstructionIssue) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkBypassFIFOF());
 
     (* conflict_free="enqueue, listen_to_cdb" *)
     rule enqueue;
@@ -329,7 +328,7 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
     endrule
 
     // insert instruction, wires will be written by method
-    FIFOF#(InstructionIssue) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkWireFIFOF();
+    FIFOF#(InstructionIssue) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkBypassFIFOF();
     rule insert_instruction;
         let inst = inst_to_insert.first();
         inst_to_insert.deq();

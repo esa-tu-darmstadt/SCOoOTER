@@ -58,6 +58,7 @@ interface ExecCoreIFC;
     // result bus output
     method Vector#(NUM_FU, Maybe#(Result)) res_bus;
 
+    // signals for DExIE
     `ifdef DEXIE
         method Maybe#(DexieMem) dexie_memw;
         (* always_ready, always_enabled *)
@@ -82,18 +83,22 @@ module mkExecCore(ExecCoreIFC);
     Vector#(NUM_BR, FunctionalUnitIFC) brs <- replicateM(mkBranch());
     let mem <- mkMem();
     let csr <- mkCSR();
-    let store_buf <- mkStoreBuffer();
 
+    // initialize and connect store buffer
+    let store_buf <- mkStoreBuffer();
     mkConnection(mem.check_store_buffer, store_buf.forward);
     mkConnection(mem.write, store_buf.memory_write);
     
+    // state signals for store_buffer <-> mem unit
     rule fwd_empty_sb;
         mem.store_queue_empty(store_buf.empty());
         mem.store_queue_full(store_buf.full());
     endrule
 
     // generate the result bus
+    // build vector with all FUs
     let fu_vec = append(alus, append(append(mds, brs), vec(mem.fu, csr.fu)));
+    // map FU vector to results
     function Maybe#(Result) get_result(FunctionalUnitIFC fu) = fu.get();
     let result_bus_vec = Vector::map(get_result, fu_vec);
 
@@ -107,6 +112,7 @@ module mkExecCore(ExecCoreIFC);
     Vector#(NUM_BR, ReservationStationWrIFC) rs_brs <- replicateM(mkReservationStationBR());
     //csr unit
     ReservationStationWrIFC rs_csr <- mkReservationStationCSR();
+    // vector of all RSs
     Vector#(NUM_RS, ReservationStationWrIFC) rs_vec = 
         append(rs_alus, append(append(rs_mds, rs_brs), vec(rs_mem, rs_csr)));
 
@@ -124,10 +130,13 @@ module mkExecCore(ExecCoreIFC);
     ShiftBufferIfc#(RESBUS_ADDED_DELAY, Vector#(NUM_RS, Maybe#(ResultLoopback))) delay_bus_rs <- mkShiftBuffer(replicate(tagged Invalid));
     rule input_result_bus_delay_loop;
         let loopback = Vector::map(map_result_to_loopback_result, result_bus_vec);
+        // provide result immediately to regfile evo
         regfile_evo.result_bus(loopback);
+        // delay bus if requested for reamining components
         delay_bus_rs.r <= loopback;
     endrule 
 
+    // fwd results to reservation stations
     rule propagate_result_bus;
         for(Integer i = 0; i < valueOf(NUM_FU); i=i+1)
             rs_vec[i].result_bus(delay_bus_rs.r);
@@ -152,6 +161,7 @@ module mkExecCore(ExecCoreIFC);
         end
     endrule
 
+    // connect issue to evo regfile
     mkConnection(issue.reserve_registers, regfile_evo.reserve_registers);
 
     // combine speculative register file info with arch regs
@@ -185,18 +195,28 @@ module mkExecCore(ExecCoreIFC);
         csr.current_rob_id(idx);
     endmethod
 
+    // provide register reservations to ROB / backend
     method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
+    
+    // connect pipeline flush signals
     method Action flush(Vector#(NUM_THREADS, Bool) in);
         mem.flush(in);
         regfile_evo.flush(in);
         csr.flush(in);
     endmethod
+
+    // connect memory read/write iface
     interface Client read = mem.request();
-    method Vector#(NUM_FU, Maybe#(Result)) res_bus = result_bus_vec;
-    interface Client csr_read = csr.csr_read;
     interface write = store_buf.write;
+
+    // connect CSR read/write
+    interface Client csr_read = csr.csr_read;
     interface Get csr_write = csr.write;
 
+    // provide result bus to output
+    method Vector#(NUM_FU, Maybe#(Result)) res_bus = result_bus_vec;
+    
+    // DExIE signal output
     `ifdef DEXIE
         method Maybe#(DexieMem) dexie_memw = mem.dexie_memw;
         interface dexie_stall = mem.dexie_stall();

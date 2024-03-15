@@ -1,5 +1,11 @@
 package Types;
 
+/*
+
+Simple numeric types
+
+*/
+
 import Config::*;
 export Config::*;
 export Types::*;

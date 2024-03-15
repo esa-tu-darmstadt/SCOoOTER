@@ -11,21 +11,32 @@ import ConfigReg::*;
 import TestFunctions::*;
 import Debug::*;
 
+/*
+
+The PLIC is responsible for routing external interrupts to the correct HART.
+Sources can be flagged with priorities and HARTs have an enable bit per source and a cutoff priority.
+
+*/
+
 interface PLICIFC#(numeric type num_periphery, numeric type prio_levels);
+    // memopry bus
     interface MemMappedIFC#(25) memory_bus;
+    // interrupt signal to HARTs
     (* always_ready, always_enabled *)
     method Vector#(NUM_HARTS, Bool) ext_interrupts_out;
+    // interrupt inputs from periphery devices
     (* always_ready, always_enabled *)
     method Action interrupts_in(Vector#(num_periphery, Bool) in);
 endinterface
 
 module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
-    Log#(prio_levels, prio_width),
+    Log#(prio_levels, prio_width), // width required to store the levels requested by user
     Add#(num_periphery, 1, num_periphery_ext),
-    Log#(num_periphery_ext, periphery_id_width),
-    Log#(NUM_HARTS, hart_id_width),
-    Log#(NUM_CPU, cpu_idx_t),
-    Add#(1, cpu_idx_t, amo_cpu_idx_t),
+    Log#(num_periphery_ext, periphery_id_width), // register width needed to store periphery ID (0 is reserved, hence add 1)
+    Log#(NUM_HARTS, hart_id_width), // id width to select HART
+    Log#(NUM_CPU, cpu_idx_t), // id width to select CPU
+    Add#(1, cpu_idx_t, amo_cpu_idx_t), // memory bus ID to differentiate CPU and AMO/normal access
+    // due to implementation limitations, those can be at most 32
     Add#(a__, prio_width, 32),
     Add#(b__, num_periphery_ext, 32),
     Add#(c__, periphery_id_width, 32),
@@ -38,9 +49,6 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
     Vector#(NUM_HARTS, Reg#(Bit#(num_periphery))) enable_reg <- replicateM(mkReg(0));
     Vector#(NUM_HARTS, Reg#(UInt#(prio_width))) threshold_regs <- replicateM(mkRegU);
 
-    // probably not needed
-    Vector#(NUM_HARTS, Reg#(Bit#(prio_width))) claim_complete_regs <- replicateM(mkRegU);
-
     // internal state
     Reg#(Bit#(num_periphery)) pending_reg <- mkReg(0);
 
@@ -49,7 +57,7 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
     Vector#(num_periphery, Reg#(Bool)) periphery_currently_handled_0 = Vector::map(disassemble_creg(0), periphery_currently_handled);
 
     
-    // internal signals for computation
+    // internal signals for computation; matrix content is explained further below
     Wire#(Vector#(NUM_HARTS, Vector#(prio_levels, Vector#(num_periphery, Bool)))) irq_matrix <- mkBypassWire();
     Wire#(Vector#(NUM_HARTS, Vector#(prio_levels, Bool))) prio_with_irq <- mkBypassWire();
     Wire#(Vector#(NUM_HARTS, Vector#(prio_levels, Bool))) max_prio_with_irq <- mkBypassWire();
@@ -76,7 +84,7 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
 
 
 
-    // compute a patrix for each hart which has
+    // compute a matrix for each hart which has
     // priorities and sources as axes.
     // The matrix entries are Boolean values.
     // A true value signals that the interrupt of device x has priority y and is currently pending.
