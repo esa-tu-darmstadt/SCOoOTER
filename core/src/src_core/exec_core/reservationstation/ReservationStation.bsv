@@ -94,10 +94,6 @@ module mkReservationStationMULDIV(ReservationStationWrIFC);
     interface result_bus = m.result_bus;
 endmodule
 
-function Bool is_ready(Maybe#(InstructionIssue) inst);
-    return (inst matches tagged Valid .i &&& i.rs1 matches tagged Operand .v1 &&& i.rs2 matches tagged Operand .v2 ? True : False);
-endfunction
-
 interface RSRowIfc;
     method Bool full;
     method Bool ready;
@@ -106,6 +102,10 @@ interface RSRowIfc;
     (*always_ready, always_enabled*)
     method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in);
 endinterface
+
+function Bool is_occupied(RSRowIfc r) = r.full;
+function Bool is_free(RSRowIfc r) = !r.full;
+function Bool is_ready(RSRowIfc r) = r.ready;
 
 module mkRSRow(RSRowIfc);
     Reg#(InstructionIssue) entry <- mkRegU;
@@ -174,95 +174,24 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     Log#(entries, entries_idx_t),
     Add#(a__, entries_idx_t, entries_log_t)
 );
-    // implement idx rollover
-    function UInt#(size_logidx_t) increment_index(UInt#(size_logidx_t) new_idx);
-        UInt#(size_logidx_t) output_idx;
-        //if DEPTH is not a pwr of two, explicitly implement rollover
-        Bit#(entries) dummy = 0;
-        if( !ispwr2(dummy) ) begin
-            output_idx = (new_idx == fromInteger(valueOf(entries)-1) ? 0 : (new_idx + 1));
-        // if depth is power of two, the index will roll over naturally
-        end else output_idx = new_idx + 1;
-        return output_idx;
-    endfunction
 
-    // wire to transport result bus
-    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkRegU() : mkBypassWire());
-    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_bypass <- mkBypassWire();
-    rule propagate_res_bus;
-        result_bus_vec <= result_bus_bypass;
+    // create a buffer of Instructions
+    Vector#(entries, RSRowIfc) rows <- replicateM(mkRSRow);
+
+    // result bus
+    Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- mkBypassWire();
+    rule forward_results;
+        for(Integer i = 0; i < valueOf(entries); i=i+1)
+            rows[i].result_bus(result_bus_vec);
     endrule
 
-    // internal storage
-    Vector#(entries, Reg#(Maybe#(InstructionIssue))) instruction_buffer_v <- replicateM(mkReg(tagged Invalid));
     // head, tail and full pointers
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
-    Reg#(Bool) full_r[2] <- mkCReg(2, False);
 
     function UInt#(entries_log_t) empty_slots;
-        UInt#(entries_log_t) result;
-
-        //calculate from head and tail pointers
-        if (head_r > tail_r) result = extend(head_r) - extend(tail_r);
-        else if (tail_r > head_r) result = fromInteger(valueOf(entries)) - extend(tail_r) + extend(head_r);
-        // if both pointers are equal, must be full or empty
-        else if (full_r[0]) result = fromInteger(valueOf(entries));
-        else result = 0;
-
-        return fromInteger(valueOf(entries)) - result;
+        return Vector::countIf(is_free, rows);
     endfunction
-
-    rule print_innards;
-        let idx = tail_r;
-        Bool nodone = True;
-        for(Integer i = 0; i < valueOf(entries); i=i+1) 
-        if ((tail_r != head_r || full_r[0]) && nodone) begin
-            dbg_print(RS, $format(fshow(eut), " ", i, " ", fshow(instruction_buffer_v[idx])));
-            if (idx == head_r) nodone = False;            
-        end
-    endrule
-
-    // evaluate result bus
-    rule listen_to_cdb;
-        for(Integer j = 0; j < valueOf(entries); j=j+1) begin // loop over entries
-
-            if(instruction_buffer_v[j] matches tagged Valid .inst) begin
-                InstructionIssue current_instruction = inst;
-
-                Bool change = False;
-
-                // loop pver result bus
-                for(Integer i = 0; i < valueOf(NUM_FU); i=i+1) begin
-                    // update rs1
-                    if( result_bus_vec[i] matches tagged Valid .res &&&
-                        current_instruction.rs1 matches tagged Tag .t &&& 
-                        t == res.tag) begin
-                            current_instruction.rs1 = tagged Operand res.result;
-                            change = True;
-                        end
-                    // update rs2
-                    if( result_bus_vec[i] matches tagged Valid .res &&&
-                        current_instruction.rs2 matches tagged Tag .t &&& 
-                        t == res.tag) begin
-                            current_instruction.rs2 = tagged Operand res.result;
-                            change = True;
-                        end
-                end
-
-                if (change) instruction_buffer_v[j] <= tagged Valid current_instruction;
-            end
-        end
-    endrule
-
-    // update the tail pointer if an inst gets dequeued
-    PulseWire clear_full_flag_w <- mkPulseWire();
-    rule clear_full_flag if(clear_full_flag_w);
-        full_r[1] <= False;
-        tail_r <= increment_index(tail_r);
-    endrule
-
-    PulseWire has_enq <- mkPulseWire();
 
     `ifdef LOG_PIPELINE
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
@@ -279,13 +208,11 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
 
     FIFOF#(InstructionIssue) inst_to_enqueue <- (valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkBypassFIFOF());
 
-    (* conflict_free="enqueue, listen_to_cdb" *)
     rule enqueue;
-        instruction_buffer_v[head_r] <= tagged Valid inst_to_enqueue.first();
+        rows[head_r].in(inst_to_enqueue.first());
         inst_to_enqueue.deq();
-        let new_head = increment_index(head_r);
-        head_r <= new_head;
-        if(tail_r == new_head) full_r[0] <= True;
+        Bit#(entries) dummy = 0;
+        head_r <= rollover_add(dummy, head_r, 1);
     endrule
 
     Reg#(Bool) ready_r <- mkReg(True);
@@ -306,12 +233,10 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     endrule
 
     // dequeue an instruction if one is ready
-    method ActionValue#(InstructionIssue) get if (
-            (head_r != tail_r || full_r[0]) && 
-            is_ready(instruction_buffer_v[tail_r])
-        );
-        let inst = fromMaybe(?, instruction_buffer_v[tail_r]);
-        clear_full_flag_w.send();
+    method ActionValue#(InstructionIssue) get if (rows[tail_r].ready);
+        let inst <- rows[tail_r].out();
+        Bit#(entries) dummy = 0;
+        tail_r <= rollover_add(dummy, tail_r, 1);
         dbg_print(RS, $format("dequeueing inst: idx ", fshow(inst)));
         `ifdef LOG_PIPELINE
             $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, inst.pc, inst.tag, inst.epoch);
@@ -324,7 +249,7 @@ module mkLinearReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entri
     method ExecUnitTag unit_type = eut;
 
     // input the result bus
-    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_bypass._write(bus_in);
+    method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
 
     // input instructions to RS
     interface ReservationStationPutIFC in;
@@ -357,10 +282,6 @@ module mkReservationStation#(ExecUnitTag eut)(ReservationStationIFC#(entries)) p
             rows[i].result_bus(result_bus_vec);
     endrule
 
-
-    function Bool is_occupied(RSRowIfc r) = r.full;
-    function Bool is_free(RSRowIfc r) = !r.full;
-    function Bool is_ready(RSRowIfc r) = r.ready;
     // insert instruction, wires will be written by method
     FIFOF#(InstructionIssue) inst_to_insert <- valueOf(RS_LATCH_INPUT) == 1 ? mkPipelineFIFOF() : mkBypassFIFOF();
     rule insert_instruction;
