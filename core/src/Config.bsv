@@ -45,19 +45,19 @@ typedef 0 RS_LATCH_INPUT;
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 1 BRANCHPRED;
+typedef 0 BRANCHPRED;
 
 typedef 5 BITS_BTB;
 typedef 5 BITS_PHT;
 
 typedef 0 BITS_BHR;
 
-typedef 1  USE_RAS;
+typedef 0  USE_RAS;
 typedef 1 RAS_SAVE_HEAD;
 typedef 1 RAS_SAVE_FIRST;
 typedef 16 RASDEPTH;
 
-typedef 8 STORE_BUF_DEPTH;
+typedef 2 STORE_BUF_DEPTH;
 
 // features
 
