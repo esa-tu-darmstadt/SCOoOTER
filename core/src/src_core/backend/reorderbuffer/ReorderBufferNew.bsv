@@ -137,6 +137,7 @@ interface RobBankIFC;
 
     (* always_ready, always_enabled *)
     method Bool ready_enq();
+    method Bool ready_enq_next();
     (* always_ready, always_enabled *)
     method Bool ready_deq();
 
@@ -164,6 +165,7 @@ module mkReorderBufferBank#(Integer base_id, Integer id_inc)(RobBankIFC) proviso
 
     // return correct ready and empty signals, depending on head
     method Bool ready_enq() = rows[local_head].empty();
+    method Bool ready_enq_next() = rows[rollover_add(dummy, local_head, 1)].empty();
     method Bool ready_deq() = rows[local_tail].ready();
 
     // enqueue instruction
@@ -227,7 +229,7 @@ module mkReorderBufferNew(RobIFC) provisos (
     Reg#(UInt#(issue_idx_t)) tail_bank_r <- mkReg(0);
 
     // helper functions to extract signals from a bank
-    function Bool get_rdy_enq(RobBankIFC rb) = rb.ready_enq();
+    function Bool get_rdy_enq(RobBankIFC rb) = rb.ready_enq_next(); // TODO: PARAMETRIZE
     function Bool get_rdy_deq(RobBankIFC rb) = rb.ready_deq();
     function RobEntry get_entry(RobBankIFC rb) = rb.first();
 
@@ -255,6 +257,23 @@ module mkReorderBufferNew(RobIFC) provisos (
         out_r <= rotateBy(map(get_entry, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)})));
     endrule
 
+    // delay incoming reservations for more efficiency
+    Reg#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issue_amt_t))) incoming_res <- mkReg(unpack(0));
+    rule insert;
+        let data = tpl_1(incoming_res);
+        let num = tpl_2(incoming_res);
+        let enq_data = rotateBy(data, head_bank_r);
+
+        function Bool should_fire(Integer i) = fromInteger(i) < num;
+        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(genWith(should_fire), head_bank_r);
+
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+            if (enq_fire[i]) robbank[i].put(enq_data[i]);
+
+
+        head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(num));
+    endrule
+
     // count how many instructions at the ROB head are ready
     method UInt#(issue_amt_t) available = amt_out_r;
 
@@ -266,16 +285,7 @@ module mkReorderBufferNew(RobIFC) provisos (
 
     // get instructions from issue
     method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issue_amt_t) num);
-        let enq_data = rotateBy(data, head_bank_r);
-
-        function Bool should_fire(Integer i) = fromInteger(i) < num;
-        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(genWith(should_fire), head_bank_r);
-
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
-            if (enq_fire[i]) robbank[i].put(enq_data[i]);
-
-
-        head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(num));
+        incoming_res <= tuple2(data, num);
     endmethod
 
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
