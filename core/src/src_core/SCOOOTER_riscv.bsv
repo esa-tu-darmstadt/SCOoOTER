@@ -1,101 +1,70 @@
 package SCOOOTER_riscv;
 
-import BlueAXI::*;
-import Interfaces::*;
-import Fetch::*;
-import Types::*;
-import ReservationStation::*;
-import BuildVector::*;
+/*
+
+Toplevel module for a single core. Cores are combined into multicore systems by DAVE.
+
+*/
+
 import Vector::*;
-import List::*;
+import Interfaces::*;
+import Types::*;
 import Inst_Types::*;
-import BuildList::*;
-import Arith::*;
-import ReorderBuffer :: *;
-import Debug::*;
-import Commit::*;
-import RegFileArch::*;
-import RegFileEvo::*;
-import Decode::*;
-import Issue::*;
-import Branch::*;
-import Mem::*;
 import GetPut::*;
 import Connectable :: *;
-import MulDiv::*;
-import StoreBuffer::*;
-import BTB::*;
-import Smiths::*;
-import AlwaysUntaken::*;
-import Gshare::*;
-import Gskewed::*;
-import RAS::*;
-import CSR::*;
-import CSRFile::*;
 import Frontend::*;
 import ExecCore::*;
 import Backend::*;
-import ShiftBuffer::*;
-import ArianeRegFile::*;
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkSCOOOTER_riscv(Top) provisos(
-        Mul#(XLEN, IFUINST, ifuwidth),
-        Add#(ISSUEWIDTH, 1, issuewidth_pad_t),
-        Log#(issuewidth_pad_t, issuewidth_log_t),
-        Log#(NUM_CPU, idx_cpu_t)
-    );
+module mkSCOOOTER_riscv(Top);
 
+    // instantiate the three main components
     let fe <- mkFrontend();
     let ec <- mkExecCore();
     let be <- mkBackend();
 
-    mkConnection(be.train, fe.train);
+    // connect BE to FE
+    mkConnection(be.train, fe.train); // train predictors
+    rule commit_to_fetch;
+        fe.redirect(be.redirect_pc()); // redirect PC
+    endrule
 
-    mkConnection(ec.csr_write, be.csr_write);
 
-
-    mkConnection(be.read_registers, ec.read_committed);
-
+    // connect EC to BE
+    mkConnection(ec.csr_write, be.csr_write); // csr writing
+    mkConnection(ec.csr_read, be.csr_read); // csr reading
+    mkConnection(be.read_registers, ec.read_committed); // register reading
+    // pass result bus
     rule propagate_result_bus;
         be.res_bus(ec.res_bus());
     endrule
-
-
-
-    mkConnection(ec.csr_read, be.csr_read);
-
-    Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) evo_wire <- mkWire();
-
-    mkConnection(ec.decoded_inst, fe.decoded_inst);
-
-    rule flush_prints;
-        $fflush();
-    endrule
-
-    rule commit_to_fetch;
+    rule commit_to_exec; // flush exec units with state
         ec.flush(Vector::map(isValid, be.redirect_pc()));
-        fe.redirect(be.redirect_pc());
     endrule
-
-    rule connect_rob_issue;
+    rule connect_rob_issue; // connect ROB feedback to ec
         ec.rob_free(be.rob_free());
-        ec.rob_current_idx(be.current_idx());
         ec.rob_current_tail_idx(be.current_tail_idx());
     endrule
-
-    rule connect_rob_issue2;
+    rule connect_rob_issue2; // forward ROB reservations to BE
         let req = ec.get_reservation();
         uncurry(be.reserve)(req);
     endrule
 
+
+    // connect EC to FE
+    mkConnection(ec.decoded_inst, fe.decoded_inst); // instruction passing
+
+
+    // wire interrupt signals to core
     Vector#(NUM_THREADS, Vector#(3, Wire#(Bool))) int_mask <- replicateM(replicateM(mkBypassWire()));
     rule push_int;
         be.int_flags(Vector::map(Vector::readVReg,int_mask));
     endrule
 
+    // DExIE signals
     `ifdef DEXIE
         interface DExIEIfc dexie;
             method Action stall_signals(Bool control, Bool store);
@@ -110,11 +79,12 @@ module mkSCOOOTER_riscv(Top) provisos(
         endinterface
     `endif
 
-    // interrupts
+    // interrupt interface from external world
     method Action sw_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][2]._write(b[i]); endmethod
     method Action timer_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][1]._write(b[i]); endmethod
     method Action ext_int(Vector#(NUM_THREADS, Bool) b); for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) int_mask[i][0]._write(b[i]); endmethod
 
+    // branch efficacy signals
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br = be.correct_pred_br;
         method UInt#(XLEN) wrong_pred_br = be.wrong_pred_br;
@@ -122,10 +92,12 @@ module mkSCOOOTER_riscv(Top) provisos(
         method UInt#(XLEN) wrong_pred_j = be.wrong_pred_j;
     `endif
 
+    // memory access
     interface write_d = ec.write;
     interface read_d = ec.read;
     interface read_i = fe.read_inst;
 
+    // HART ID
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in) = be.hart_id(in);
 
 endmodule

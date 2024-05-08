@@ -78,11 +78,11 @@ endrule
 // combine target and condition into a result
 rule build_response_packet;
     let inst = in_f.first(); in_f.deq();
-    Maybe#(Bit#(XLEN)) target = condition_w ? tagged Valid target_w : tagged Invalid;
+    Maybe#(Bit#(PCLEN)) target = condition_w ? tagged Valid truncateLSB(target_w) : tagged Invalid;
     let resp = Result {
         tag:    inst.tag,
         result: (inst.exception matches tagged Valid .e ? tagged Except e :
-                  target matches tagged Valid .a &&& a[1:0] != 0 ? tagged Except MISALIGNED_ADDR
+                  condition_w && target_w[1:0] != 0 ? tagged Except MISALIGNED_ADDR
                   : tagged Result ({inst.pc+1, 2'b00})),
         new_pc: target
         };

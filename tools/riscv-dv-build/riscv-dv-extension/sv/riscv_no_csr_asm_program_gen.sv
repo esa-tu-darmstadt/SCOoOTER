@@ -23,7 +23,12 @@ class riscv_no_csr_asm_program_gen extends riscv_asm_program_gen;
         gen_section("_start", str);
     endfunction*/
     
-    
+    // Dump all GPR to the starting point of the program
+    // TB can check the GPR value for this memory location to compare with expected value generated
+    // by the ISA simulator. If the processor doesn't have a good tracer unit, it might not be
+    // possible to compare the GPR value after each instruction execution.
+    virtual function void gen_register_dump(ref string instr[$]);
+    endfunction
     
     virtual function void gen_program_header();
     string str[$];

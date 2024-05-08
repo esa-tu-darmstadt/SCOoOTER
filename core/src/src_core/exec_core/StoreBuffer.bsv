@@ -33,13 +33,7 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     // the id type is smaller or equal to
     // the count type as counting can hold
     // one further value
-    Add#(b__, idx_t, amount_t),
-    // issuewidth must be at least the buffer size
-    Add#(c__, issuewidth_log_t, idx_t),
-    // create types for instruction count tracking
-    Add#(ISSUEWIDTH, 1 , issue_pad_t),
-    Log#(issue_pad_t, issuewidth_log_t),
-    Add#(a__, issuewidth_log_t, amount_t)
+    Add#(b__, idx_t, amount_t)
 );
     // internal store
     Vector#(entries, Reg#(MemWr)) storage <- replicateM(mkRegU());
@@ -116,7 +110,7 @@ module mkStoreBuffer(StoreBufferIFC);
     function MaskedWord mw_from_memory_write(MemWr in) = MaskedWord {data: in.data, store_mask: in.store_mask};
     
     // forward memory data - create a wire which holds pending requests or a default value
-    Reg#(UInt#(XLEN)) forward_test_addr_w <- mkRegU();
+    Wire#(UInt#(XLEN)) forward_test_addr_w <- mkBypassWire();
     Wire#(MemWr) forward_pending <- mkDWire(MemWr {mem_addr: 0, store_mask: ?, data: ?});
     rule fwd_pend;
         forward_pending <= pending_buf.first();
@@ -183,6 +177,8 @@ module mkStoreBuffer(StoreBufferIFC);
             endmethod
         endinterface
     endinterface
+
+    // signal empty/full buffer to outside
     method Bool empty() = internal_buf.empty() && pending_buf.notFull();
     method Bool full() = internal_buf.full();
 endmodule

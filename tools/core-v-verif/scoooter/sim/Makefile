@@ -109,7 +109,7 @@ endif
 # Spike specific commands, variables
 ###############################################################################
 spike:
-	$(tool_path)/spike $(spike_stepout) $(spike_extension) --pmpregions=0 --priv=m --log-commits --isa=$(variant) -l -m0x2000:0x640000 $(elf) 
+	$(tool_path)/spike $(spike_stepout) $(spike_extension) --pmpregions=0 --priv=m --log-commits --isa=$(variant) -l -m0x2000:0x800000 $(elf) 
 	cp $(log).iss $(log)
 
 ###############################################################################
@@ -118,7 +118,7 @@ spike:
 
 veri-testharness:
 	mkdir -p $(path_var)/program
-	python3 $(path_var)/tools/hexConverter/hexConverter.py $(basename $(elf)).bin.p -o $(path_var)/program/test -b 0x320000
+	python3 $(path_var)/tools/hexConverter/hexConverter.py $(basename $(elf)).bin.p -o $(path_var)/program/test -b 0x400000
 	cd $(path_var)/core && make TB=COREV_TB RVFI=1 TOHOST=$(shell echo "$$(( 0x$(shell $$RISCV/bin/${CV_SW_PREFIX}nm -B $(elf) | grep -w tohost | cut -d' ' -f1) ))")
 	$(tool_path)/spike-dasm --isa=$(variant) < $(path_var)/core/build/trace_rvfi_hart_00.dasm > $(log)
 	# grep $(isspostrun_opts) ./trace_rvfi_hart_00.dasm

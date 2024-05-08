@@ -1,7 +1,7 @@
 package MulDiv;
 
 /*
-  FU for multipla-divide operations
+  FU for multiply-divide operations
 */
 
 import Interfaces::*;

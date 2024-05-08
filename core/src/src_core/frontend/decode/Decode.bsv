@@ -95,7 +95,6 @@ function InstructionPredecode predecode(Bit#(ILEN) inst, Bit#(PCLEN) pc, UInt#(E
         thread_id : thread_id
 
         `ifdef RVFI
-            // RVFI
             , iword : inst
         `endif
 
@@ -108,27 +107,6 @@ endfunction
 
 //***************************************************
 // Functions to select correct fields based on opcode
-
-function Action print_inst(t inst) provisos(
-    FShow#(t)
-);
-    return (action
-        $display(fshow(inst));
-    endaction);
-endfunction
-
-/*function Bit#(XLEN) select_imm(InstructionPredecode inst);
-    return case(inst.opc)
-        //SYSTEM uses U type as we must know which register is src
-        LUI, AUIPC, SYSTEM                 : inst.immU;
-        JAL                                : inst.immJ;
-        JALR, LOAD, OPIMM, MISCMEM         : inst.immI;
-        STORE                              : inst.immS;
-        BRANCH                             : inst.immB;
-
-        default : ?;
-    endcase;
-endfunction*/
 
 function Bool select_rs1(InstructionPredecode inst);
     return case(inst.opc)
@@ -155,6 +133,7 @@ function ExecUnitTag get_exec_unit(InstructionPredecode inst);
     return case(inst.opc)
         LOAD, STORE, AMO: LS;
         LUI, AUIPC, OPIMM: ALU;
+        // MULDIV and ALU must be separated by funct field
         OP: case(inst.funct7)
             7'b0000001: MULDIV;
             default: ALU;
@@ -231,6 +210,7 @@ function OpFunction getFunct(InstructionPredecode inst);
                     'b101 : SRA;
                     default: INVALID;
                     endcase
+                // if MULDIV is disabled, return invalid instruction
                 'b0000001 : (valueOf(NUM_MULDIV) > 0 ? case(inst.funct3)
                     'b000 : MUL;
                     'b001 : MULH;
@@ -289,8 +269,10 @@ endfunction
 // Create a instruction struct with required fields
 function Instruction decode(InstructionPredecode inst);
     return Instruction {
+        // invalid instructions should be sent to ALU
         eut: (getFunct(inst) == INVALID ? ALU : get_exec_unit(inst)),
 
+        // PC of this instruction
         pc : inst.pc,
         //general opcode
         opc : (getFunct(inst) == INVALID ? OP : inst.opc),
@@ -306,15 +288,18 @@ function Instruction decode(InstructionPredecode inst);
         //set exception INVALID_INST if decode error
         exception : (getFunct(inst) == INVALID),
 
+        // remainder of IWORD to piece together immediate value
         remaining_inst : inst.remaining_inst,
 
+        // epoch for misprediction tracking
         epoch : inst.epoch,
 
+        // prediction info : predicted PC and history for restore upon mispredict
         predicted_pc : inst.predicted_pc,
-        history : inst.history,
+        history : inst.history, // restore direction predictor
+        ras: inst.ras, // restore RAS
 
-        ras: inst.ras,
-
+        // track which HART the inst belongs to
         thread_id: inst.thread_id
 
         // RVFI
@@ -328,6 +313,7 @@ function Instruction decode(InstructionPredecode inst);
     };
 endfunction
 
+// helper function to apply predecoding to fetched instruction struct
 function InstructionPredecode predecode_instruction_struct(FetchedInstruction in);
     return predecode(in.instruction, in.pc, in.epoch, in.next_pc, in.history, in.ras, in.thread_id
     `ifdef LOG_PIPELINE
@@ -336,14 +322,13 @@ function InstructionPredecode predecode_instruction_struct(FetchedInstruction in
     );
 endfunction
 
+// Real Unit
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
-module mkDecode(DecodeIFC) provisos (
-        Bits#(Instruction, instruction_width_t),
-        Log#(RASDEPTH, ras_log_t)
-);
+module mkDecode(DecodeIFC);
 
+    // open files for pipeline logging
     `ifdef LOG_PIPELINE
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
@@ -360,42 +345,48 @@ module mkDecode(DecodeIFC) provisos (
     // select correct MIMO
     // the pipelined mimo schedules deq() prior to first() and enq() - therefore a circular dependency occurs if the output is not buffered
     // therefore the normal esamimo is used instead if no bufering is enabled, which schedules {first, enq} > deq
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkESAMIMO_pipeline() : mkESAMIMO());
-    PulseWire clear_buffer <- mkPulseWire();
-    Reg#(DecodeResponse) buffer_output <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkReg(DecodeResponse {count: 0, instructions: ?}) : mkBypassWire());
+    IWinIfc#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO_banks();
+    Reg#(DecodeResponse) buffer_output <- mkBypassWire();
 
+    // get data from instruction MIMO and store it for returning to next stage
     (* fire_when_enabled,no_implicit_conditions *)
-    rule fill_buffer;
-        let inst_vec = decoded_inst_m.first();
-        MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
-        buffer_output <= DecodeResponse {count: amount_loc, instructions: inst_vec};
+    rule read_from_buffer;
+        let inst_vec = decoded_inst_m.first(); // get inst
+        // calculate amount
+        Bit#(ISSUEWIDTH) valids = decoded_inst_m.deqReadyMask();
+        // write response to out buffer
+        buffer_output <= DecodeResponse {instruction_valid: valids, instructions: inst_vec};
     endrule
 
+    // input from fetch stage
     interface Put instructions;
+        // only enabled if enough insts can be stored
         method Action put(FetchResponse inst_from_decode) if (decoded_inst_m.enqReadyN(fromInteger(valueOf(IFUINST))));
-            if (!clear_buffer) begin
-                let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
-                decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
-                `ifdef LOG_PIPELINE
-                    for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count) begin
-                        $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
-                        $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, decoded_vec[i].log_id, 0, "D");
-                        $fdisplay(out_log_ko, "%d L %d %d %x DASM(%x)", clk_ctr, decoded_vec[i].log_id, 0, inst_from_decode.instructions[i].pc, inst_from_decode.instructions[i].instruction);
-                    end
-                `endif
-            end
+            // decode insts
+            let decoded_vec = Vector::map(compose(decode, predecode_instruction_struct), inst_from_decode.instructions);
+            // write decoded insts to buffer
+            decoded_inst_m.enq(inst_from_decode.count, decoded_vec);
+            // pipeline log writing
+            `ifdef LOG_PIPELINE
+                for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count) begin
+                    $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
+                    $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, decoded_vec[i].log_id, 0, "D");
+                    $fdisplay(out_log_ko, "%d L %d %d %x DASM(%x)", clk_ctr, decoded_vec[i].log_id, 0, inst_from_decode.instructions[i].pc, inst_from_decode.instructions[i].instruction);
+                end
+            `endif
         endmethod
     endinterface
 
+    // requesting instructions
     interface GetSC decoded_inst;
         method DecodeResponse first;
             return buffer_output;
         endmethod
-        method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst_m.deq(amount);
+        method Action deq(Bit#(ISSUEWIDTH) mask) = decoded_inst_m.deqByMask(mask);
     endinterface
 
+    // clearing the buffer if a pipeline flush is requested
     method Action flush();
-        decoded_inst_m.clear();
     endmethod  
     
 endmodule

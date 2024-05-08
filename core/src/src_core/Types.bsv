@@ -1,5 +1,11 @@
 package Types;
 
+/*
+
+Simple numeric types
+
+*/
+
 import Config::*;
 export Config::*;
 export Types::*;
@@ -28,4 +34,6 @@ typedef NUM_FU NUM_RS;
 typedef TLog#(TAdd#(TAdd#(IFUINST,ROBDEPTH),INST_WINDOW)) EPOCH_WIDTH;
 
 typedef TMul#(NUM_CPU, NUM_THREADS) NUM_HARTS;
+
+typedef TMul#(ISSUEWIDTH, ROB_BANK_DEPTH) ROBDEPTH;
 endpackage

@@ -1,5 +1,11 @@
 package Interfaces;
 
+/*
+
+Interfaces for all units
+
+*/
+
 import BlueAXI :: *;
 import Types :: *;
 import Inst_Types :: *;
@@ -10,20 +16,15 @@ import GetPut::*;
 import GetPutCustom::*;
 import ClientServer::*;
 
+interface MemMappedIFC#(numeric type addrwidth);
+    interface Server#(Tuple2#(UInt#(addrwidth), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) mem_r;
+    interface Server#(Tuple4#(UInt#(addrwidth), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) mem_w;
+endinterface
+
 interface DaveIFC;
-    `ifndef SOC
-        (* prefix= "axi_master_fetch" *)
-        interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) imem_axi;
-        (* prefix= "axi_master_data" *)
-        interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_r;
-        (* prefix= "axi_master_data" *)
-        interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) dmem_axi_w;
-    
-    `else
-        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
-        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TAdd#(1, TLog#(NUM_CPU))))) dmem_r;
-        interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Bit#(TAdd#(1, TLog#(NUM_CPU)))) dmem_w;
-    `endif
+    interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
+    interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_r;
+    interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) dmem_w;
 
     (* always_ready, always_enabled *)
     method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
@@ -37,10 +38,6 @@ interface DaveIFC;
         method UInt#(XLEN) wrong_pred_br;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
-    `endif
-
-    `ifdef DEXIE
-        interface Vector#(NUM_CPU, DExIEIfc) dexie;
     `endif
 
 endinterface
@@ -66,37 +63,19 @@ interface Top;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
     `endif
-
-    `ifdef DEXIE
-        interface DExIEIfc dexie;
-    `endif
 endinterface
 
 interface MemoryArbiterIFC;
-    // axi to data memory
-    
-
-    `ifndef SOC
-        interface AXI4_Master_Rd_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_r;
-        interface AXI4_Master_Wr_Fab#(XLEN, XLEN, TAdd#(1, TLog#(NUM_CPU)), 0) axi_w;
-    `else
-        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TAdd#(1, TLog#(NUM_CPU))))) dmem_r;
-        interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(1, TLog#(NUM_CPU)))), Bit#(TAdd#(1, TLog#(NUM_CPU)))) dmem_w;
-    `endif
-
+    // simple iface to data memory / periphery
+    interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_r;
+    interface Client#(Tuple4#(UInt#(XLEN), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) dmem_w;
     // normal reads/writes
     interface Vector#(NUM_CPU, Server#(MemWr, void)) writes;
     interface Vector#(NUM_CPU, Server#(Tuple2#(Bit#(XLEN), Maybe#(Tuple2#(Bit#(XLEN), AmoType))), Bit#(XLEN))) reads;
 endinterface
 
 interface InstArbiterIFC;
-    // axi to data memory
-    `ifndef SOC
-        interface AXI4_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST), TLog#(NUM_CPU), 0) axi_r;
-    `else
-        interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
-    `endif
-
+    interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
     interface Vector#(NUM_CPU, Server#(Bit#(XLEN), Bit#(TMul#(XLEN, IFUINST)))) reads;
 endinterface
 
@@ -121,14 +100,14 @@ interface DecodeIFC;
     // insert instructions here
     method Put#(FetchResponse) instructions;
     //output
-    interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface GetSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
     //flush
     method Action flush();
 endinterface
 
 interface IssueIFC;
     //instruction input
-    interface PutSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface PutSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
 
     //connection to regfile_evo
     interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
@@ -136,9 +115,7 @@ interface IssueIFC;
 
     (* always_ready, always_enabled *)
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
-    (* always_ready, always_enabled *)
-    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
-    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
+    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), Bit#(ISSUEWIDTH)) get_reservation();
 
     method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
@@ -183,24 +160,16 @@ interface MemoryUnitIFC;
     method Action store_queue_empty(Bool b);
     method Action store_queue_full(Bool b);
     interface Get#(MemWr) write;
-
-    `ifdef DEXIE
-        method Maybe#(DexieMem) dexie_memw;
-        (* always_ready, always_enabled *)
-        method Action dexie_stall(Bool stall);
-    `endif
 endinterface
 
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
     (* always_enabled, always_ready *)
-    method UInt#(TLog#(ROBDEPTH)) current_idx;
-    (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
 
     (* always_enabled, always_ready *)
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask);
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
@@ -226,12 +195,6 @@ interface CommitIFC;
     `ifdef RVFI
         (* always_ready,always_enabled *)
         method Vector#(ISSUEWIDTH, RVFIBus) rvfi_out;
-    `endif
-
-    `ifdef DEXIE
-        interface DExIETraceIfc dexie;
-        (* always_ready, always_enabled *)
-        method Action dexie_stall(Bool stall);
     `endif
 endinterface
 
@@ -280,29 +243,6 @@ interface CsrFileIFC;
     method Vector#(NUM_THREADS, Bit#(3)) ext_interrupt_mask();
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
-endinterface
-
-interface DExIETraceIfc;
-
-    (*always_ready, always_enabled*)
-    method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
-    (*always_ready, always_enabled*)
-    method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
-    (*always_ready, always_enabled*)
-    method Maybe#(DexieMem) memw;
-endinterface
-
-interface DExIEIfc;
-
-    (*always_ready, always_enabled*)
-    method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
-    (*always_ready, always_enabled*)
-    method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
-    (*always_ready, always_enabled*)
-    method Maybe#(DexieMem) memw;
-
-    (*always_ready, always_enabled*)
-    method Action stall_signals(Bool control, Bool store);
 endinterface
 
 endpackage

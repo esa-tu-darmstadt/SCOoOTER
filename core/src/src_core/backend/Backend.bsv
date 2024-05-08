@@ -13,7 +13,7 @@ import Inst_Types::*;
 import Types::*;
 import GetPut::*;
 import Interfaces::*;
-import ReorderBuffer::*;
+import ReorderBufferNew::*;
 import Commit::*;
 import RegFileArch::*;
 import CSRFile::*;
@@ -31,10 +31,8 @@ interface BackendIFC;
     method Action int_flags(Vector#(NUM_THREADS, Vector#(3, Bool)) int_mask);
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     (* always_enabled, always_ready *)
-    method UInt#(TLog#(ROBDEPTH)) current_idx;
-    (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
@@ -64,7 +62,7 @@ module mkBackend(BackendIFC) provisos (
 
     // instantiate units
     let csrf <- mkCSRFile();
-    RobIFC rob <- mkReorderBuffer();
+    RobIFC rob <- mkReorderBufferNew();
     CommitIFC commit <- mkCommit();
     RegFileIFC regfile_arch <- valueOf(REGFILE_LATCH_BASED) == 0 ? mkRegFile() : mkRegFileAriane();
 
@@ -119,9 +117,8 @@ module mkBackend(BackendIFC) provisos (
     endmethod
 
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc() = commit.redirect_pc;
-    method UInt#(TLog#(ROBDEPTH)) current_idx = rob.current_idx();
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num) = rob.reserve(data, num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask) = rob.reserve(data, mask);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free = rob.free();
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br = commit.correct_pred_br;

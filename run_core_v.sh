@@ -13,16 +13,17 @@ export CV_SW_PREFIX=riscv64-unknown-elf-
 
 export DV_TARGET=cv32a6_imac_sv0
 
-test_scripts=(dv-riscv-tests dv-riscv-arch-test dv-riscv-compliance dv-riscv-csr-access-test dv-generated-tests benchmark coremark)
+test_scripts=(dv-riscv-tests dv-riscv-arch-test dv-riscv-compliance dv-riscv-csr-access-test dv-generated-tests dv-generated-tests dv-generated-tests dv-generated-tests dv-generated-tests dv-generated-tests dv-generated-tests benchmark coremark)
+test_list_no=(             0                  0                   0                        0                 91                 92                  3                 94                 95                 96                  7         0        0)
 mkdir -p core-v-logs
 
 source ./scoooter/regress/install-spike.sh
 
-for script in ${test_scripts[@]}
+for i in ${!test_scripts[@]}
 do
 	rm -rf scoooter/sim/out* &> /dev/null
-	printf "$script "
-	list_num=99 source ./scoooter/regress/$script.sh 2>&1 | tee >(grep -q "\[FAILED\]") >(grep -q -i "error") > core-v-logs/$script.log
+	printf "${test_scripts[i]} "
+	list_num=${test_list_no[i]} source ./scoooter/regress/${test_scripts[i]}.sh 2>&1 | tee >(grep -q "\[FAILED\]") >(grep -q -i "error") > core-v-logs/${test_scripts[i]}_${test_list_no[i]}.log
 	
 	if [ $? -eq 0 ] 
 	then 

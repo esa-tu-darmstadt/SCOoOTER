@@ -4,10 +4,14 @@ typedef 1 IFUINST;
 typedef 1 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
-typedef 'h40000 BRAMSIZE;
+
+typedef 'h40000 BASE_DMEM;
+typedef 'h40000 SIZE_DMEM;
+typedef 'h00000 BASE_IMEM;
+typedef 'h40000 SIZE_IMEM;
 
 // must be at least as big as the issuewidth
-typedef 1 ROBDEPTH;
+typedef 1 ROB_BANK_DEPTH;
 
 //must be at least as big as IFUINST and issuewidth
 //and larger than 1 (required for MIMO)
@@ -36,11 +40,13 @@ typedef 2 RS_DEPTH_MULDIV;
 typedef 2 RS_DEPTH_BR;
 
 // bus buffering
-typedef 0 RS_LATCH_BUS;
 typedef 1 DECODE_LATCH_OUTPUT;
 typedef 1 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
+
+// add more stages
 typedef 0 RS_LATCH_INPUT;
+typedef 1 SPLIT_ISSUE_STAGE;
 
 // prediction strategy
 // 0: always untaken
