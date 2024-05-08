@@ -5,10 +5,11 @@ typedef 1 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
 
-typedef 'h10000 BASE_DMEM;
-typedef 'h10000 SIZE_DMEM;
+typedef 'h20000 BRAM_SIZE;
+typedef 'h20000 BASE_DMEM;
+typedef 'h20000 SIZE_DMEM;
 typedef 'h00000 BASE_IMEM;
-typedef 'h10000 SIZE_IMEM;
+typedef 'h20000 SIZE_IMEM;
 
 // must be at least as big as the issuewidth
 typedef 1 ROB_BANK_DEPTH;
@@ -52,7 +53,7 @@ typedef 0 SPLIT_ISSUE_STAGE;
 // prediction strategy
 // 0: always untaken
 // 1: smiths
-typedef 1 BRANCHPRED;
+typedef 0 BRANCHPRED;
 
 typedef 5 BITS_BTB;
 typedef 5 BITS_PHT;
