@@ -40,11 +40,13 @@ typedef 2 RS_DEPTH_MULDIV;
 typedef 2 RS_DEPTH_BR;
 
 // bus buffering
-typedef 0 RS_LATCH_BUS;
 typedef 0 DECODE_LATCH_OUTPUT;
 typedef 0 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
+
+// add more stages
 typedef 0 RS_LATCH_INPUT;
+typedef 0 SPLIT_ISSUE_STAGE;
 
 // prediction strategy
 // 0: always untaken

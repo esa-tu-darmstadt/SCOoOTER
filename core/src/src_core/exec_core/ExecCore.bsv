@@ -27,7 +27,7 @@ import StoreBuffer::*;
 
 interface ExecCoreIFC;
     // instruction input
-    interface PutSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface PutSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
 
     // info from ROB
     (* always_ready, always_enabled *)
@@ -35,7 +35,7 @@ interface ExecCoreIFC;
     (* always_ready, always_enabled *)
     method Action rob_current_tail_idx(UInt#(TLog#(ROBDEPTH)) idx);
     // reserve space in ROB
-    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
+    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), Bit#(ISSUEWIDTH)) get_reservation();
 
     // mispredict signal
     (* always_ready *)
@@ -193,7 +193,7 @@ module mkExecCore(ExecCoreIFC);
     endmethod
 
     // provide register reservations to ROB / backend
-    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
+    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), Bit#(ISSUEWIDTH)) get_reservation() = issue.get_reservation();
     
     // connect pipeline flush signals
     method Action flush(Vector#(NUM_THREADS, Bool) in);

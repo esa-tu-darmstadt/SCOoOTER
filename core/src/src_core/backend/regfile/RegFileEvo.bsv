@@ -150,7 +150,7 @@ module mkRegFileEvo(RegFileEvoIFC);
                     if(in.reservations[i].epoch == epoch[thread_id]) begin
                         let reg_addr = in.reservations[i].addr;
                         //if the instruction and register is valid
-                        if(fromInteger(i) < in.count && reg_addr != 0) begin
+                        if(in.mask[i] == 1 && reg_addr != 0) begin
                             //store the tag to the regfile
                             let tag = in.reservations[i].tag;
                             local_entries[thread_id][reg_addr-1] = tagged Tag tag;

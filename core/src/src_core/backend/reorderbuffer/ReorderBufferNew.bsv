@@ -54,7 +54,7 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
     // real instruction entry
     Reg#(RobEntry) entry_r <- mkRegU;
     Reg#(ResultOrExcept) result_r <- mkRegU;
-    Reg#(Bit#(PCLEN)) next_pc_r <- mkRegU;
+    Reg#(Maybe#(Bit#(PCLEN))) next_pc_r <- mkRegU;
     `ifdef RVFI
         Reg#(UInt#(XLEN)) mem_addr_r <- mkRegU;
     `endif
@@ -88,10 +88,7 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
             `endif
 
             // generate the next pc field from the result
-            next_pc_r <= case (v.Valid.new_pc) matches
-                tagged Valid .n : truncateLSB(n);
-                tagged Invalid  : truncateLSB(entry_r.pc+1);
-            endcase;
+            next_pc_r <= v.Valid.new_pc;
 
             // write info for pipeline viewer
             `ifdef LOG_PIPELINE
@@ -107,12 +104,23 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
         occupied_r[1] <= True;
         ready_r[1] <= False;
         schedulingFix.send();
+
+        dbg_print(ROB, $format("got: ", fshow(re)));
+
+        // addertions
+        if (occupied_r[1] == True) begin
+            $display("Trying to enqueue into a full ROB cell. Abort.");
+            $finish();
+        end
     endmethod
 
     // get stored instruction
     method RobEntry first();
         let entry = entry_r;
-        entry.next_pc = next_pc_r;
+        entry.next_pc = case (next_pc_r) matches
+            tagged Valid .n : n;
+            tagged Invalid  : (entry_r.pc+1);
+        endcase;
         entry.result = result_r;
         `ifdef RVFI // for testing, expose memory address
             entry.mem_addr = mem_addr_r;
@@ -229,7 +237,7 @@ module mkReorderBufferNew(RobIFC) provisos (
     Reg#(UInt#(issue_idx_t)) tail_bank_r <- mkReg(0);
 
     // helper functions to extract signals from a bank
-    function Bool get_rdy_enq(RobBankIFC rb) = rb.ready_enq_next(); // TODO: PARAMETRIZE
+    function Bool get_rdy_enq(RobBankIFC rb) = valueOf(ROB_BANK_DEPTH) > 1 ? rb.ready_enq_next() : rb.ready_enq(); // TODO: PARAMETRIZE
     function Bool get_rdy_deq(RobBankIFC rb) = rb.ready_deq();
     function RobEntry get_entry(RobBankIFC rb) = rb.first();
 
@@ -258,20 +266,20 @@ module mkReorderBufferNew(RobIFC) provisos (
     endrule
 
     // delay incoming reservations for more efficiency
-    Reg#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), UInt#(issue_amt_t))) incoming_res <- mkReg(unpack(0));
+    Reg#(Tuple2#(Vector#(ISSUEWIDTH, RobEntry), Bit#(ISSUEWIDTH))) incoming_res <- valueOf(ROB_BANK_DEPTH) > 1 ? mkReg(unpack(0)) : mkBypassWire();
     rule insert;
         let data = tpl_1(incoming_res);
-        let num = tpl_2(incoming_res);
+        let mask = tpl_2(incoming_res);
         let enq_data = rotateBy(data, head_bank_r);
 
-        function Bool should_fire(Integer i) = fromInteger(i) < num;
-        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(genWith(should_fire), head_bank_r);
+        Vector#(ISSUEWIDTH, Bool) enq_fire = rotateBy(unpack(mask), head_bank_r);
 
-        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
+        for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
             if (enq_fire[i]) robbank[i].put(enq_data[i]);
+        end
 
 
-        head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(num));
+        head_bank_r <= rollover_add(dummy, head_bank_r, cExtend(Vector::countElem(True, unpack(mask))));
     endrule
 
     // count how many instructions at the ROB head are ready
@@ -284,8 +292,8 @@ module mkReorderBufferNew(RobIFC) provisos (
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = tail_out_r;
 
     // get instructions from issue
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(issue_amt_t) num);
-        incoming_res <= tuple2(data, num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask);
+        incoming_res <= tuple2(data, mask);
     endmethod
 
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();

@@ -100,14 +100,14 @@ interface DecodeIFC;
     // insert instructions here
     method Put#(FetchResponse) instructions;
     //output
-    interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface GetSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
     //flush
     method Action flush();
 endinterface
 
 interface IssueIFC;
     //instruction input
-    interface PutSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface PutSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
 
     //connection to regfile_evo
     interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
@@ -115,7 +115,7 @@ interface IssueIFC;
 
     (* always_ready, always_enabled *)
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
-    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
+    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), Bit#(ISSUEWIDTH)) get_reservation();
 
     method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
@@ -169,7 +169,7 @@ interface RobIFC;
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
 
     (* always_enabled, always_ready *)
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask);
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);

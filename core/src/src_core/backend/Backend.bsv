@@ -32,7 +32,7 @@ interface BackendIFC;
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc();
     (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free;
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
@@ -118,7 +118,7 @@ module mkBackend(BackendIFC) provisos (
 
     method Vector#(NUM_THREADS, Maybe#(Tuple2#(Bit#(PCLEN), Bit#(RAS_EXTRA)))) redirect_pc() = commit.redirect_pc;
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx = rob.current_tail_idx();
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num) = rob.reserve(data, num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask) = rob.reserve(data, mask);
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) rob_free = rob.free();
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br = commit.correct_pred_br;

@@ -43,8 +43,10 @@ typedef 6 RS_DEPTH_BR;
 typedef 1 DECODE_LATCH_OUTPUT;
 typedef 1 ROB_LATCH_OUTPUT;
 typedef 1 RESBUS_ADDED_DELAY;
-typedef 1 RS_LATCH_INPUT;
 
+// add more stages
+typedef 1 RS_LATCH_INPUT;
+typedef 1 SPLIT_ISSUE_STAGE;
 
 // prediction strategy
 // 0: always untaken
