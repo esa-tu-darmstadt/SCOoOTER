@@ -5,7 +5,6 @@ typedef 1 ISSUEWIDTH;
 
 typedef 0 RESETVEC;
 
-typedef 'h20000 BRAM_SIZE;
 typedef 'h20000 BASE_DMEM;
 typedef 'h20000 SIZE_DMEM;
 typedef 'h00000 BASE_IMEM;
