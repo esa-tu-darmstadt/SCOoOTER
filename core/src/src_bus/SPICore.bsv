@@ -23,6 +23,9 @@ interface SPICore#(numeric type idx_width);
     method Action spi_miso(Bit#(1) i);
     (*always_ready, always_enabled*)
     method Bool spi_cs;
+
+    (*always_ready,always_enabled*)
+    method Action set_clkdiv(Bit#(32) in);
 endinterface
 
 
@@ -37,11 +40,17 @@ module mkSPICore(SPICore#(idx_width));
     Wire#(Bool) rising_edge <- mkBypassWire();
     Wire#(Bool) falling_edge <- mkBypassWire();
     // clk divider
-    Array#(Reg#(Bit#(5))) clkdiv <- mkCReg(2, 0);
+    Wire#(Bit#(32)) clk_div_in <- mkBypassWire();
+    Array#(Reg#(Bit#(32))) clkdiv <- mkCReg(2, 0);
     rule clk_div;
-        if (init_r == 0) clkdiv[0] <= clkdiv[0]+1;
+        if (init_r == 0) begin
+            if (clkdiv[0] == clk_div_in-1)
+                clkdiv[0] <= 0;
+            else 
+                clkdiv[0] <= clkdiv[0]+1;
+        end
         falling_edge <= (clkdiv[0] == 0);
-        rising_edge  <= (clkdiv[0] == 16);
+        rising_edge  <= (clkdiv[0] == clk_div_in>>1);
     endrule
 
     
@@ -70,6 +79,12 @@ module mkSPICore(SPICore#(idx_width));
         suppress_cs_reg <= suppress_cs_reg << 1;
         count_sent_reg <= count_sent_reg - 1;
         break_enforced <= False;
+    endrule
+
+    //gen clock
+    Reg#(Bit#(1)) clk_r <- mkReg(0);
+    rule gen_clk;
+        clk_r <= pack((clkdiv[0] >= clk_div_in>>1) && cs_r._read() && !unpack(cs_suppress_r));
     endrule
 
     // enforce pause between packets
@@ -158,13 +173,15 @@ module mkSPICore(SPICore#(idx_width));
 
 
     interface spi_cs = !(cs_r && !unpack(cs_suppress_r));
-    interface spi_clk = pack((clkdiv[0] >= 16) && cs_r._read() && !unpack(cs_suppress_r));
+    interface spi_clk = clk_r;
 
     method Action spi_miso(Bit#(1) i);
         miso_w <= i;
     endmethod
 
     method Bit#(1) spi_mosi = mosi_r._read();
+
+    method Action set_clkdiv(Bit#(32) in) = clk_div_in._write(in);
 endmodule
 
 endpackage
