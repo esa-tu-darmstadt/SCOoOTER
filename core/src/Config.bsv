@@ -51,10 +51,10 @@ Bit#(32) dexie_offset_tables = fromInteger(dexie_offset_tables_i);
 /*
 * Scoooter's internal memory offsets
 */
-typedef 'h20000 BASE_DMEM;
-typedef 'h20000 SIZE_DMEM;
+typedef 'h40000 BASE_DMEM;
+typedef 'h40000 SIZE_DMEM;
 typedef 'h00000 BASE_IMEM;
-typedef 'h20000 SIZE_IMEM;
+typedef 'h40000 SIZE_IMEM;
 
 // must be at least as big as the issuewidth
 typedef 1 ROB_BANK_DEPTH;

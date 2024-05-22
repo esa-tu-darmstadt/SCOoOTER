@@ -80,7 +80,7 @@ module mkRAM(SPI);
 
         case (command)
             8'b00000110: begin
-                //$display("write enabled");
+                $display("write enabled");
                 state <= 3;
             end
 
@@ -89,7 +89,7 @@ module mkRAM(SPI);
             end
 
             8'b00000011: begin
-                //$display("got read");
+                $display("got read");
                 state <= 1;
             end
 
@@ -106,7 +106,7 @@ module mkRAM(SPI);
 
     rule advance_addr if (addr_ctr == 24 && cs && state == 1);
         state <= 2;
-        //$display("addr", fshow(addr));
+        $display("addr", fshow(addr));
     endrule
 
 
@@ -117,7 +117,7 @@ module mkRAM(SPI);
 
     rule write_wr_data if (command == 'b10 && state == 2 && wrdata_ctr == 8 && cs);
         regs.upd(addr, wrdata);
-        //$display("writing ", fshow(wrdata), " to ", fshow (addr));
+        $display("writing ", fshow(wrdata), " to ", fshow (addr));
         state <= 3;
     endrule
 
