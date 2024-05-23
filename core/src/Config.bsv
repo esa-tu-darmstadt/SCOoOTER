@@ -3,7 +3,7 @@ package Config;
 typedef 1 IFUINST;
 typedef 1 ISSUEWIDTH;
 
-typedef 0 RESETVEC;
+typedef 'h20000 RESETVEC;
 
 /*
 * Toplevel Wishbone Routing
