@@ -56,9 +56,9 @@ module mkSPICore(SPICore#(idx_width));
     
 
     // cmd reg (8b op + 24b addr + 32b data)
-    Reg#(Bit#(163)) command_reg <- mkReg({8'b00000110, 0});
-    Reg#(Bit#(163)) suppress_cs_reg <- mkReg(0);
-    Reg#(Bit#(8)) count_sent_reg <- mkReg(9);
+    Reg#(Bit#(172)) command_reg <- mkRegU();
+    Reg#(Bit#(172)) suppress_cs_reg <- mkReg(0);
+    Reg#(Bit#(8)) count_sent_reg <- mkReg(0);
 
     // input reg
     Reg#(Bit#(32)) miso_shift_r <- mkRegU();
@@ -121,9 +121,9 @@ module mkSPICore(SPICore#(idx_width));
                 Vector#(4, Bit#(40)) strb_ext = map(compose(pack, replicate), strb_v);
 
                 // send packet
-                command_reg     <= {8'b00000010,  addr+3, data[7:0], 1'b0,   8'b00000010, addr+2, data[15:8], 1'b0,    8'b00000010, addr+1,  data[23:16], 1'b0,   8'b00000010, addr, data[31:24]};
-                suppress_cs_reg <= {~strb_ext[0], 1'b1, ~strb_ext[1], 1'b1, ~strb_ext[2], 1'b1, ~strb_ext[3]};
-                count_sent_reg  <= 164;
+                command_reg     <= {8'b00000110, 1'b0, 8'b00000010,  addr+3, data[7:0], 1'b0,   8'b00000010, addr+2, data[15:8], 1'b0,    8'b00000010, addr+1,  data[23:16], 1'b0,   8'b00000010, addr, data[31:24]};
+                suppress_cs_reg <= {8'b0, 1'b1, ~strb_ext[0], 1'b1, ~strb_ext[1], 1'b1, ~strb_ext[2], 1'b1, ~strb_ext[3]};
+                count_sent_reg  <= 173;
 
                 // store id
                 inflight_id <= tagged Valid idx;
