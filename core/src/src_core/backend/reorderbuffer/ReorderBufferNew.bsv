@@ -253,7 +253,15 @@ module mkReorderBufferNew(RobIFC) provisos (
         tail_out_r <= extend(tail_bank_r) + extend(robbank[tail_bank_r].current_tail_idx())*cExtend(fromInteger(valueOf(ISSUEWIDTH)));
     endrule
 
-    rule calc_insts;
+    `ifdef DEXIE
+        Wire#(Bool) dexie_stall_w <- mkBypassWire();
+    `endif
+
+    rule calc_insts
+        `ifdef DEXIE
+            if (!dexie_stall_w) // stalled by DExIE if necessary
+        `endif
+    ;
         let amt_current = foldr(fold_rdy_deq_amt, 0, rotateBy(map(get_rdy_deq, robbank), truncate(fromInteger(valueOf(ISSUEWIDTH)) - unpack({1'b0, pack(tail_bank_r)}))));
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
             if (fromInteger(i) < amt_current)
@@ -304,6 +312,10 @@ module mkReorderBufferNew(RobIFC) provisos (
         for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1)
             robbank[i].result_bus(res_bus);
     endmethod
+
+    `ifdef DEXIE
+        method Action dexie_stall(Bool stall) = dexie_stall_w._write(stall);
+    `endif
 endmodule
 
 

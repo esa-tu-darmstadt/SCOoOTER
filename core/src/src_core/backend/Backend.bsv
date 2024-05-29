@@ -131,7 +131,10 @@ module mkBackend(BackendIFC) provisos (
     interface Put csr_write = csrf.write();
     `ifdef DEXIE
         interface dexie = commit.dexie;
-        interface dexie_stall = commit.dexie_stall;
+        method Action dexie_stall(Bool stall);
+            commit.dexie_stall(stall);
+            rob.dexie_stall(stall);
+        endmethod
     `endif
 endmodule
 

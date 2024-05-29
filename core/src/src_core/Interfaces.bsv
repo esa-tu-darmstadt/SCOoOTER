@@ -187,6 +187,11 @@ interface RobIFC;
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
+
+    `ifdef DEXIE
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
+    `endif
 endinterface
 
 interface CommitIFC;
