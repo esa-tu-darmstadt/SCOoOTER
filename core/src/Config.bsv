@@ -70,7 +70,7 @@ typedef 1 MUL_DIV_STRATEGY;
 
 // CSR and Mem units are always one
 typedef 1 NUM_ALU;
-typedef 1 NUM_MULDIV;
+typedef 0 NUM_MULDIV;
 typedef 1 NUM_BR;
 
 // Regfile as Latches
