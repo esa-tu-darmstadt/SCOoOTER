@@ -7,42 +7,37 @@ typedef 'h20000 RESETVEC;
 
 /*
 * Toplevel Wishbone Routing
-* Caravel Userspace: 0x3000 0000 ... 0x7FFF FFFF
-*  MSB 31==0, Block selection via MSBs 30...28
-*  011 Scoooter IMEM
-*  100 Scoooter DMEM
-*  101 Free (?)
-*  110 DExIE Tables
-*  111 AXI CTRL
+* Caravel Userspace: 0x3000 0000 ... 0x3FFF FFFF
+*  MSB 31==0, Block selection via MSBs 27...26
+*  00 Scoooter IMEM
+*  01 Scoooter DMEM
+*  10 DExIE Tables
+*  11 AXI CTRL
 *
-* Address range per Block; Bits 27...0 are freely usable
-* 0...0xFFF FFFF = 0x1000 0000 combinations
-* 0...268.435.455 = 268.435.455 combinations
-* ca. 256 MByte per Block
+* Address range per Block; Bits 25...0 are freely usable
+* 0...0x3FF FFFF = 0x0400 0000 combinations
+* ca. 64 MByte per Block
 */
 
-typedef 'b0011 WB_OFFSET_IMEM;
-typedef 'b0100 WB_OFFSET_DMEM;
-typedef 'b0101 WB_OFFSET_FREE;
-typedef 'b0110 WB_OFFSET_DEX_MEM;
-typedef 'b0111 WB_OFFSET_AXI_CTRL;
+typedef 'b00 WB_OFFSET_IMEM;
+typedef 'b01 WB_OFFSET_DMEM;
+typedef 'b10 WB_OFFSET_DEX_MEM;
+typedef 'b11 WB_OFFSET_AXI_CTRL;
 
 /*
 * DExIE's Internal Table Offset (MSBs for table selection)
 */
-typedef 'h1000000 DExIE_OFFSET_TABLES; // Bit 27...24 Dexie MSBs to select table
+typedef 32'h00400000 DExIE_OFFSET_TABLES; // Bit 25...22 Dexie MSBs to select table
 
 // Integer conversion
 Integer wb_offset_imem_i = valueOf(WB_OFFSET_IMEM);
 Integer wb_offset_dmem_i = valueOf(WB_OFFSET_DMEM);
-Integer wb_offset_free_i = valueOf(WB_OFFSET_FREE);
 Integer wb_offset_dex_mem_i = valueOf(WB_OFFSET_DEX_MEM);
 Integer wb_offset_axi_ctrl_i = valueOf(WB_OFFSET_AXI_CTRL);
 Integer dexie_offset_tables_i = valueOf(DExIE_OFFSET_TABLES);
 
 Bit#(32) wb_offset_imem = fromInteger(wb_offset_imem_i);
 Bit#(32) wb_offset_dmem = fromInteger(wb_offset_dmem_i);
-Bit#(32) wb_offset_free = fromInteger(wb_offset_free_i);
 Bit#(32) wb_offset_dex_mem = fromInteger(wb_offset_dex_mem_i);
 Bit#(32) wb_offset_axi_ctrl = fromInteger(wb_offset_axi_ctrl_i);
 Bit#(32) dexie_offset_tables = fromInteger(dexie_offset_tables_i);
