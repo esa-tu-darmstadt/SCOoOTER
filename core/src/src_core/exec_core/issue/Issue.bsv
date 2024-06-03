@@ -223,7 +223,7 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
         `endif
         `ifdef DEXIE
             , dexie_type: (case (inst.opc)
-                JAL, BRANCH, JALR: tagged Control;
+                JAL, BRANCH, JALR, SYSTEM: tagged Control;
                 AMO, LOAD, STORE: tagged Memory;
                 default: tagged Register;
                 endcase)

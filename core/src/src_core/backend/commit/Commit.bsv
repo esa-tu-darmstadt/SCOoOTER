@@ -93,9 +93,15 @@ function Maybe#(TrainPrediction) rob_entry_to_train(RobEntry re);
     return out;
 endfunction
 
+PulseWire dx_allow_int <- mkPulseWire();
 // per HART: redirect if an internal exception occurs
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
-    rule redirect_on_no_interrupt (int_in[i] == 0 || int_in_process_r[i][1]); // no external interrupt or currently handled int
+    rule redirect_on_no_interrupt
+    `ifdef DEXIE
+        (!dx_allow_int);
+    `else
+        (int_in[i] == 0 || int_in_process_r[i][1]); // no external interrupt or currently handled int
+    `endif
         if(redirect_pc_w_exc[i].wget() matches tagged Valid .v) begin // if an interrupt redirtection address is available
             epoch[i] <= epoch[i] + 1; // increment epoch
             redirect_pc_w_out[i].wset(v); // send redirection to frontend
@@ -124,14 +130,12 @@ endfunction
     Ehr#(TAdd#(ISSUEWIDTH, 1), Bool) first_trap <- mkEhr(False); // boolean to mark first instruction of trap handler
 `endif
 
-PulseWire dx_allow_int <- mkPulseWire();
-
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
     rule redirect_on_interrupt 
     `ifdef DEXIE
         (dx_allow_int); // no interrupt in progress and incoming interrupt signal set
     `else
-        (int_in[i] != 0 && !int_in_process_r[i][1])
+        (int_in[i] != 0 && !int_in_process_r[i][1]);
     `endif
         dbg_print(Commit, $format("Interrupt!"));
         epoch[i] <= epoch[i] + 1; // increase epoch
@@ -216,6 +220,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
 
                     // special handling for ECALL instruction - only required for logging
                     if (e == ECALL_M) begin
+                        int_in_process_r[inst_thread_id][0] <= True;
                         dbg_print(Commit, $format("Ecall!"));
                         `ifdef RVFI
                             // generate RVFI frame
@@ -328,7 +333,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
 
                 if (interrupt_allowed_constraint) dx_allow_int.send();
                 dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: interrupt_allowed_constraint ? truncate(tvec[i] >> 2) : instructions[i].next_pc});
-                $display("DX: ", fshow(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: interrupt_allowed_constraint ? truncate(tvec[i] >> 2) : instructions[i].next_pc}));
                 if (instructions[i].dexie_type matches tagged Register) dexie_reg_write[i].wset(DexieReg {pc: instructions[i].pc, destination: instructions[i].destination, data: instructions[i].result.Result});
             `endif
             end 
