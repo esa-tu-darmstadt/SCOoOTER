@@ -73,7 +73,7 @@ module mkExecCore(ExecCoreIFC);
     let issue <- mkIssue();
 
     // create speculative register file
-    RegFileEvoIFC regfile_evo <- mkRegFileEvo();
+    RegFileEvoIFC regfile_evo <- (valueOf(ROB_BANK_DEPTH) == 1 && valueOf(ISSUEWIDTH) == 1 ? mkRegFileEvo_dummy() : mkRegFileEvo());
 
     // instantiate all functional units
     Vector#(NUM_ALU, FunctionalUnitIFC) alus <- replicateM(mkArith());

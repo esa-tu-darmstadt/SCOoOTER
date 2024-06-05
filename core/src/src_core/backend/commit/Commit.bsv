@@ -47,7 +47,7 @@ module mkCommit(CommitIFC) provisos(
 `endif
 
 // buffer register writes
-FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- mkPipelineFIFO();
+FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- (valueOf(ROB_BANK_DEPTH) == 1 && valueOf(ISSUEWIDTH) == 1 ? mkBypassFIFO() : mkPipelineFIFO());
 
 // those counters are used to track prediction performance
 `ifdef EVA_BR

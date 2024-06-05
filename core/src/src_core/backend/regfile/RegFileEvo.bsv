@@ -167,5 +167,45 @@ module mkRegFileEvo(RegFileEvoIFC);
     endinterface
 endmodule
 
+
+`ifdef SYNTH_SEPARATE
+    (* synthesize *)
+`endif
+module mkRegFileEvo_dummy(RegFileEvoIFC);
+    // wire to transport read data from request to response
+    Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
+
+    // server/client for reading
+    interface Server read_registers;
+    
+        interface Put request;
+            method Action put(Vector#(TMul#(2, ISSUEWIDTH), RegRead) req);
+                Vector#(TMul#(2, ISSUEWIDTH), EvoResponse) response;
+
+                for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
+                    let reg_addr = req[i].addr;
+                    // if we store a value, return it, otherwise return a Tag.
+                    // if we have neither, return None
+                    response[i] = (reg_addr == 0 ? tagged Value 0 : tagged None);
+                end
+
+                register_responses_w <= response;
+            endmethod
+        endinterface
+
+        interface Get response;
+            method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) get();
+                actionvalue
+                    // broadcast returned result
+                    return register_responses_w;
+                endactionvalue
+            endmethod
+        endinterface
+    
+    endinterface
+
+endmodule
+
+
 endpackage
 

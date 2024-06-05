@@ -65,7 +65,7 @@ typedef 1 MUL_DIV_STRATEGY;
 
 // CSR and Mem units are always one
 typedef 1 NUM_ALU;
-typedef 0 NUM_MULDIV;
+typedef 1 NUM_MULDIV;
 typedef 1 NUM_BR;
 
 // Regfile as Latches
@@ -81,9 +81,9 @@ typedef 1 RS_DEPTH_MULDIV;
 typedef 1 RS_DEPTH_BR;
 
 // bus buffering
-typedef 1 RS_LATCH_BUS;
-typedef 1 DECODE_LATCH_OUTPUT;
-typedef 1 ROB_LATCH_OUTPUT;
+typedef 0 RS_LATCH_BUS;
+typedef 0 DECODE_LATCH_OUTPUT;
+typedef 0 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
 
 // add more stages
