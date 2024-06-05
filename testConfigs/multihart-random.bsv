@@ -41,7 +41,7 @@ typedef 2 RS_DEPTH_BR;
 
 // bus buffering
 typedef 1 DECODE_LATCH_OUTPUT;
-typedef 1 ROB_LATCH_OUTPUT;
+typedef 0 ROB_LATCH_OUTPUT;
 typedef 0 RESBUS_ADDED_DELAY;
 
 // add more stages
