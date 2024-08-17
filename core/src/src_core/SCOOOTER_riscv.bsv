@@ -46,7 +46,6 @@ module mkSCOOOTER_riscv(Top);
     endrule
     rule connect_rob_issue; // connect ROB feedback to ec
         ec.rob_free(be.rob_free());
-        ec.rob_current_idx(be.current_idx());
         ec.rob_current_tail_idx(be.current_tail_idx());
     endrule
     rule connect_rob_issue2; // forward ROB reservations to BE

@@ -297,7 +297,7 @@ run_corev_simple:
   script:
     - yum install -y dtc python3 python3-pip libXft
     - pushd tools/core-v-verif/bin
-    - pip3 install install -r requirements.txt
+    - pip3 install -r requirements.txt
     - popd
     - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
     - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor
@@ -317,7 +317,7 @@ run_corev_medium:
   script:
     - yum install -y dtc python3 python3-pip libXft
     - pushd tools/core-v-verif/bin
-    - pip3 install install -r requirements.txt
+    - pip3 install -r requirements.txt
     - popd
     - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
     - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor
@@ -337,7 +337,7 @@ run_corev_high:
   script:
     - yum install -y dtc python3 python3-pip libXft
     - pushd tools/core-v-verif/bin
-    - pip3 install install -r requirements.txt
+    - pip3 install -r requirements.txt
     - popd
     - export PATH="/opt/cad/mentor/2020-21/RHELx86/QUESTA-CORE-PRIME_2020.4/questasim/bin:${PATH}"
     - export MGLS_LICENSE_FILE=/opt/cad/keys/mentor

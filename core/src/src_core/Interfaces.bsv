@@ -40,6 +40,10 @@ interface DaveIFC;
         method UInt#(XLEN) wrong_pred_j;
     `endif
 
+    `ifdef DEXIE
+        interface Vector#(NUM_CPU, DExIEIfc) dexie;
+    `endif
+
 endinterface
 
 // Toplevel interface to external world
@@ -62,6 +66,10 @@ interface Top;
         method UInt#(XLEN) wrong_pred_br;
         method UInt#(XLEN) correct_pred_j;
         method UInt#(XLEN) wrong_pred_j;
+    `endif
+
+    `ifdef DEXIE
+        interface DExIEIfc dexie;
     `endif
 endinterface
 
@@ -100,14 +108,14 @@ interface DecodeIFC;
     // insert instructions here
     method Put#(FetchResponse) instructions;
     //output
-    interface GetSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface GetSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
     //flush
     method Action flush();
 endinterface
 
 interface IssueIFC;
     //instruction input
-    interface PutSC#(DecodeResponse, UInt#(TLog#(TAdd#(ISSUEWIDTH, 1)))) decoded_inst;
+    interface PutSC#(DecodeResponse, Bit#(ISSUEWIDTH)) decoded_inst;
 
     //connection to regfile_evo
     interface Client#(Vector#(TMul#(2, ISSUEWIDTH), RegRead), Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) read_registers;
@@ -115,9 +123,7 @@ interface IssueIFC;
 
     (* always_ready, always_enabled *)
     method Action rob_free(UInt#(TLog#(TAdd#(ROBDEPTH,1))) free);
-    (* always_ready, always_enabled *)
-    method Action rob_current_idx(UInt#(TLog#(ROBDEPTH)) idx);
-    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), MIMO::LUInt#(ISSUEWIDTH)) get_reservation();
+    method Tuple2#(Vector#(ISSUEWIDTH, RobEntry), Bit#(ISSUEWIDTH)) get_reservation();
 
     method Action rs_ready(Vector#(NUM_RS, Bool) rdy);
     method Action rs_type(Vector#(NUM_RS, ExecUnitTag) in);
@@ -162,21 +168,30 @@ interface MemoryUnitIFC;
     method Action store_queue_empty(Bool b);
     method Action store_queue_full(Bool b);
     interface Get#(MemWr) write;
+
+    `ifdef DEXIE
+        method Maybe#(DexieMem) dexie_memw;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
+    `endif
 endinterface
 
 interface RobIFC;
     method UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) available;
     method UInt#(TLog#(TAdd#(ROBDEPTH,1))) free;
     (* always_enabled, always_ready *)
-    method UInt#(TLog#(ROBDEPTH)) current_idx;
-    (* always_enabled, always_ready *)
     method UInt#(TLog#(ROBDEPTH)) current_tail_idx;
 
     (* always_enabled, always_ready *)
-    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, UInt#(TLog#(TAdd#(1, ISSUEWIDTH))) num);
+    method Action reserve(Vector#(ISSUEWIDTH, RobEntry) data, Bit#(ISSUEWIDTH) mask);
     method ActionValue#(Vector#(ISSUEWIDTH, RobEntry)) get();
 
     method Action result_bus(Vector#(NUM_FU, Maybe#(Result)) res_bus);
+
+    `ifdef DEXIE
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
+    `endif
 endinterface
 
 interface CommitIFC;
@@ -199,6 +214,12 @@ interface CommitIFC;
     `ifdef RVFI
         (* always_ready,always_enabled *)
         method Vector#(ISSUEWIDTH, RVFIBus) rvfi_out;
+    `endif
+
+    `ifdef DEXIE
+        interface DExIETraceIfc dexie;
+        (* always_ready, always_enabled *)
+        method Action dexie_stall(Bool stall);
     `endif
 endinterface
 
@@ -247,6 +268,29 @@ interface CsrFileIFC;
     method Vector#(NUM_THREADS, Bit#(3)) ext_interrupt_mask();
     (* always_ready, always_enabled *)
     method Action hart_id(Bit#(TLog#(TMul#(NUM_CPU, NUM_THREADS))) in);
+endinterface
+
+interface DExIETraceIfc;
+
+    (*always_ready, always_enabled*)
+    method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
+    (*always_ready, always_enabled*)
+    method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
+    (*always_ready, always_enabled*)
+    method Maybe#(DexieMem) memw;
+endinterface
+
+interface DExIEIfc;
+
+    (*always_ready, always_enabled*)
+    method Vector#(ISSUEWIDTH, Maybe#(DexieCF)) cf;
+    (*always_ready, always_enabled*)
+    method Vector#(ISSUEWIDTH, Maybe#(DexieReg)) regw;
+    (*always_ready, always_enabled*)
+    method Maybe#(DexieMem) memw;
+
+    (*always_ready, always_enabled*)
+    method Action stall_signals(Bool control, Bool store);
 endinterface
 
 endpackage

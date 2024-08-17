@@ -47,7 +47,7 @@ module mkCommit(CommitIFC) provisos(
 `endif
 
 // buffer register writes
-FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- mkPipelineFIFO();
+FIFO#(Vector#(ISSUEWIDTH, Maybe#(RegWrite))) out_buffer <- (valueOf(ROB_BANK_DEPTH) == 1 && valueOf(ISSUEWIDTH) == 1 ? mkBypassFIFO() : mkPipelineFIFO());
 
 // those counters are used to track prediction performance
 `ifdef EVA_BR
@@ -93,9 +93,15 @@ function Maybe#(TrainPrediction) rob_entry_to_train(RobEntry re);
     return out;
 endfunction
 
+PulseWire dx_allow_int <- mkPulseWire();
 // per HART: redirect if an internal exception occurs
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
-    rule redirect_on_no_interrupt (int_in[i] == 0 || int_in_process_r[i][1]); // no external interrupt or currently handled int
+    rule redirect_on_no_interrupt
+    `ifdef DEXIE
+        (!dx_allow_int);
+    `else
+        (int_in[i] == 0 || int_in_process_r[i][1]); // no external interrupt or currently handled int
+    `endif
         if(redirect_pc_w_exc[i].wget() matches tagged Valid .v) begin // if an interrupt redirtection address is available
             epoch[i] <= epoch[i] + 1; // increment epoch
             redirect_pc_w_out[i].wset(v); // send redirection to frontend
@@ -125,7 +131,13 @@ endfunction
 `endif
 
 for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) // per thread
-    rule redirect_on_interrupt (int_in[i] != 0 && !int_in_process_r[i][1]); // no interrupt in progress and incoming interrupt signal set
+    rule redirect_on_interrupt 
+    `ifdef DEXIE
+        (dx_allow_int); // no interrupt in progress and incoming interrupt signal set
+    `else
+        (int_in[i] != 0 && !int_in_process_r[i][1]);
+    `endif
+        dbg_print(Commit, $format("Interrupt!"));
         epoch[i] <= epoch[i] + 1; // increase epoch
         int_in_process_r[i][1] <= True; // interrupt handler in progress
         redirect_pc_w_out[i].wset(tuple2(truncateLSB(tvec[i]), tpl_2(next_pc_r[i][1]))); // redirect frontend
@@ -208,6 +220,8 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
 
                     // special handling for ECALL instruction - only required for logging
                     if (e == ECALL_M) begin
+                        int_in_process_r[inst_thread_id][0] <= True;
+                        dbg_print(Commit, $format("Ecall!"));
                         `ifdef RVFI
                             // generate RVFI frame
                             RVFIBus rvfi_i = unpack(0);
@@ -227,10 +241,7 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                             count_insts[instructions[i].thread_id][i] <= count_insts[instructions[i].thread_id][i]+1;
                         `endif
 
-                        // generate DEXIE trace
-                        `ifdef DEXIE
-                            dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: instructions[i].next_pc});
-                        `endif
+
                     end
 
                 end else // not an exception and valid instruction
@@ -239,9 +250,10 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                 // handle returns
                 if(instructions[i].result matches tagged Result .r &&& 
                     instructions[i].ret) begin
-                    instructions[i].next_pc = truncateLSB(trap_return_w[inst_thread_id]);
-                    instructions[i].pred_pc = ~truncateLSB(trap_return_w[inst_thread_id]); // force redirect, pred and next pc are guaranteed to be different
+                    instructions[i].next_pc = truncateLSB(trap_return_w[inst_thread_id]+1);
+                    instructions[i].pred_pc = ~truncateLSB(trap_return_w[inst_thread_id]+1); // force redirect, pred and next pc are guaranteed to be different
                     int_in_process_r[inst_thread_id][0] <= False; // end interrupt handling
+                    dbg_print(Commit, $format("Return!"));
                 end
 
                 // write registers
@@ -276,13 +288,6 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                         $fdisplay(out_log, "%d COMMIT %x %d", clk_ctr, {instructions[i].pc, 2'b00}, instructions[i].epoch);
                         $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, instructions[i].log_id, 0, "X");
                         $fdisplay(out_log_ko, "%d R %d %d %d", clk_ctr, instructions[i].log_id, instructions[i].log_id, 0);
-                    `endif
-
-                    // write DExIE trace
-                    `ifdef DEXIE
-                        if (instructions[i].dexie_type matches tagged Control) dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: instructions[i].next_pc});
-                        else if (instructions[i].ret) dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: instructions[i].next_pc});
-                        else if (instructions[i].dexie_type matches tagged Register &&& instructions[i].destination != 0) dexie_reg_write[i].wset(DexieReg {pc: instructions[i].pc, destination: instructions[i].destination, data: r});
                     `endif
 
                     // handle control flow logging for correct prediction
@@ -320,6 +325,16 @@ method Action consume_instructions(Vector#(ISSUEWIDTH, RobEntry) instructions, U
                     next_pc_local[inst_thread_id] = tuple2(instructions[i].next_pc, instructions[i].ras);
 
                 end
+            // write DExIE trace
+            `ifdef DEXIE
+                Bool interrupt_allowed_constraint1 = instructions[i].dexie_type matches tagged Memory &&& int_in[i] != 0 &&& (!int_in_process_r[i][0]) ? True : False;
+                Bool interrupt_allowed_constraint2 = instructions[i].dexie_type matches tagged Register &&& int_in[i] != 0 &&& (!int_in_process_r[i][0]) ? True : False;
+                Bool interrupt_allowed_constraint = interrupt_allowed_constraint1 || interrupt_allowed_constraint2;
+
+                if (interrupt_allowed_constraint) dx_allow_int.send();
+                dexie_control_flow[i].wset(DexieCF {pc: instructions[i].pc, instruction: instructions[i].dexie_iword, next_pc: interrupt_allowed_constraint ? truncate(tvec[i] >> 2) : instructions[i].next_pc});
+                if (instructions[i].dexie_type matches tagged Register) dexie_reg_write[i].wset(DexieReg {pc: instructions[i].pc, destination: instructions[i].destination, data: instructions[i].result.Result});
+            `endif
             end 
             // log flushed instructions for pipeline log
             `ifdef LOG_PIPELINE

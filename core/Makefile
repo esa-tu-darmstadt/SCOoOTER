@@ -56,7 +56,9 @@ else
 		EXTRA_FLAGS+= -D SOC
 endif
 ifeq ($(IP),1)
-EXTRA_FLAGS+= -verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" " -D BSV_NO_INITIAL_BLOCKS
+EXTRA_FLAGS+= -lift -aggressive-conditions -opt-undetermined-vals -verilog-filter "sed -i \"/\/\/ synopsys translate_off/,/\/\/ synopsys translate_on/d\" " -D BSV_NO_INITIAL_BLOCKS
+else
+EXTRA_FLAGS+= -parallel-sim-link 48
 endif
 
 

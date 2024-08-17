@@ -40,7 +40,7 @@ typedef enum {
 } DbgTag deriving(Eq, FShow);
 
 // List of currently allowed prints
-List#(DbgTag) current_tags = list(PLIC);
+List#(DbgTag) current_tags = list(Commit);
 
 //  Function for printing text with a yellow label
 function Action dbg_print(DbgTag tag, Fmt text);

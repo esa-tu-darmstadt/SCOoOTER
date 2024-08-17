@@ -267,7 +267,7 @@ typedef union tagged { // resulting value or exception
 // type transported via result bus
 typedef struct {
     UInt#(TLog#(ROBDEPTH)) tag; // identifies producer instruction
-    Maybe#(Bit#(XLEN)) new_pc; // if the control flow was redirected
+    Maybe#(Bit#(PCLEN)) new_pc; // if the control flow was redirected
     ResultOrExcept result;
 
     `ifdef RVFI
@@ -292,11 +292,7 @@ typedef union tagged {
 typedef struct {
     Bit#(PCLEN) pc; // addr of the instruction
     RADDR destination; // destination register
-    union tagged { // result (or tag identifying producing instruction)
-        UInt#(TLog#(ROBDEPTH)) Tag;
-        Bit#(XLEN) Result;
-        ExceptionType Except;
-    } result;
+    ResultOrExcept result;
     // next real pc and predicted one
     Bit#(PCLEN) next_pc;
     Bit#(PCLEN) pred_pc;
@@ -366,7 +362,7 @@ typedef struct {
 
 typedef struct {
     Vector#(ISSUEWIDTH, RegReservation) reservations;
-    UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
+    Bit#(ISSUEWIDTH) mask;
 } RegReservations deriving(Bits, FShow);
 
 // read response from evo regfile
@@ -399,8 +395,8 @@ typedef struct {
 
 // output from decode stage
 typedef struct {
-    UInt#(TLog#(TAdd#(ISSUEWIDTH,1))) count;
     Vector#(ISSUEWIDTH, Instruction) instructions;
+    Bit#(ISSUEWIDTH) instruction_valid;
 } DecodeResponse deriving(Bits, FShow);
 
 // training info for predictors

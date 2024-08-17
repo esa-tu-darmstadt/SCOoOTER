@@ -345,17 +345,17 @@ module mkDecode(DecodeIFC);
     // select correct MIMO
     // the pipelined mimo schedules deq() prior to first() and enq() - therefore a circular dependency occurs if the output is not buffered
     // therefore the normal esamimo is used instead if no bufering is enabled, which schedules {first, enq} > deq
-    MIMO#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkESAMIMO_pipeline() : mkESAMIMO());
-    Reg#(DecodeResponse) buffer_output <- (valueOf(DECODE_LATCH_OUTPUT) == 1 ? mkReg(DecodeResponse {count: 0, instructions: ?}) : mkBypassWire());
+    IWinIfc#(IFUINST, ISSUEWIDTH, INST_WINDOW, Instruction) decoded_inst_m <- mkESAMIMO_banks();
+    Reg#(DecodeResponse) buffer_output <- mkBypassWire();
 
     // get data from instruction MIMO and store it for returning to next stage
     (* fire_when_enabled,no_implicit_conditions *)
     rule read_from_buffer;
         let inst_vec = decoded_inst_m.first(); // get inst
         // calculate amount
-        MIMO::LUInt#(ISSUEWIDTH) amount_loc = truncate(min(decoded_inst_m.count(), fromInteger(valueOf(ISSUEWIDTH))));
+        Bit#(ISSUEWIDTH) valids = decoded_inst_m.deqReadyMask();
         // write response to out buffer
-        buffer_output <= DecodeResponse {count: amount_loc, instructions: inst_vec};
+        buffer_output <= DecodeResponse {instruction_valid: valids, instructions: inst_vec};
     endrule
 
     // input from fetch stage
@@ -382,12 +382,11 @@ module mkDecode(DecodeIFC);
         method DecodeResponse first;
             return buffer_output;
         endmethod
-        method Action deq(MIMO::LUInt#(ISSUEWIDTH) amount) = decoded_inst_m.deq(amount);
+        method Action deq(Bit#(ISSUEWIDTH) mask) = decoded_inst_m.deqByMask(mask);
     endinterface
 
     // clearing the buffer if a pipeline flush is requested
     method Action flush();
-        decoded_inst_m.clear();
     endmethod  
     
 endmodule
