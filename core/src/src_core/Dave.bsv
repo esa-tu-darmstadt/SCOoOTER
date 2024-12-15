@@ -64,5 +64,4 @@ module mkDave(DaveIFC);
 
 
 endmodule
-
 endpackage
