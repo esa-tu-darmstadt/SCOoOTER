@@ -21,6 +21,36 @@ interface MemMappedIFC#(numeric type addrwidth);
     interface Server#(Tuple4#(UInt#(addrwidth), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Bit#(TAdd#(TLog#(NUM_CPU), 1))) mem_w;
 endinterface
 
+interface DaveAXIWrapper;
+    (* prefix="m_axi_imem" *)
+    interface AXI4_Lite_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST)) imem_r;
+    (* prefix="m_axi_imem" *)
+    interface AXI4_Lite_Master_Wr_Fab#(XLEN, TMul#(XLEN, IFUINST)) imem_w;
+
+    (* prefix="m_axi_dmem" *)
+    interface AXI4_Lite_Master_Rd_Fab#(XLEN, XLEN) dmem_r;
+    (* prefix="m_axi_dmem" *)
+    interface AXI4_Lite_Master_Wr_Fab#(XLEN, XLEN) dmem_w;
+
+    (* always_ready, always_enabled *)
+    method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
+    (* always_ready, always_enabled *)
+    method Action timer_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
+    (* always_ready, always_enabled *)
+    method Action ext_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
+
+    `ifdef EVA_BR
+        method UInt#(XLEN) correct_pred_br;
+        method UInt#(XLEN) wrong_pred_br;
+        method UInt#(XLEN) correct_pred_j;
+        method UInt#(XLEN) wrong_pred_j;
+    `endif
+
+    `ifdef DEXIE
+        interface Vector#(NUM_CPU, DExIEIfc) dexie;
+    `endif
+endinterface : DaveAXIWrapper
+
 interface DaveIFC;
     interface Client#(Tuple2#(UInt#(XLEN), Bit#(TLog#(NUM_CPU))), Tuple2#(Bit#(TMul#(XLEN, IFUINST)), Bit#(TLog#(NUM_CPU)))) imem_r;
     interface Client#(Tuple2#(UInt#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1))), Tuple2#(Bit#(XLEN), Bit#(TAdd#(TLog#(NUM_CPU), 1)))) dmem_r;

@@ -14,6 +14,10 @@ ifeq ($(SOC), 1)
 	TESTBENCH_FILE=src/src_soc/SocTop.bsv
 endif
 
+# Sizes for internal memory map if needed
+TAPASCO_BRAM_SIZE ?= 0x20000
+TAPASCO_BRAM_SIZE_BSV := $(shell echo $(TAPASCO_BRAM_SIZE) | sed -r "s/0x/'h/g")
+
 # Initialize
 -include .bsv_tools
 ifndef BSV_TOOLS
@@ -35,16 +39,16 @@ RVFI?=0
 TOHOST?=0
 
 # Add subdirectories
-EXTRA_BSV_LIBS += $(shell find $(PWD)/src/* -type d -printf '%p ')
+EXTRA_BSV_LIBS += $(shell find $(CURDIR)/src/* -type d -printf '%p ')
 
 PROJECT_NAME=SCOOOTER_riscv
 
 ifeq ($(RUN_TEST),)
 RUN_TEST=TestsMainTest
 endif
-
 # Default flags
-EXTRA_FLAGS= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
+EXTRA_FLAGS= -D "TAPASCO_BRAM_SIZE=$(TAPASCO_BRAM_SIZE_BSV)"
+EXTRA_FLAGS+= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
 EXTRA_FLAGS+= -show-schedule -D "BSV_TIMESCALE=1ns/1ps"
 EXTRA_FLAGS+= -D $(TB) +RTS -K1G -RTS -D BSV_ASYNC_RESET -D TOHOST=$(TOHOST)
 
@@ -110,8 +114,8 @@ CXX_NO_OPT := 1
 # CONSTRAINT_FILES += "$(PWD)/constraints/custom.xdc,LATE"
 
 # Do not change: Load libraries such as BlueAXI or BlueLib
-ifneq ("$(wildcard $(PWD)/libraries/*/*.mk)", "")
-include $(PWD)/libraries/*/*.mk
+ifneq ("$(wildcard $(CURDIR)/libraries/*/*.mk)", "")
+include $(CURDIR)/libraries/*/*.mk
 endif
 
 # Do not change: Include base makefile

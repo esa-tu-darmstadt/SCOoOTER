@@ -25,6 +25,9 @@ before_script:
   - git submodule sync
   - git rm core/libraries/BlueSRAM -f
   - git submodule update --init --recursive
+  - pushd /opt/bsvtools/
+  - git pull
+  - popd
 
 deps:
   stage: deps
