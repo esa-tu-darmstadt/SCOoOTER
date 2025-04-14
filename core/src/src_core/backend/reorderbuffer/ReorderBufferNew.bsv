@@ -59,6 +59,19 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
         Reg#(UInt#(XLEN)) mem_addr_r <- mkRegU;
     `endif
 
+    `ifdef LOG_PIPELINE
+        Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
+        rule count_clk; clk_ctr <= clk_ctr + 1; endrule
+        Reg#(File) out_log <- mkRegU();
+        Reg#(File) out_log_ko <- mkRegU();
+        rule open if (clk_ctr == 0);
+            File out_log_l <- $fopen("scoooter.log", "a");
+            out_log <= out_log_l;
+            File out_log_kol <- $fopen("konata.log", "a");
+            out_log_ko <= out_log_kol;
+        endrule
+    `endif
+
     // status flags
     Reg#(Bool) occupied_r[2] <- mkCReg(2, False);
     Reg#(Bool) ready_r[2] <- mkCReg(2, False);
@@ -92,7 +105,7 @@ module mkReorderBufferRow#(Integer base_id, Integer id_inc, Integer pos)(RobRowI
 
             // write info for pipeline viewer
             `ifdef LOG_PIPELINE
-                $fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, entry_r.pc, i, entry_r.epoch);
+                //$fdisplay(out_log, "%d COMPLETE %x %d %d", clk_ctr, entry_r.pc, i, entry_r.epoch);
                 $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, entry_r.log_id, 0, "E");
             `endif
         end

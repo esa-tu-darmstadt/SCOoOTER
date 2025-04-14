@@ -369,7 +369,7 @@ module mkDecode(DecodeIFC);
             // pipeline log writing
             `ifdef LOG_PIPELINE
                 for(Integer i = 0; i < valueOf(IFUINST); i=i+1) if(fromInteger(i) < inst_from_decode.count) begin
-                    $fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
+                    //$fdisplay(out_log, "%d DECODE %x ", clk_ctr, decoded_vec[i].pc, fshow(decoded_vec[i].opc), " ", fshow(decoded_vec[i].funct), " ", fshow(decoded_vec[i].rd), " ", fshow(decoded_vec[i].rs1 matches tagged Raddr .r ? fshow(r) : decoded_vec[i].rs1 matches tagged Operand .r ? fshow("xx") : fshow("IM")), " ", fshow(decoded_vec[i].rs2 matches tagged Raddr .r ? fshow(r) : fshow("IM")), " ", decoded_vec[i].epoch);
                     $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, decoded_vec[i].log_id, 0, "D");
                     $fdisplay(out_log_ko, "%d L %d %d %x DASM(%x)", clk_ctr, decoded_vec[i].log_id, 0, inst_from_decode.instructions[i].pc, inst_from_decode.instructions[i].instruction);
                 end
