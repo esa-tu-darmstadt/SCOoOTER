@@ -1,7 +1,6 @@
 package SoC_Mem;
 
 import SoC_Config::*;
-import Config::*;
 import FIFO::*;
 import SpecialFIFOs::*;
 import Vector::*;
@@ -18,9 +17,10 @@ import EFSRAM::*;
 import BRAMCore::*;
 import OpenRAMIfc::*;
 import WrapBRAMAsOpenRAM::*;
+import Config::*;
 
-interface MemMapIfc#(numeric type words_per_line);
-        interface BRAM1PortBE#(Bit#(XLEN), Bit#(TMul#(words_per_line, XLEN)), TMul#(words_per_line, 4)) access;
+interface MemMapIfc;
+        interface BRAM1PortBE#(Bit#(XLEN), Bit#(XLEN), 4) access;
 
 
         // SPI signals
@@ -54,43 +54,32 @@ interface MemMapIfc#(numeric type words_per_line);
     endinterface
 
     // DMEM BRAM controller
-    module mkMEMMap#(Bool dmem) (MemMapIfc#(words_per_line)) provisos (
+    module mkMEMMap#(Bool dmem) (MemMapIfc) provisos (
         Div#(SIZE_DMEM, 4, bram_word_num_dmem_t),
         Log#(macro_size_word_t, macro_addr_w_t),
-        Mul#(macro_size_word_t, 4, MACRO_SIZE),
-        Log#(words_per_line, bit_shift_addr),
-        Mul#(words_per_line, XLEN, bus_width),
-        Mul#(words_per_line, 4, ena_width),
-        Add#(a__, 32, bus_width)
+        Mul#(macro_size_word_t, 4, MACRO_SIZE)
     );
         `ifdef EFSRAM
-            Vector#(words_per_line, OpenRAMIfc#(0, 0, 1, 10, 32, 4)) brams <- replicateM(mkEFSRAM(True));
+            OpenRAMIfc#(0, 0, 1, 10, 32, 4) bram <- mkEFSRAM(True);
         `else
             BRAM_Configure cfg_i = defaultValue;
             cfg_i.allowWriteResponseBypass = False;
             cfg_i.latency = 2;
-            Vector#(words_per_line, BRAM1PortBE#(Bit#(macro_addr_w_t), Bit#(XLEN), 4)) brams_i <- replicateM(mkBRAM1ServerBE(cfg_i));
-            Vector#(words_per_line, OpenRAMIfc#(0, 0, 1, macro_addr_w_t, 32, 4)) brams <- mapM(mkOpenRamBRAMByteEnSP, brams_i)
+            BRAM1PortBE#(Bit#(macro_addr_w_t), Bit#(XLEN), 4) bram_i <- mkBRAM1ServerBE(cfg_i);
+            OpenRAMIfc#(0, 0, 1, macro_addr_w_t, 32, 4) bram <- mkOpenRamBRAMByteEnSP(bram_i);
         `endif
 
-        FIFO#(Bit#(bus_width)) response_out_f <- mkPipelineFIFO();
+        FIFO#(Bit#(XLEN)) response_out_f <- mkPipelineFIFO();
         PulseWire inhibit_b <- mkPulseWire();
         FIFO#(Bool) rq_type <- mkSizedFIFO(1);
         
         rule get_sram_response if (rq_type.first());
             rq_type.deq();
-
-            Vector#(words_per_line, Bit#(XLEN)) rd_data;
-
-            for(Integer i = 0; i < valueOf(words_per_line); i=i+1) begin
-                let r <- brams[i].rw[0].response();
-                rd_data[i] = r;
-            end
-
-            response_out_f.enq(truncate(pack(rd_data)));
+            let r <- bram.rw[0].response();
+            response_out_f.enq(truncate(r));
         endrule
 
-        Reg#(Bit#(bus_width)) resp_rd <- mkRegU;
+        Reg#(Bit#(XLEN)) resp_rd <- mkRegU;
         rule get_sram_w_response if (!rq_type.first());
             rq_type.deq();
             response_out_f.enq(resp_rd);
@@ -128,17 +117,12 @@ interface MemMapIfc#(numeric type words_per_line);
 
         // universal map for IMEM and DMEM
         // returns true if request handled
-        function ActionValue#(Bool) handle_request_universal(BRAMRequestBE#(Bit#(XLEN), Bit#(bus_width), ena_width) r);
+        function ActionValue#(Bool) handle_request_universal(BRAMRequestBE#(Bit#(XLEN), Bit#(XLEN), 4) r);
             actionvalue
                 Bool ret = True;
                 if (decodeAddressRange(r.address << 2, 0, fromInteger(valueOf(MACRO_SIZE)))) begin // directly after SPI memory
                     rq_type.enq(r.writeen == 0);
-
-                    Vector#(words_per_line, Bit#(XLEN)) rd_data = unpack(r.datain);
-                    Vector#(words_per_line, Bit#(4))    rd_ena  = unpack(r.writeen);
-
-                    for(Integer i = 0; i < valueOf(words_per_line); i=i+1)
-                        brams[i].rw[0].request(truncate(r.address>>valueOf(bit_shift_addr)), extend(rd_data[i]), rd_ena[i], r.writeen!=0);
+                    bram.rw[0].request(truncate(r.address), extend(r.datain), r.writeen, r.writeen!=0);
                 end
 
                 // Signal unhandled request
@@ -150,7 +134,7 @@ interface MemMapIfc#(numeric type words_per_line);
             endactionvalue
         endfunction
 
-        function Action handle_request_dmem(BRAMRequestBE#(Bit#(XLEN), Bit#(bus_width), ena_width) r);
+        function Action handle_request_dmem(BRAMRequestBE#(Bit#(XLEN), Bit#(XLEN), 4) r);
             action
                 // universal map
                 Bool handled <- handle_request_universal(r);
@@ -192,7 +176,7 @@ interface MemMapIfc#(numeric type words_per_line);
             endaction
         endfunction
 
-        function Action handle_request_imem(BRAMRequestBE#(Bit#(XLEN), Bit#(bus_width), ena_width) r);
+        function Action handle_request_imem(BRAMRequestBE#(Bit#(XLEN), Bit#(XLEN), 4) r);
             action
                 Bool handled = True;
 
@@ -212,14 +196,14 @@ interface MemMapIfc#(numeric type words_per_line);
             interface BRAMServerBE portA;
 
                 interface Put request;
-                    method Action put(BRAMRequestBE#(Bit#(XLEN), Bit#(bus_width), ena_width) r);
+                    method Action put(BRAMRequestBE#(Bit#(XLEN), Bit#(XLEN), 4) r);
                         if (dmem) handle_request_dmem(r);
                         else      handle_request_imem(r);
                     endmethod
                 endinterface
 
                 interface Get response;
-                    method ActionValue#(Bit#(bus_width)) get();
+                    method ActionValue#(Bit#(XLEN)) get();
                         response_out_f.deq();
                         return response_out_f.first();
                     endmethod

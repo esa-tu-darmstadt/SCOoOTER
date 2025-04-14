@@ -90,9 +90,9 @@ package SoC_Base;
         **/
 
         // initiate memory map
-        MemMapIfc#(1) imem <- mkMEMMap(False);
+        MemMapIfc imem <- mkMEMMap(False);
         BRAM1PortBE#(Bit#(32), Bit#(32), 4) ibram = imem.access;
-        MemMapIfc#(1) dmem <- mkMEMMap(True);
+        MemMapIfc dmem <- mkMEMMap(True);
         BRAM1PortBE#(Bit#(32), Bit#(32), 4) dbram = dmem.access;
 
         rule stallAndInterruptTieOff;

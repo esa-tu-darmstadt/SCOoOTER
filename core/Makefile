@@ -14,6 +14,13 @@ ifeq ($(SOC), 1)
 	TESTBENCH_FILE=src/src_soc/SocTop.bsv
 endif
 
+ifeq ($(CARAVEL), 1)
+	TOP_MODULE=mkScoooterCaravel
+	TESTBENCH_MODULE=mkScoooterCaravel
+	MAIN_MODULE=src_openlane/SoC_WB
+	TESTBENCH_FILE=src/src_openlane/SoC_WB.bsv
+endif
+
 # Sizes for internal memory map if needed
 TAPASCO_BRAM_SIZE ?= 0x20000
 TAPASCO_BRAM_SIZE_BSV := $(shell echo $(TAPASCO_BRAM_SIZE) | sed -r "s/0x/'h/g")
@@ -83,6 +90,9 @@ ifeq ($(RVFI),1)
 endif
 ifeq ($(DEXIE),1)
 	EXTRA_FLAGS+=-D DEXIE
+endif
+ifeq ($(EFSRAM),1)
+	EXTRA_FLAGS+=-D EFSRAM
 endif
 
 $(shell cp src/BVI/*.v build/verilog)
