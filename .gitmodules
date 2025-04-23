@@ -24,4 +24,4 @@
 	url = git@gitlab.esa.informatik.tu-darmstadt.de:asic/bluesram.git
 [submodule "tools/openlane_asic/caravelscoooterdexie"]
 	path = tools/openlane_asic/caravelscoooterdexie
-	url = git@gitlab.esa.informatik.tu-darmstadt.de:risc-v/SHMoDaCo/caravelscoooterdexie.git
+	url = ../SHMoDaCo/caravelscoooterdexie.git
