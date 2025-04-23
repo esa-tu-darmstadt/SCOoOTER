@@ -11,7 +11,6 @@ package TestsMulti;
     import BlueLibTests :: *;
     import Assertions :: *;
     import Types::*;
-    import BuildList::*;
     import TestFunctions::*;
 
     // struct to store info about test
@@ -213,7 +212,7 @@ package TestsMulti;
         Reg#(Int#(32)) pass <- mkReg(0);
         Reg#(Int#(32)) fail <- mkReg(0);
         Reg#(Int#(32)) hang <- mkReg(0);
-        // one bool per test to signify if it is running
+        // one bool per test to signify if it is still running
         List#(Reg#(Bool)) notFinished <- List::replicateM(testAmount, mkReg(True));
 
         // launch all tests
