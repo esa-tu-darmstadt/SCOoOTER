@@ -1,5 +1,12 @@
 package SPICore;
 
+/*
+
+This module allows to connect an external MRAM memory chip via SPI.
+This has been used for tapeout but is not meant for educational use.
+
+*/
+
 import ClientServer::*;
 import GetPut::*;
 import Vector::*;

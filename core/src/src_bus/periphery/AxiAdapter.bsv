@@ -6,6 +6,8 @@ package AxiAdapter;
 AxiAdapter adapts from the custom memory bus to AXI4 full.
 IDs are passed through via the AXI4 bus.
 
+Uses BlueAXIs AXI implementation.
+
 
 */
 
@@ -18,26 +20,30 @@ import ClientServer::*;
 
 interface AxiAdapterIFC#(numeric type aw);
     // internal memory iface
+    // get requests from CPU side
     interface MemMappedIFC#(aw) memory_bus;
     // AXI interfaces
+    // pass requests on to external devices
+    // look at the AXI4 specification for a detailed explaination of the AXI4 Bus
     interface AXI4_Master_Rd_Fab#(aw, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) rd;
     interface AXI4_Master_Wr_Fab#(aw, XLEN, TAdd#(TLog#(NUM_CPU), 1), 0) wr;
 endinterface
 
 module mkAxiAdapter(AxiAdapterIFC#(aw)) provisos (
     Log#(NUM_CPU, cpu_idx_t),         // id width to track CPUs
+                                      // we take the LOG of the CPU amount to get a bit width with one state per CPU
     Add#(1, cpu_idx_t, amo_cpu_idx_t) // add a bit to CPU id to encode AMOs or normal request
 );
 
-    // AXI4 instances
+    // AXI4 instances - BlueAXI
     AXI4_Master_Rd#(aw, XLEN, amo_cpu_idx_t, 0) rd_inst <- mkAXI4_Master_Rd(1, 1, False);
     AXI4_Master_Wr#(aw, XLEN, amo_cpu_idx_t, 0) wr_inst <- mkAXI4_Master_Wr(1, 1, 1, False);
 
-    // provide axi on toplevel interface
+    // connect the BlueAXI instances to the interface of this module
     interface AXI4_Master_Rd_Fab rd = rd_inst.fab;
     interface AXI4_Master_Wr_Fab wr = wr_inst.fab;
 
-    // register read implementation
+    // read implementation - forward read requests to AXI
     interface MemMappedIFC memory_bus;
         interface Server mem_r;
             interface Put request;
@@ -58,7 +64,7 @@ module mkAxiAdapter(AxiAdapterIFC#(aw)) provisos (
             endinterface
         endinterface
 
-        // writing registers
+        // write implementation - forward write requests to AXI
         interface Server mem_w;
             interface Put request;
                 method Action put(Tuple4#(UInt#(aw), Bit#(XLEN), Bit#(4), Bit#(TAdd#(TLog#(NUM_CPU), 1))) req);

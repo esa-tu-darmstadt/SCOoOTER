@@ -21,6 +21,14 @@ ifeq ($(CARAVEL), 1)
 	TESTBENCH_FILE=src/src_openlane/SoC_WB.bsv
 endif
 
+ifeq ($(CARAVEL_SIM), 1)
+	TOP_MODULE=mkSoC
+	TESTBENCH_MODULE=mkTestSoC
+	MAIN_MODULE=src_openlane/SoC_AXI
+	TESTBENCH_FILE=src/src_openlane/TestSoC_AXI.bsv
+	TB=CUSTOM_TB
+endif
+
 # Sizes for internal memory map if needed
 TAPASCO_BRAM_SIZE ?= 0x20000
 TAPASCO_BRAM_SIZE_BSV := $(shell echo $(TAPASCO_BRAM_SIZE) | sed -r "s/0x/'h/g")
@@ -54,7 +62,7 @@ ifeq ($(RUN_TEST),)
 RUN_TEST=TestsMainTest
 endif
 # Default flags
-EXTRA_FLAGS= -D "TAPASCO_BRAM_SIZE=$(TAPASCO_BRAM_SIZE_BSV)"
+#EXTRA_FLAGS= -D "TAPASCO_BRAM_SIZE=$(TAPASCO_BRAM_SIZE_BSV)"
 EXTRA_FLAGS+= -D "RUN_TEST=$(RUN_TEST)" -D "TESTNAME=mk$(RUN_TEST)" -steps-max-intervals 5000000
 EXTRA_FLAGS+= -show-schedule -D "BSV_TIMESCALE=1ns/1ps"
 EXTRA_FLAGS+= -D $(TB) +RTS -K1G -RTS -D BSV_ASYNC_RESET -D TOHOST=$(TOHOST)

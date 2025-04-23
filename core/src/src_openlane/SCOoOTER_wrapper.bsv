@@ -1,6 +1,4 @@
 package SCOoOTER_wrapper;
-
-    //From Scoooter
     import Dave::*;
     import Interfaces::*;
 
@@ -12,14 +10,22 @@ package SCOoOTER_wrapper;
     import SpecialFIFOs::*;
     import Vector::*;
 
-    import SoC_Types::*;
     import Inst_Types::*;
 
+    /*
+    
+    This is a wrapper around SCOoOTER to simplify the interface for ASIC integration.
+    
+    */
+
     interface WrappedCPUIfc;
+        // instruction and data memory interfaces
+        // currently, ASIC synthesis is only possible with 32 bit bus widths, so only single-issue
         interface Client#(UInt#(32), Bit#(32)) imem_r;
         interface Client#(UInt#(32), Bit#(32)) dmem_r;
         interface Client#(Tuple3#(UInt#(32), Bit#(32), Bit#(4)), Bit#(0)) dmem_w;
 
+        // interrupt signals
         (* always_ready, always_enabled *)
         method Action interrupts(Bool sw, Bool timer, Bool ext);
     endinterface
@@ -29,7 +35,8 @@ package SCOoOTER_wrapper;
         // instantiate scoooter
         DaveIFC dave <- mkDave();
 
-        // stateful elements for rdwr tags
+        // stateful elements for rdwr bus IDs
+        // which must be returned with the response
         FIFO#(Bit#(1)) inflight_r_ids_mem <- mkSizedFIFO(1);
         FIFO#(Bit#(1)) inflight_w_ids_mem <- mkSizedFIFO(1);
 

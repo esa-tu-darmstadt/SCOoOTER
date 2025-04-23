@@ -4,8 +4,7 @@ package SoC_Base;
     import GetPut::*;
     import ClientServer::*;
     import BlueAXI :: *;
-    //import Wishbone::*;
-    import Memory::*; // wishbone memory request and response
+    import Memory::*;
     import DefaultValue::*;
     import SoC_Config::*;
     import FIFO::*;
@@ -17,64 +16,35 @@ package SoC_Base;
     import Vector::*;
     import RegFile::*;
     import Config::*;
-
     import SoC_Mem::*;
-
     import SCOoOTER_wrapper::*;
 
+    /*
+    
+    Base Caravel design. Connects SCOoOTER with the memories and the external bus system of Caravel.
+    From the external bus, Caravel can write the instruction and data memory and start the processor.
 
-    import SoC_Types::*;
+    */
 
-    typedef enum {IMEM, DMEM, DEXIE_R, DEXIE_W, DEXIE_CTRL_R, DEXIE_CTRL_W, DUMMY} MemRouting deriving(Bits, Eq, FShow);
-    typedef enum {MEM, DXCTL, DX} AccType deriving(Bits, FShow, Eq);
+    // type to tag external requests with their destination
+    typedef enum {IMEM, DMEM, DUMMY} MemRouting deriving(Bits, Eq, FShow);
+    // Type to tag SCOoOTER DMEM requests with read or write
+    typedef enum {RD, WR} AccType deriving(Bits, FShow, Eq);
 
     interface SoCIntf_base;
+        // external bus from Caravel
+        // used to load program binaries
         interface Server#(MemoryRequest#(32,32), Bit#(32)) ext_bus;
 
-        (* always_ready *) method Bool irq();
+        // GPIO input and output
+        (* always_ready, always_enabled *)
+        method Action gpio_in(Bit#(32) d);
+        (* always_ready, always_enabled *)
+        method Bit#(32) gpio_out;
 
-        // SPI signals
-        (*always_ready, always_enabled*)
-        method Bit#(1) spi_clk_dmem;
-        (*always_ready, always_enabled*)
-        method Bit#(1) spi_mosi_dmem;
-        (*always_ready, always_enabled*)
-        method Action spi_miso_dmem(Bit#(1) i);
-        (*always_ready, always_enabled*)
-        method Bool spi_cs_dmem;
-
-        (*always_ready, always_enabled*)
-        method Bit#(1) spi_clk_imem;
-        (*always_ready, always_enabled*)
-        method Bit#(1) spi_mosi_imem;
-        (*always_ready, always_enabled*)
-        method Action spi_miso_imem(Bit#(1) i);
-        (*always_ready, always_enabled*)
-        method Bool spi_cs_imem;
-
-
-        // GPIOs
-        (*always_ready,always_enabled*)
-        method Bit#(NUM_GPIO_OUT) gpio_out;
-        (*always_ready,always_enabled*)
-        method Action gpio_in(Bit#(NUM_GPIO_IN) in);
-
-        // vex_irq
+        // IRQ from SCOoOTER to Caravel
         (*always_ready, always_enabled*)
         method Bool irq_vex();
-
-        // Failsafes
-        (*always_ready,always_enabled*)
-        method Action fs_dexie_disable(Bool in);
-        (*always_ready,always_enabled*)
-        method Action fs_mgmt_disable(Bool in);
-        (*always_ready,always_enabled*)
-        method Action fs_boot_from_SPI(Bool in);
-        (*always_ready,always_enabled*)
-        method Action fs_stall_core(Bool in);
-
-        (*always_ready,always_enabled*)
-        method Action fs_int_core(Bool in);
     endinterface
     
     module mkSoC_Base(SoCIntf_base) provisos (
@@ -82,27 +52,29 @@ package SoC_Base;
         Div#(SIZE_DMEM, 4, bram_word_num_dmem_t)
     );
 
-        // Instantiate DExIE and Base Core
+        // Instantiate SCOoOTER
         let core <- mkSCOoOTERWrapped();
 
-        /**
-        * AXI
-        **/
-
-        // initiate memory map
+        // Create imem and dmem memories
+        // dmem also contains periphery (e.g. CLINT)
         MemMapIfc imem <- mkMEMMap(False);
         BRAM1PortBE#(Bit#(32), Bit#(32), 4) ibram = imem.access;
         MemMapIfc dmem <- mkMEMMap(True);
         BRAM1PortBE#(Bit#(32), Bit#(32), 4) dbram = dmem.access;
 
-        rule stallAndInterruptTieOff;
+        // connect timer interrupt
+        rule interruptTieOff;
             core.interrupts(False, dmem.irq_scoooter_timer(), False);
         endrule
 
-/*
-        * External access
-        */
-        // Define local Wishbone local addresses (MSBs already cut away)
+        // Prior to receiving a program binary, SCOoOTER must be stalled to avoid executing
+        // random noise from the memories
+        Reg#(Bool) rst_active <- mkReg(True);
+
+        // helper functions
+        // helps checking that an addess (with removed MSBs) is in a certain range
+        // MSBs must be removed since they are used to route memory accesses from Caravel to the correct component
+        // (in our case IMEM or DMEM)
         function Bool isImemAddrRange(Bit#(26) addr);
             return addr<fromInteger(valueOf(SIZE_IMEM));
         endfunction
@@ -111,113 +83,131 @@ package SoC_Base;
             return addr<fromInteger(valueOf(SIZE_DMEM));
         endfunction
 
-        /*
-        * Buffer external access
-        */
+
+        /**
+        * External Bus
+        **/
+        // Currently, the external bus can only write to the system since we only load binaries.
+        // Reading back the data is currently unsupportec.
+
+
+        // Create FIFOs to buffer external requests
         FIFO#(MemoryRequest#(32,32)) requests <- mkPipelineFIFO();
         FIFO#(Bit#(32)) responses <- mkPipelineFIFO();
 
+        // store which unit is handling the current request
+        // can be IMEM, DMEM or DUMMY
+        // DUMMY means, we respond although the request hit an empty memory map space
+        // this avoids a lockup of Caravel due to never receiving a response
         FIFO#(MemRouting) inflight_rq <- mkSizedFIFO(1);
 
-        // Return WB response
-        function Action retireWbRequest(Bit#(32) data, Bool send);
-            action
-                if (send) begin
-                    responses.enq(data);
-                end
-            endaction
-        endfunction
-
         /*
-        * IMEM Wishbone Access
+        * IMEM External Access
         */
-        FIFO#(Bool) inflightImemReadReq <- mkSizedFIFO(1);
 
+        // function to handle requests from Caravel to the IMEM
         function Action toImem(MemoryRequest#(32, 32) r, Bit#(26) addr_loc);
             action
                 // Filter local imem addresses
                 if (!isImemAddrRange(addr_loc)) begin
-                    // Send empty WB response, and deq request fifo
+                    // Send empty response if out of range
                     inflight_rq.enq(DUMMY);
                 end else begin
                     // Forward to imem
                     ibram.portA.request.put(BRAMRequestBE{writeen: signExtend(pack(r.write)), responseOnWrite: True, address: extend((addr_loc>>2)), datain: r.data});
+                    // store that we handle an IMEM request
                     inflight_rq.enq(IMEM);
-                    inflightImemReadReq.enq(False);
                 end
             endaction
         endfunction
 
-        rule imemWbResponse if (inflight_rq.first == IMEM && !inflightImemReadReq.first());
+        // respond to the external bus
+        // only fires if we are handling an imem write
+        rule imemResponse if (inflight_rq.first == IMEM);
+            // empty FIFOs
             inflight_rq.deq();
             let resp_data <- ibram.portA.response.get();
-            retireWbRequest(resp_data, True);
-            inflightImemReadReq.deq();
+            responses.enq(resp_data);
         endrule
 
 
         /*
-        * DMEM Wishbone Access
+        * DMEM External Access
         */
 
+        // function to handle requests from Caravel to the DMEM
         function Action toDmem(MemoryRequest#(32, 32) r, Bit#(26) addr_loc);
             action
                 // Filter local addresses
                 if (!isDmemAddrRange(addr_loc)) begin
-                    // Send empty WB response, and deq request fifo
+                    // Send empty response, and deq request fifo
                     inflight_rq.enq(DUMMY);
                 end else begin
-                    // Forward to imem
+                    // Forward to dmem
                     dbram.portA.request.put(BRAMRequestBE{writeen: 'hF, responseOnWrite: False, address: (extend(addr_loc)>>2), datain: r.data});
                     inflight_rq.enq(DMEM);
                 end
             endaction
         endfunction
 
+
+        // response for DMEM writes
         rule dmemReadResponse if (inflight_rq.first() == DMEM);
             inflight_rq.deq();
             let resp_data <- dbram.portA.response.get();
-            retireWbRequest(resp_data, True);
+            responses.enq(resp_data);
         endrule
 
+        // dummy response for erroneous accesses
         rule dmemDummyResponse if (inflight_rq.first() == DUMMY);
             inflight_rq.deq();
-            retireWbRequest(0, True);
+            // recognizable value for errors
+            responses.enq('hdeadbeef);
         endrule
 
         /*
-        * Wishbone Router
-        * - Forward wishbone requests to the appropriate memory.
+        * Request Router
+        * - Forward requests to the appropriate memory.
         * - Handle only one request in flight at a time to keep order of responses simple.
         * - Use 2 bits [27:26] to select target.
         */
-        Reg#(Bool) rst_active <- mkReg(True);
 
         rule wishboneRouter;
+            // get request from FIFO and dissect it into routing part and address of the component
             let r = requests.first();
             requests.deq();
             Bit#(2) msbs = r.address[27:26];
             Bit#(26) addr_loc = r.address[25:0];
 
-            // writes into any DExIE region trigger core to run
-            if (r.address >= 32'h_30_00_00_00 + (wb_offset_dex_mem << 26)) rst_active <= False;
+            // writes into special region triggers core to run
+            if (r.address == fromInteger(valueOf(WB_OFFSET_START)) << 26) rst_active <= False;
 
+            // Use MSBs to determine destination of a request
             case (msbs)
                 fromInteger(valueOf(WB_OFFSET_IMEM)):        toImem(r, addr_loc);
                 fromInteger(valueOf(WB_OFFSET_DMEM)):        toDmem(r, addr_loc);
             endcase
         endrule
 
+
         /*
-        * Scoooter memory access
+        * SCOoOTER instruction access
         */
-        // imem read
+
+
+        // FETCH side
+        // IMEM requests
+        // Only allowed once program has been loaded
+        // So we effectively stall the processor until loading is complete
         rule ifuread if (!rst_active);
             let r <- core.imem_r.request.get();
             
+            // Move from byte addressing to word addressing
+            // since the memories are word-addressed 
             let addr = r;
             let idx = (pack(addr)>>2);
-            inflightImemReadReq.enq(True);
+
+
             ibram.portA.request.put(BRAMRequestBE{
                 writeen: 0,
                 responseOnWrite: True,
@@ -226,73 +216,78 @@ package SoC_Base;
             });
           endrule
 
-        // response
-        rule ifuresp;
-            inflightImemReadReq.deq();
+        // response to FETCH side of SCOoOTER
+        rule ifuresp if (!rst_active);
             let r <- ibram.portA.response.get();
             core.imem_r.response.put(r);
         endrule
 
-        // tag whether we excpect a response from dexie or memory next
-        FIFO#(AccType) next_rd_mem_not_dexie <- mkPipelineFIFO();
-        FIFO#(AccType) next_wr_mem_not_dexie <- mkPipelineFIFO();
+        /*
+         SCOoOTER data access
+        */
 
-        // dmem read
-        rule dfuread;
+        // tag whether we excpect a read or write response next
+        FIFO#(AccType) next_mem_access <- mkPipelineFIFO();
+
+
+        // LOAD/STORE read connection to data memory
+        rule dfuread if (!rst_active);
             let r <- core.dmem_r.request.get();
+            // convert to word address
+            // and remove offset
             let addr = r;
-            let idx = (addr-fromInteger(valueOf(BASE_DMEM)))>>2; // TODO: configure by addr map
-            begin
-                //$display("SCOOOOOTER read req");
-                dbram.portA.request.put(BRAMRequestBE{
-                    writeen: 0,
-                    responseOnWrite: True,
-                    address: pack(idx), //subtract the imem size offset, shift by 2 bit for word addressing
-                    datain: ?
-                });
-                next_rd_mem_not_dexie.enq(MEM);
-            end
+            let idx = (addr-fromInteger(valueOf(BASE_DMEM)))>>2;
+            dbram.portA.request.put(BRAMRequestBE{
+                writeen: 0,
+                responseOnWrite: True,
+                address: pack(idx),
+                datain: ?
+            });
+            next_mem_access.enq(RD);
         endrule
 
-        // response
-        rule dfuresp if (next_rd_mem_not_dexie.first() == MEM);
-            $display("rdval dmem");
-            next_rd_mem_not_dexie.deq();
+        // LOAD/STORE read response from data memory
+        rule dfuresp if (next_mem_access.first() == RD);
+            next_mem_access.deq();
             let r <- dbram.portA.response.get();
             core.dmem_r.response.put(r);
         endrule
 
-        // dmem write
+        // LOAD/STORE write connection to data memory
         (*descending_urgency="wishboneRouter, dfuwrite, ifuread"*)
         rule dfuwrite;
             let r <- core.dmem_w.request.get();
             let addr = tpl_1(r);
             let data = tpl_2(r);
             let strb = tpl_3(r);
+            // generate word address
+            // and remove offset
             let idx = (addr-fromInteger(valueOf(BASE_DMEM)))>>2;
-            begin
-                $display("dmem wr");
-                dbram.portA.request.put(BRAMRequestBE{
-                    writeen: strb,
-                    responseOnWrite: True,
-                    address: pack(idx),
-                    datain: data
-                });
-                next_wr_mem_not_dexie.enq(MEM);
-            end
+            dbram.portA.request.put(BRAMRequestBE{
+                writeen: strb,
+                responseOnWrite: True,
+                address: pack(idx),
+                datain: data
+            });
+            next_mem_access.enq(WR);
         endrule
 
-        // response
-        rule dfuwresp if (next_wr_mem_not_dexie.first() == MEM);
-            next_wr_mem_not_dexie.deq();
+        // LOAD/STORE write response from data memory
+        rule dfuwresp if (next_mem_access.first() == WR);
             let r <- dbram.portA.response.get();
             core.dmem_w.response.put(0);
+            next_mem_access.deq();
         endrule
 
         interface Server ext_bus;
             interface Put request = toPut(requests);
             interface Get response = toGet(responses);
         endinterface
+
+        // GPIOs and interrupt pins
+        interface gpio_in  = dmem.gpio_in;
+        interface gpio_out = dmem.gpio_out;
+        interface irq_vex  = dmem.irq_vex;
 
     endmodule
 

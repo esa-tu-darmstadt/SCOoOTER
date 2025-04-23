@@ -53,7 +53,6 @@ function Action dbg_print(DbgTag tag, Fmt text);
             if(elem(tag, current_tags))
                 $display($format("%c[33m",27), "[", fshow(tag), "]: ", $format("%c[0m",27), text);
         `endif
-        $fflush();
     endaction
 endfunction
 

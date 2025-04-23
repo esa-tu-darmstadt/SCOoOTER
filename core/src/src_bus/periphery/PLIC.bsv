@@ -30,13 +30,13 @@ interface PLICIFC#(numeric type num_periphery, numeric type prio_levels);
 endinterface
 
 module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
-    Log#(prio_levels, prio_width), // width required to store the levels requested by user
+    Log#(prio_levels, prio_width), // width required to store the priority levels requested by user
     Add#(num_periphery, 1, num_periphery_ext),
     Log#(num_periphery_ext, periphery_id_width), // register width needed to store periphery ID (0 is reserved, hence add 1)
     Log#(NUM_HARTS, hart_id_width), // id width to select HART
     Log#(NUM_CPU, cpu_idx_t), // id width to select CPU
     Add#(1, cpu_idx_t, amo_cpu_idx_t), // memory bus ID to differentiate CPU and AMO/normal access
-    // due to implementation limitations, those can be at most 32
+    // due to implementation limitations, widths can be at most 32 since we do not split them over multiple memory bus requests
     Add#(a__, prio_width, 32),
     Add#(b__, num_periphery_ext, 32),
     Add#(c__, periphery_id_width, 32),
@@ -52,7 +52,8 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
     // internal state
     Reg#(Bit#(num_periphery)) pending_reg <- mkReg(0);
 
-    // on claim, set bit to true, on release to false
+    // on interrupt claim, set bit to true, on release to false
+    // bit signaling whether a certain periphery device is currently being handled
     Vector#(num_periphery, Array#(Reg#(Bool))) periphery_currently_handled <- replicateM(mkCReg(2, False));
     Vector#(num_periphery, Reg#(Bool)) periphery_currently_handled_0 = Vector::map(disassemble_creg(0), periphery_currently_handled);
 
@@ -66,20 +67,25 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
     Wire#(Vector#(NUM_HARTS, Vector#(prio_levels, Bool))) threshold_mask <- mkBypassWire();
     Wire#(Vector#(num_periphery, Bool)) incoming_int_signals <- mkBypassWire();
 
-    // outgoing interrupt signals
+    // outgoing interrupt signals to HARTs
     Reg#(Vector#(NUM_HARTS, Bool)) int_flags <- mkReg(unpack(0));
 
 
-    // compute which interrupts should be triggered
     Reg#(Bit#(num_periphery)) pending_buffer_wire <- mkBypassWire();
+    // generate bit vector of pending interrupts
+    // an interupt is pending, if the periphery requested one, which has not been handled yet (stored inside pending_reg)
+    // or if the interrupt is currently requested (incoming)
+    // we must clear interrupts which are currently being handled to not trigger them again
+    rule calculate_pending_ints;
+        pending_buffer_wire <= unpack((pack(pending_reg) | pack(incoming_int_signals)) & ~pack(readVReg(periphery_currently_handled_0)));
+    endrule
+    // store currently pending interrupts for next cycle
     rule fwd_pending_wires;
         pending_reg <= pending_buffer_wire;
     endrule
+    // debugging info: print if pending IRQs changed
     rule debug_message_pending if (pending_buffer_wire != pending_reg);
         dbg_print(PLIC, $format("Pending changed: ", fshow(pending_buffer_wire)));
-    endrule
-    rule calculate_pending_ints;
-        pending_buffer_wire <= unpack((pack(pending_reg) | pack(incoming_int_signals)) & ~pack(readVReg(periphery_currently_handled_0)));
     endrule
 
 
@@ -99,7 +105,7 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
     endrule
 
 
-    // create a Vector per hart, which has a bit'for each priority level
+    // create a Vector per hart, which has a bit for each priority level
     // the bit is high, if for said hart, there is a pending interrupt at that level
     rule find_prio_levels_with_irq;
         Vector#(NUM_HARTS, Vector#(prio_levels, Bool)) local_prio_level_with_int = unpack(0);
@@ -138,7 +144,7 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
         periphery_with_highest_irq <= local_periphery_with_highest_irq;
     endrule
 
-    // from the previously created vector, select the first entry and provide it as one claim_id per hart
+    // from the previously created vector, select the first entry and provide it as the claim_id per hart
     rule select_max_interrupt;
         Vector#(NUM_HARTS, UInt#(periphery_id_width)) claim_id = unpack(0);
         for(Integer hart = 0; hart < valueOf(NUM_HARTS); hart=hart+1)
@@ -163,6 +169,7 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
     endrule
 
     // set interrupt bits for every hart
+    // check if any priority accepted by a certain hart is currently pending and if so, set the irq bit of that hart
     rule set_int_flags;
         Vector#(NUM_HARTS, Bool) local_int_flags = ?;
 
