@@ -21,7 +21,6 @@ import BuildVector::*;
     (* synthesize *)
 `endif
 module mkGskewed(PredIfc) provisos (
-    // TODO: this is ugly
     Add#(0, TExp#(BITS_PHT), entries_t),
     // create types for instruction amount tracking
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
@@ -67,6 +66,7 @@ module mkGskewed(PredIfc) provisos (
         end
     endrule
 
+    // train the predictor using the provided training data
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
     rule train_predictors;
         let in = trains.first();
@@ -93,7 +93,6 @@ module mkGskewed(PredIfc) provisos (
         
     endrule
     end
-
     rule deq_train;
         trains.deq();
     endrule

@@ -307,6 +307,7 @@ function Instruction decode(InstructionPredecode inst);
             , iword : inst.iword
         `endif
 
+        // Konata log id
         `ifdef LOG_PIPELINE
             , log_id: inst.log_id
         `endif

@@ -25,7 +25,7 @@ module mkCSRFile(CsrFileIFC) provisos (
     let ehrModal = (valueOf(REGCSR_LATCH_BASED) == 0 ? mkEhr : mkArianeEhr);
 
     // register implementations
-    // one port per issue slot and one extra port for updates from hw
+    // one port for software updates, one for hardware updates to the contents
     Vector#(NUM_THREADS, Ehr#(2, Bit#(XLEN))) mcause <- replicateM(ehrModal(0));
     Vector#(NUM_THREADS, Ehr#(2, Bit#(XLEN))) mie <- replicateM(ehrModal(0));
     Vector#(NUM_THREADS, Ehr#(2, Bit#(XLEN))) misa <- replicateM(ehrModal( { 2'h1, 'b1000100000001 } )); //upper two bits: 32 Bit XLEN, lower bits: ISA ext in alphabetic
@@ -89,7 +89,7 @@ module mkCSRFile(CsrFileIFC) provisos (
         endinterface
     endinterface
 
-    // write implementation - disambiguated by EHRs for multi-issue
+    // write implementation
     interface Put write;
         method Action put(CsrWrite request);
             let ehr_maybe = get_csr_wr(request.addr, request.thread_id);

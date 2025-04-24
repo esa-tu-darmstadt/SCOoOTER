@@ -20,7 +20,6 @@ import Ehr::*;
     (* synthesize *)
 `endif
 module mkGshare(PredIfc) provisos (
-    // TODO: this is ugly
     Add#(0, TExp#(BITS_PHT), entries_t),
     // create types for instruction amount tracking
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
@@ -59,6 +58,7 @@ module mkGshare(PredIfc) provisos (
         end
     endrule
 
+    // use training data to update predictor storage
     for(Integer i = 0; i < valueOf(ISSUEWIDTH); i=i+1) begin
     rule train_predictors;
         let in = trains.first();
@@ -74,7 +74,6 @@ module mkGshare(PredIfc) provisos (
             end
     endrule
     end
-
     rule deq_train;
         trains.deq();
     endrule

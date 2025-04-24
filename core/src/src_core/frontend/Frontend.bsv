@@ -48,7 +48,7 @@ module mkFrontend(FrontendIFC);
 
     // CONNECT UNITS
     
-    // pass instructions forward
+    // pass instructions from fetch to decode
     mkConnection(ifu.instructions, decode.instructions);
 
     // connect predictors to IFU
@@ -57,11 +57,13 @@ module mkFrontend(FrontendIFC);
     end
     mkConnection(ifu.predict_target, btb.predict);
 
+    // notify predictors of currently-predicted thread
+    // each thread has its own BHR
     rule propagate_thread_id;
         dir_pred.current_thread(ifu.current_thread());
     endrule
 
-    // connect outside training stimuli
+    // connect training stimuli from commit to the predictors
     interface Put train;
         method Action put(Vector#(ISSUEWIDTH, Maybe#(TrainPrediction)) in);
             btb.train.put(in);
@@ -77,7 +79,7 @@ module mkFrontend(FrontendIFC);
     // output from the frontend to the exec core
     interface GetSC decoded_inst = decode.decoded_inst;
 
-    // port to main mem
+    // port to instruction memory
     interface read_inst = ifu.read;
 endmodule
 

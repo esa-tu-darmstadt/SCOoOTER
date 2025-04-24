@@ -1,7 +1,7 @@
 package Smiths;
 
 /*
-  This is the simplest branch direction predictor.
+  This is the smith branch direction predictor.
 */
 
 import Interfaces::*;
@@ -19,7 +19,6 @@ import ClientServer::*;
     (* synthesize *)
 `endif
 module mkSmiths(PredIfc) provisos (
-    // For some reason, the compiler does not like this with a proviso
     Add#(0, TExp#(BITS_PHT), entries_t),
     // create instruction count tracking types
     Add#(1, ISSUEWIDTH, issuewidth_pad_t),
@@ -58,7 +57,6 @@ module mkSmiths(PredIfc) provisos (
         end
     endrule
     end
-
     rule predictor_deq;
         trains.deq();
     endrule
@@ -82,8 +80,6 @@ module mkSmiths(PredIfc) provisos (
             endinterface
         endinterface);
     end
-
-    
 
     interface predict_direction = pred_ifc;
     interface Put train = toPut(trains);

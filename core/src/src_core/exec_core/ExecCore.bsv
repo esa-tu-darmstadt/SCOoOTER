@@ -1,7 +1,7 @@
 package ExecCore;
 
 /*
-  This package connects all exec core components
+  This package connects the execution core
 */
 
 import Types::*;
@@ -163,6 +163,7 @@ module mkExecCore(ExecCoreIFC);
     mkConnection(issue.reserve_registers, regfile_evo.reserve_registers);
 
     // combine speculative register file info with arch regs
+    // i.e. if evo has no information, forward data from arch regs
     interface Client read_committed;
         interface Get request;
             method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), RegRead)) get();

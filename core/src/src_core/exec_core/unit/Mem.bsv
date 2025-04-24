@@ -111,6 +111,7 @@ function Bool is_speculative_region(UInt#(32) addr) = decodeAddressRange(addr, f
 
 // STORE HANDLING
 
+// tracing signals for DExIE
 `ifdef DEXIE
     RWire#(DexieMem) dexie_memw_local <- mkRWire();
     Wire#(Bool) dexie_stall_w <- mkBypassWire();
@@ -120,6 +121,7 @@ function Bool is_speculative_region(UInt#(32) addr) = decodeAddressRange(addr, f
 // single-cycle calculation of stores
 // real write occurs in storebuffer after successful commit
 rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r && (rob_head == in.first().tag || valueOf(ROBDEPTH) == 1) && in.first().epoch == epoch_r[in.first().thread_id]
+    // stall signals from DExIE
     `ifdef DEXIE
         && !dexie_stall_w
     `endif
@@ -157,7 +159,7 @@ rule calculate_store if (!store_queue_full_w && in.first().opc == STORE && !aq_r
 
     dbg_print(Mem, $format("instruction:  ", fshow(inst)));
     
-    // write a result to the result bus - it may make sense to merge this pipeline with the read one to avoid muxing of results
+    // write a result to the result bus
     let local_result = Result {result : ((check_misalign(truncate(pack(final_addr)), width)) ? tagged Except AMO_ST_MISALIGNED : tagged Result 0) , new_pc : tagged Invalid, tag : inst.tag 
         `ifdef RVFI 
             , mem_addr: final_addr

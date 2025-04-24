@@ -135,10 +135,12 @@ typedef struct {
 
     UInt#(TLog#(NUM_THREADS)) thread_id;
 
+    // save instruction word to announce it on RVFI
     `ifdef RVFI
         Bit#(XLEN) iword;
     `endif
 
+    // save a instruction ID for Konata logging
     `ifdef LOG_PIPELINE
         Bit#(XLEN) log_id;
     `endif
@@ -198,10 +200,12 @@ typedef struct {
     // multithreading
     UInt#(TLog#(NUM_THREADS)) thread_id;
 
+    // save instruction word to announce it on RVFI
     `ifdef RVFI
         Bit#(XLEN) iword;
     `endif
 
+    // save a instruction ID for Konata logging
     `ifdef LOG_PIPELINE
         Bit#(XLEN) log_id;
     `endif
@@ -237,10 +241,12 @@ typedef struct {
 
     Bit#(25) remaining_inst;
 
+    // save instruction word to announce it on RVFI
     `ifdef RVFI
         Bit#(XLEN) iword;
     `endif
 
+    // save a instruction ID for Konata logging
     `ifdef LOG_PIPELINE
         Bit#(XLEN) log_id;
     `endif
@@ -270,6 +276,7 @@ typedef struct {
     Maybe#(Bit#(PCLEN)) new_pc; // if the control flow was redirected
     ResultOrExcept result;
 
+    // save accesses to memory addresses for RVFI tracing
     `ifdef RVFI
         UInt#(XLEN) mem_addr;
     `endif
@@ -282,6 +289,7 @@ typedef struct {
     Bit#(XLEN) result;
 } ResultLoopback deriving(Bits, FShow);
 
+// control flow tracing for DExIE
 typedef union tagged {
     void Control;
     void Memory;
@@ -306,16 +314,19 @@ typedef struct {
     Bool ret; // instruction is branch return
     UInt#(TLog#(NUM_THREADS)) thread_id;
 
+    // additional information to announce over RVFI
     `ifdef RVFI
         Bit#(XLEN) iword;
         UInt#(XLEN) mem_addr;
         OpCode opc;
     `endif
 
+    // store a log id for Konata
     `ifdef LOG_PIPELINE
         Bit#(XLEN) log_id;
     `endif
 
+    // control flow integrity information for DExIE
     `ifdef DEXIE
         DexieInstType dexie_type;
         Bit#(XLEN) dexie_iword;
@@ -329,6 +340,7 @@ typedef struct {
     UInt#(TLog#(NUM_THREADS)) thread_id;
 } RegWrite deriving(Bits, FShow);
 
+// reads from a register
 typedef struct {
     RADDR addr;
     UInt#(TLog#(NUM_THREADS)) thread_id;
@@ -347,6 +359,7 @@ typedef struct {
     Bit#(XLEN) data;
 } CsrWriteResult deriving(Bits, FShow);
 
+// reads from a CSR
 typedef struct {
     Bit#(12) addr;
     UInt#(TLog#(NUM_THREADS)) thread_id;
@@ -359,7 +372,7 @@ typedef struct {
     UInt#(EPOCH_WIDTH) epoch;
     UInt#(TLog#(NUM_THREADS)) thread_id;
 } RegReservation deriving(Bits, FShow);
-
+// reserve multiple tags for multi-issue
 typedef struct {
     Vector#(ISSUEWIDTH, RegReservation) reservations;
     Bit#(ISSUEWIDTH) mask;
@@ -476,17 +489,7 @@ typedef struct {
     UInt#(TLog#(NUM_THREADS)) thread_id;
 } RVFIBus deriving(Bits, FShow);
 
-typedef struct {
-    Bit#(XLEN) mcause;
-    Bit#(XLEN) mie;
-    Bit#(XLEN) mtvec;
-    Bit#(XLEN) mepc;
-    Bit#(XLEN) mstatus;
-    Bit#(XLEN) mscratch;
-    Bit#(XLEN) mtval;
-    Bit#(XLEN) mhartid;
-} CSRBundle deriving(Bits);
-
+// control flow typed for the DExIE control flow integrity engine
 typedef struct {
     Bit#(PCLEN) pc;
     Bit#(XLEN) instruction;

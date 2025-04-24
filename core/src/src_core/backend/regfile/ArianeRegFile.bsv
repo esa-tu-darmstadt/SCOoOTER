@@ -5,21 +5,22 @@ import Vector::*;
 /*
 
 ArianeRegFile is a latch-based register file. It is based on the register file from the Ariane core.
+This module includes the verilog description via BVI.
 
 */
 
-// single write port
+// Interface foe a single write port
 interface ArianeRegWriteIfc#(type t_data);
     method Action request(Bit#(5) addr, t_data data);
 endinterface
 
-// read port
+// Interface for a single read port
 interface ArianeRegReadIfc#(type t_data);
      method Action request(Bit#(5) addr);
      method t_data response();
 endinterface
 
-// read and write ports (as well as entire contents for debugging purposes)
+// full interface with read and write ports (as well as entire contents for debugging purposes)
 interface ArianeRegFileIfc#(numeric type rd_ports, numeric type wr_ports, type t_data);
     interface Vector#(rd_ports, ArianeRegReadIfc#(t_data)) rd;
     interface Vector#(wr_ports, ArianeRegWriteIfc#(t_data)) wr;
@@ -27,7 +28,7 @@ interface ArianeRegFileIfc#(numeric type rd_ports, numeric type wr_ports, type t
 endinterface
 
 
-// wrapper for better usability - instantiates wrapped vlog module and fixes up interfaces
+// wrapper for better usability - instantiates wrapped vlog module and fixes up the interfaces
 module mkArianeRegFile (ArianeRegFileIfc#(rd_ports, wr_ports, t_data)) provisos (
     Bits#(t_data, datawidth) // stored data must be in Bits typeclass
 );
@@ -53,6 +54,7 @@ module mkArianeRegFile (ArianeRegFileIfc#(rd_ports, wr_ports, t_data)) provisos 
     endrule
 
     // create ported interface and separate ports
+    // READ:
     Vector#(rd_ports, ArianeRegReadIfc#(t_data)) read_ifc = ?;
     for(Integer i = 0; i < valueOf(rd_ports); i = i+1) begin
         read_ifc[i] = (interface ArianeRegReadIfc;
@@ -64,7 +66,7 @@ module mkArianeRegFile (ArianeRegFileIfc#(rd_ports, wr_ports, t_data)) provisos 
             endmethod
         endinterface);
     end
-
+    // WRITE:
     Vector#(wr_ports, ArianeRegWriteIfc#(t_data)) write_ifc = ?;
     for(Integer i = 0; i < valueOf(wr_ports); i = i+1) begin
         write_ifc[i] = (interface ArianeRegWriteIfc;

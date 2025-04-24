@@ -30,6 +30,7 @@ module mkAlwaysUntaken(PredIfc) provisos (
             interface Get response;
                 method ActionValue#(Prediction) get();
                     actionvalue
+                        // always return untaken and no history
                         return Prediction{pred: False, history: ?};
                     endactionvalue
                 endmethod

@@ -107,6 +107,9 @@ function Bool is_occupied(RSRowIfc r) = r.full;
 function Bool is_free(RSRowIfc r) = !r.full;
 function Bool is_ready(RSRowIfc r) = r.ready;
 
+// This module is a single RS entry
+// It holds an instruction and latches the operands from the result bus
+// It can be either full or empty
 module mkRSRow(RSRowIfc);
     Reg#(InstructionIssue) entry <- mkRegU;
     Array#(Reg#(Bool)) full_r <- mkCReg(2, False);
@@ -114,6 +117,7 @@ module mkRSRow(RSRowIfc);
     Array#(Reg#(Maybe#(Bit#(32)))) op2 <- mkCReg(2, tagged Invalid);
     Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- (valueOf(RS_LATCH_INPUT) == 1 ? mkRegU() : mkBypassWire());
 
+    // look through result bus and latch operands
     function Bool match_tag(UInt#(TLog#(ROBDEPTH)) tag, Maybe#(ResultLoopback) r) = isValid(r) && r.Valid.tag == tag;
     rule consume_result_bus;
         if (entry.rs1 matches tagged Tag .t) begin
@@ -131,7 +135,7 @@ module mkRSRow(RSRowIfc);
         end
     endrule
 
-    // use wires to allow for more dynamic scheduling of interface methods
+    // use wires to allow for dynamic scheduling of interface methods
     Wire#(Bool) full_w <- mkBypassWire();
     Wire#(Bool) ready_w <- mkBypassWire();
     rule bypass_ifc; full_w <= full_r[0]; ready_w <= full_r[0] && isValid(op1[0]) && isValid(op2[0]); endrule
@@ -163,12 +167,14 @@ module mkRSRow(RSRowIfc);
         e.rs2 = tagged Operand op2[0].Valid;
         return e;
     endmethod
+
+    // get the result bus
     method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
 endmodule
 
 
 
-
+// reservationStation which allows for instruction reordering
 module mkReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entries)) provisos (
     // create index and count types
     Add#(entries, 1, entries_pad_t),
@@ -180,6 +186,7 @@ module mkReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entr
     // create a buffer of Instructions
     Vector#(entries, RSRowIfc) rows <- replicateM(mkRSRow);
 
+    // enqueue of an instruction into the buffer
     FIFO#(InstructionIssue) inst_in_f <- mkPipelineFIFO();
     rule insert_inst if (valueOf(RS_LATCH_INPUT) == 1);
         Vector::find(is_free, rows).Valid.in(inst_in_f.first());
@@ -195,13 +202,14 @@ module mkReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entr
         inst_in_f.deq();
     endrule
 
-    // result bus
+    // result bus forwarding to the internal rows
     Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- valueOf(SPLIT_ISSUE_STAGE) == 1 ? mkRegU() : mkBypassWire();
     rule forward_results;
         for(Integer i = 0; i < valueOf(entries); i=i+1)
             rows[i].result_bus(result_bus_vec);
     endrule
 
+    // Konata logging
     `ifdef LOG_PIPELINE
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
@@ -215,10 +223,11 @@ module mkReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entr
         endrule
     `endif
 
-    // method to request an instruction
+    // method to retrieve an instruction if one is ready
     method ActionValue#(InstructionIssue) get if (Vector::any(is_ready, rows));
         let i <- Vector::find(is_ready, rows).Valid.out();
 
+        // Konata logging
         `ifdef LOG_PIPELINE
             $fdisplay(out_log, "%d DISPATCH %x %d %d", clk_ctr, i.pc, i.tag, i.epoch);
             $fdisplay(out_log_ko, "%d S %d %d %s", clk_ctr, i.log_id, 0, "S");
@@ -240,8 +249,9 @@ module mkReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entr
                 if (valueOf(RS_LATCH_INPUT) == 0) begin
                     Vector::find(is_free, rows).Valid.in(inst);
 
+                    // error handling
                     if(Vector::find(is_free, rows) matches tagged Invalid) begin
-                        $display("Trying to enqueue inro already full RS! Abort!");
+                        $display("Trying to enqueue into already full RS! Abort!");
                         $finish;
                     end
                 end else begin
@@ -250,13 +260,19 @@ module mkReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entr
                 dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
+        // signify that an instruction enqueue is possible / rs is not full
         method Bool can_insert;
+            // required number of free slots for insert from issue to be possible (if pipeline stages between issue and rs are added)
             Integer free_slots = fromInteger(valueOf(RS_LATCH_INPUT)) + fromInteger(valueOf(SPLIT_ISSUE_STAGE)) + 1;
+            // check if the required number of free slots is satisfied
             return free_slots == 1 ? Vector::any(is_free, rows) : (Vector::countIf(is_free, rows) >= fromInteger(free_slots));
         endmethod
     endinterface
 endmodule
 
+// reservationStation for state-modifying units that require instructions to be kept in order
+// e.g. CSR and Mem
+// works like a ring buffer, keeping the order of instructions intact
 module mkLinearReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC#(entries)) provisos (
     // create index and count types
     Add#(entries, 1, entries_pad_t),
@@ -265,12 +281,15 @@ module mkLinearReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC
     Add#(a__, 1, entries_log_t)
 );
 
+    // ring buffer head and tail pointer
     Reg#(UInt#(entries_idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(entries_idx_t)) tail_r <- mkReg(0);
 
     // create a buffer of Instructions
     Vector#(entries, RSRowIfc) rows <- replicateM(mkRSRow);
 
+    // insert instructions into the buffer
+    // upon insert, advance the head pointer
     FIFO#(InstructionIssue) inst_in_f <- mkPipelineFIFO();
     rule insert_inst if (valueOf(RS_LATCH_INPUT) == 1);
         rows[head_r].in(inst_in_f.first());
@@ -279,13 +298,14 @@ module mkLinearReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC
         inst_in_f.deq();
     endrule
 
-    // result bus
+    // connect the result bus to the rs rows
     Reg#(Vector#(NUM_FU, Maybe#(ResultLoopback))) result_bus_vec <- valueOf(SPLIT_ISSUE_STAGE) == 1 ? mkRegU() : mkBypassWire();
     rule forward_results;
         for(Integer i = 0; i < valueOf(entries); i=i+1)
             rows[i].result_bus(result_bus_vec);
     endrule
 
+    // Konata logging
     `ifdef LOG_PIPELINE
         Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
         rule count_clk; clk_ctr <= clk_ctr + 1; endrule
@@ -299,7 +319,8 @@ module mkLinearReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC
         endrule
     `endif
 
-    // method to request an instruction
+    // method to request a ready instruction
+    // dequeues from tail and advances the tail pointer
     method ActionValue#(InstructionIssue) get if (rows[tail_r].ready);
         let i <- rows[tail_r].out();
         Bit#(entries) dummy = 0;
@@ -313,13 +334,14 @@ module mkLinearReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC
         return i;
     endmethod
 
-    // return execution unit tag
+    // return the execution unit tag of this RS
+    // used by issue to find matching instructions
     method ExecUnitTag unit_type = eut;
 
     // input result bus
     method Action result_bus(Vector#(NUM_FU, Maybe#(ResultLoopback)) bus_in) = result_bus_vec._write(bus_in);
 
-    // insert instructions
+    // instruction input
     interface ReservationStationPutIFC in;
         interface Put instruction;
             method Action put(InstructionIssue inst);
@@ -333,6 +355,8 @@ module mkLinearReservationStation_simple#(ExecUnitTag eut)(ReservationStationIFC
                 dbg_print(RS, $format("got inst: ", fshow(inst)));
             endmethod
         endinterface
+        // signify if an instruction can be inserted
+        // depending on the configuration (added pipeline stages between issue and RS), we may nee to look ahead beyond the head pointer
         method Bool can_insert;
             Bit#(entries) dummy = 0;
             Integer advance_head = fromInteger(valueOf(RS_LATCH_INPUT)) + fromInteger(valueOf(SPLIT_ISSUE_STAGE));

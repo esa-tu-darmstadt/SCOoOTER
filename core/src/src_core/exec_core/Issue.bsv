@@ -1,7 +1,7 @@
 package Issue;
 
 /*
-  ISSUE distributes incoming instructions amidst the RS
+  ISSUE distributes incoming instructions amidst the RSs
   and requests space in the ROB. ISSUE also reads and
   writes speculative register tags and provides those tags
   or already generated operands to the instructions.
@@ -46,10 +46,13 @@ module mkIssue(IssueIFC) provisos(
     Max#(issuewidth_log_t, rs_count_log_t, issue_amount_t),
     Add#(__a, 1, issue_amount_t),
 
+    // the maximum issuable amount must be smaller or equal to
+    // the amount of RSs and the configured issuewidth
     Add#(__b, rs_count_log_t, issue_amount_t),
     Add#(__c, issuewidth_log_t, issue_amount_t)
 );
 
+// konata logging
 `ifdef LOG_PIPELINE
     Reg#(UInt#(XLEN)) clk_ctr <- mkReg(0);
     rule count_clk; clk_ctr <= clk_ctr + 1; endrule
@@ -161,7 +164,7 @@ endrule
 function Bool is_rdy_rs(ExecUnitTag eut, Tuple2#(ExecUnitTag, Bool) entry) = (eut == tpl_1(entry) && tpl_2(entry));
 
 // find out how many instructions can be issued
-// based on free RS, place in ROB, provided from window buffer
+// based on free RS, place in ROB, and availability in window buffer
 rule count_possible_issue;
 
     let instructions = inst_in;
@@ -218,9 +221,11 @@ function RobEntry map_to_rob_entry(Inst_Types::Instruction inst, UInt#(size_logi
             , iword: inst.iword,
               opc: inst.opc
         `endif
+        // id for Konata logging
         `ifdef LOG_PIPELINE
             , log_id: inst.log_id
         `endif
+        // information for he DExIE integrity engine
         `ifdef DEXIE
             , dexie_type: (case (inst.opc)
                 JAL, BRANCH, JALR, SYSTEM: tagged Control;
@@ -253,6 +258,7 @@ function InstructionIssue map_to_issued(Inst_Types::Instruction inst);
         `ifdef RVFI
             iword: inst.iword,
         `endif
+        // id for Konata log
         `ifdef LOG_PIPELINE
             log_id: inst.log_id,
         `endif
@@ -324,6 +330,7 @@ rule assemble_instructions;
     rs_ids_v <= needed_rs_idx_w;
 endrule
 
+// actually send issued instructions to RSs
 rule assemble_issue_bus;
     let instructions = instructions_for_rs;
     //then assemble issue bus
@@ -341,10 +348,10 @@ rule assemble_issue_bus;
         end
     end
 
-
     instructions_rs_v <= instructions_rs;
 endrule
 
+// advance the local ROB ID counter for instruction tagging
 rule advance_issue_idx if (valueOf(ROBDEPTH) != 1);
     Bit#(ROBDEPTH) dummy = 0;
     let num_issued = Vector::countElem(True, unpack(can_issue_mask));

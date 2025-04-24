@@ -39,7 +39,7 @@ typedef enum {
     PLIC
 } DbgTag deriving(Eq, FShow);
 
-// List of currently allowed prints
+// List of currently enabled prints
 List#(DbgTag) current_tags = list(Commit);
 
 //  Function for printing text with a yellow label

@@ -14,6 +14,8 @@ import GetPut::*;
 import ArianeRegFile::*;
 
 // LATCH-based implementation - smaller footprint
+// just re-wraps the imported verilog reg file in the correct interface
+// and instantiates one per thread
 
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
@@ -23,7 +25,7 @@ module mkRegFileAriane(RegFileIFC) provisos (
 );
 
     // stateful registers
-    // we do not need reg0, as this is hardwired to 0
+    // import verilog implementation
     Vector#(NUM_THREADS, ArianeRegFileIfc#(TMul#(2, ISSUEWIDTH), ISSUEWIDTH, Bit#(32))) regfile <- replicateM(mkArianeRegFile());
 
     // buffer for read requests
@@ -88,7 +90,7 @@ module mkRegFile(RegFileIFC) provisos (
 );
 
     // stateful registers
-    // we do not need reg0, as this is hardwired to 0
+    // we do not need reg0, as it is hardwired to 0 (see RISC-V specificaton)
     Vector#(NUM_THREADS, Vector#(31, Ehr#(issuewidth_pad_t, Bit#(XLEN)))) regs <- replicateM(replicateM(mkEhr(?)));
 
     // buffer for read requests
@@ -119,7 +121,7 @@ module mkRegFile(RegFileIFC) provisos (
             method Action put(Vector#(TMul#(2, ISSUEWIDTH), RegRead) req);
                 Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN)) response;
 
-                // gather result and buffer it
+                // gather read results and forward them to the read interface
                 for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
                     let reg_addr = req[i].addr;
                     let thread_id = req[i].thread_id;
@@ -130,10 +132,10 @@ module mkRegFile(RegFileIFC) provisos (
             endmethod
         endinterface
 
+        // return responses from the response wire
         interface Get response;
             method ActionValue#(Vector#(TMul#(2, ISSUEWIDTH), Bit#(XLEN))) get();
                 actionvalue
-                    // return results
                     return register_responses_w;
                 endactionvalue
             endmethod

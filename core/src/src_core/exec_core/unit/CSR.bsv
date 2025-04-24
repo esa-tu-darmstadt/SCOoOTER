@@ -10,8 +10,10 @@ package CSR;
 
   We therefore have a signal from ROB that tells
   us if a CSR instruction may perform.
+  I.e. the instruction will be executed if it is the next instruction
+  to be committed, because we can be sure that it is not speculative any more.
 
-  Interrupt returns also pass through here as
+  Interrupt returns (mret instructions) also pass through here as
   they share the system opcode.
 */
 

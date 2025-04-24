@@ -25,8 +25,8 @@ import TestFunctions::*;
     (* synthesize *)
 `endif
 module mkFetch(FetchIFC) provisos(
-        Mul#(XLEN, IFUINST, ifuwidth), //the width of the IFU axi must be as large as the size of a word times the issuewidth
-        Log#(NUM_THREADS, thread_id_t)
+        Mul#(XLEN, IFUINST, ifuwidth), // the width of the IFU axi must be as large as the size of a word times the issuewidth
+        Log#(NUM_THREADS, thread_id_t) // id width to differentiate between threads of a CPU
 );
 
     // open files for pipeline logging

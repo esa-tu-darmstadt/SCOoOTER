@@ -11,9 +11,9 @@ import Types::*;
 import Inst_Types::*;
 
 
-// interface just gets trace info
+// interface just gets the trace info
 interface RVFITraceIFC;
-method Action rvfi_in(Vector#(ISSUEWIDTH, RVFIBus) rvfi);
+    method Action rvfi_in(Vector#(ISSUEWIDTH, RVFIBus) rvfi);
 endinterface
 
 
@@ -26,6 +26,7 @@ module mkRVFITracer(RVFITraceIFC);
     Vector#(NUM_THREADS, Reg#(File)) out_log <- replicateM(mkRegU());
     
     // open log files for writing
+    // one log file per HART is generated
     Reg#(Bool) opened <- mkReg(False);
     rule open_files (!opened);
         opened <= True;
@@ -49,7 +50,8 @@ module mkRVFITracer(RVFITraceIFC);
             if(rvfi[i].valid) begin
                 Bit#(32) pc_long = zeroExtend(rvfi[i].pc_rdata);
                 let log = out_log[rvfi[i].thread_id]; 
-                //TODO: core numbers
+                // TODO: core numbers
+                // currently, only single-core is supported
                 $fwrite(log, "core   0: 0x%h (0x%h) DASM(%h)\n", pc_long, rvfi[i].insn, rvfi[i].insn);
 
                 // misc. inst info
@@ -74,8 +76,6 @@ module mkRVFITracer(RVFITraceIFC);
                     end
                 end
                 $fwrite(log, "\n");
-
-                // TODO: trace exceptions
             end
         end
 

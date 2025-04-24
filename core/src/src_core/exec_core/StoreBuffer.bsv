@@ -1,5 +1,11 @@
 package StoreBuffer;
 
+/*
+
+This is the store buffer. It holds pending store requests and enables forwarding of data from those pending stores.
+
+*/
+
 import FIFO::*;
 import FIFOF::*;
 import SpecialFIFOs::*;
@@ -13,15 +19,14 @@ import ClientServer::*;
 import GetPut::*;
 import Debug::*;
 
-// This is the internal storage
-// the real unit is written below
-
+// first, define a module as internal storage of the store buffer
 interface InternalStoreIFC#(numeric type entries);
-    method Action enq(MemWr data);
-    method Action deq();
-    method MemWr first();
-    method ActionValue#(Maybe#(MaskedWord)) forward(UInt#(XLEN) addr);
-    method Bool empty();
+    method Action enq(MemWr data); // add store request
+    method Action deq(); // dequeue store request for commit to memory
+    method MemWr first(); // peek at first write
+    method ActionValue#(Maybe#(MaskedWord)) forward(UInt#(XLEN) addr); // forwarding for successive loads
+    // state of the buffer
+    method Bool empty(); 
     method Bool full();
 endinterface
 
@@ -37,7 +42,7 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
 );
     // internal store
     Vector#(entries, Reg#(MemWr)) storage <- replicateM(mkRegU());
-    // pointers
+    // pointers - ringbuffer organization
     Reg#(UInt#(idx_t)) head_r <- mkReg(0);
     Reg#(UInt#(idx_t)) tail_r <- mkReg(0);
     // full flags
@@ -55,7 +60,6 @@ module mkInternalStore(InternalStoreIFC#(entries)) provisos (
     endrule
 
     // this limits us to pwr2 depths
-    // TODO: fix this
     function UInt#(idx_t) truncate_idx(UInt#(idx_t) a, UInt#(idx_t) b) = a + b;
 
     // enqueue store requests
@@ -92,7 +96,7 @@ endmodule
 
 
 // unit implementation
-
+// in addition to the internal storage module, the unit also stores in-flight requests to forward from them
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif

@@ -3,7 +3,7 @@ package RegFileEvo;
 /*
   This regfile tracks the SPECULATIVE register state.
 
-  The regfile stores Tags, if the value for this register is
+  The regfile stores ROB IDs, if the value for this register is
   still in calculation.
   If a value was produced, it stores this value.
   If a flush occured or we are just starting, the Regfile
@@ -42,7 +42,8 @@ module mkRegFileEvo(RegFileEvoIFC);
     // wire to transport read data from request to response
     Wire#(Vector#(TMul#(2, ISSUEWIDTH), EvoResponse)) register_responses_w <- mkWire();
 
-    //register storage
+    // register storage
+    // create latches or flipflops based on user settings
     Vector#(NUM_THREADS, Vector#(31, Ehr#(3, EvoEntry))) registers <- replicateM(replicateM(valueOf(REGEVO_LATCH_BASED) == 0 ? mkEhr(tagged Invalid): mkArianeEhr(tagged Invalid)));
     //derived Reg ifaces from CReg
     Vector#(NUM_THREADS, Vector#(31, Reg#(EvoEntry))) registers_port0 = Vector::map(compose(Vector::map, disassemble_ehr)(0), registers);
@@ -82,13 +83,13 @@ module mkRegFileEvo(RegFileEvoIFC);
         end
     endrule
 
-    // print the contents 
+    // print the contents for debugging purposes
     rule print_debug;
         for(Integer i = 0; i < 31; i=i+1)
             dbg_print(RegEvo, $format(i+1, ": ", fshow(registers_port1[0][i])));
     endrule
 
-    //inform about misprediction
+    // when a misprediction has occurred, drop all contents and increase the epoch
     method Action flush(Vector#(NUM_THREADS, Bool) flags);
         for(Integer i = 0; i < valueOf(NUM_THREADS); i=i+1) 
         if(flags[i]) begin
@@ -168,6 +169,8 @@ module mkRegFileEvo(RegFileEvoIFC);
 endmodule
 
 
+// DUMMY module to use when speculation is impossible
+// Currently, this is used when the ROB only has a single entry and hence no parallelism is possible
 `ifdef SYNTH_SEPARATE
     (* synthesize *)
 `endif
@@ -184,8 +187,7 @@ module mkRegFileEvo_dummy(RegFileEvoIFC);
 
                 for (Integer i = 0; i < valueOf(ISSUEWIDTH)*2; i=i+1) begin
                     let reg_addr = req[i].addr;
-                    // if we store a value, return it, otherwise return a Tag.
-                    // if we have neither, return None
+                    // always return none except for reg 0 which is always 0
                     response[i] = (reg_addr == 0 ? tagged Value 0 : tagged None);
                 end
 
