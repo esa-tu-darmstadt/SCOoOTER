@@ -1,4 +1,4 @@
-# Features and Options
+# Features and Configuration Options
 
 SCOoOTER supports the following features:
 

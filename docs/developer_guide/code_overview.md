@@ -1,4 +1,6 @@
-# Code overview
+
+# Code overview and Architectural details
+
 
 This file introduces the code structure of SCOoOTER. It is organized similarly to the source files of the repository. Implementation details and overall concepts are discussed here.
 
@@ -8,7 +10,7 @@ This section introduces important terms.
 
 - Epoch: Since SCOoOTER may speculate, we must be able to detect wrong-path instructions. Each instruction is tagged with an Epoch value and every unit which may be affected by flushes has an epoch register. When a flush is notified to a unit, it increments its epoch register. Hence all instructions on the redirected path will have a different epoch value. This architecture allows us to asynchronously notify units of flushes and still maintain correct execution.
 
-- Tag: To keep track of an instruction during execution, a tag is attached to it. The tag is derived from the occupied memory cell in the reorder buffer. The tag marks whichresult is meant for which rob entry.
+- Tag: To keep track of an instruction during execution, a tag is attached to it. The tag is derived from the occupied memory cell in the reorder buffer. The tag marks which result is meant for which rob entry.
 
 ## Architecture
 
@@ -16,13 +18,12 @@ SCOoOTER is a speculative, superscalar, multithreaded processor using a dynamic 
 
 The result bus announces instruction results. The mispredict/training bus is used by the backend to notify the frontend of mispredictions and training information for the predictor.
 
-![](../fig/scooter_arch.png)
+![](../fig/pipeline.png)
 
 
+We introduce the units by explaining the source code tree. Some complex units are shown with architectural figures. In those, PFIFO and BFIFO refer to BSV Pipeline and Bypass FIFOs.
 
-# Code walk
-
-We introduce the units by explaining the source code tree.
+For a deeper understanding of the employed concepts, please refer to the recommended literature in the introduction of this documentation.
 
 ## core
 
@@ -39,7 +40,7 @@ This folder contains the RTL code.
 
 ### libraries
 
-Libraries used in the project. For `BlueAXI`, `BlueLib` and `BlueSRAM` refer to the projects documentation.
+Libraries used in the project. For `BlueAXI`, `BlueLib` and `BlueSRAM` refer to the project's documentation.
 
 
 ### src
@@ -48,19 +49,18 @@ Libraries used in the project. For `BlueAXI`, `BlueLib` and `BlueSRAM` refer to 
 
 - `Debug.bsv` is the debug library of SCOoOTER. Debug statements are always tagged in the RTL core. The available tags as well as which tags are currently printed can be selected in this file.
 
-- `TestFunctions.bsv` contains helper functions used in multiple places. 
-
-- `BuildList.bsv` implements similar functionality for lists as BuildVector does for vectors.
-
-- `GetPutCustom.bsv` defines custom GetPut interfaces.
 
 #### src_bus
 
 Contains periphery components. `IDMemAdapter.bsv` instantiates the core and implements address decoding to forward requests and responses to the correct periphery components. Since responses from the periphery may arrive in any order, EHRs are used to establish a priority of result propagation.
 
-`BRamDmem.bsv` and `BRamImem.bsv` implement block memories for FPGA use as IMEM and DMEM.
+`BRamDmem.bsv` and `BRamImem.bsv` implement block memories for FPGA use as IMEM and DMEM. `MemoryDecoder` implements helper functions for memory address decoding.
 
-The Periphery folder contains periphery components. AXI adapters are self-explanatory. `CLINT` and `PLIC` implement the RISC-V interrupt infrastructure. RVController simulates the RVController from TaPaSCo-RISC-V.
+The `Periphery` folder contains periphery components. AXI adapters are self-explanatory. `CLINT` and `PLIC` implement the RISC-V interrupt infrastructure. `RVController` emulates the RVController from TaPaSCo-RISC-V.
+
+
+
+
 
 #### src_core
 
@@ -74,7 +74,27 @@ RTL code for the processor core.
 
 - `RVFITracer.bsv` is used to trace instruction execution for `Core-V-Verif`
 
+- `SCOOOTER_riscv.bsv` is the top-level module for a single processor. The module connects the frontend, execution core and backend. 
+
 - `InstructionArbiter.bsv`, `Dave.bsv` and `MemoryArbiter.bsv` implement the arbitration of memory access between multiple cores. Dave instantiates the two arbiters. The instruction arbiter only supports read requests while the memory arbiter supports reads, writes and atomics.
+
+- The `Primitives` folder contains generic modules, functions and reimplementations of StdLib components:
+
+    - `TestFunctions.bsv` contains helper functions used in multiple places. 
+
+    - `BuildList.bsv` implements similar functionality for lists as BuildVector does for vectors.
+
+    - `GetPutCustom.bsv` defines custom GetPut interfaces.
+
+    - `CWire.bsv` contains a CReg implementation, that does not preserve data between clock cycles.
+
+    - `ShiftBuffer.bsv` contains modules to delay data for a fixed number of cycles.
+
+    - `ESAMIMO.bsv` contains a BSV MIMO inplementation more suited towards our use-case.
+
+    - `Ehr.bsv` contains an alternative CReg implementation.
+
+    - `ArianeEhr.bsv` contains latch-based EHRs/CRegs based on the regfile of the Ariane processor.
 
 
 The memory arbitration logic enables connecting multiple processors to the same
@@ -102,7 +122,7 @@ the correct processor or the atomics logic. The instruction memory is arbitrated
 similarly but writing and atomics handling is omitted as the instruction memory
 is read-only.
 
-![](../fig/arbit.png)
+![](../fig/arbiter.png)
 
 ##### frontend
 
@@ -143,7 +163,7 @@ representing the instruction window is filled with said instructions. The buffer
 must be at least the size of the fetch width. The decode stage processes up to as
 many instructions per cycle as the fetch width.
 
-###### Predictors (direction)
+###### Predictors
 
 `Smiths`, `Gshare` and `Gskewed` are different algorithms to predict the direction of a branch. `AlwaysUntaken` is a dummy module to allow for disabling the predictors.
 
@@ -160,25 +180,23 @@ If a misprediction occurs, the BHR is restored to the state of the mispredicted 
 interfaces and are only enabled if the associated instruction is a branch as determined during predecoding in the fetch stage. To achieve consistency of the
 BHR, the direction prediction must be informed whether a target prediction has
 been found for any branch. If no target is available, the prediction falls back to
-predict the branch as untaken. The direction prediction is only used for condi-
-tional branch instructions (for the RISC-V ISA, those have the BRANCH opcode).
+predict the branch as untaken. The direction prediction is only used for conditional branch instructions (for the RISC-V ISA, those have the BRANCH opcode).
 All input and output ports are unbuffered as we require the prediction result in
 the same cycle as the prediction invocation. The predictor must provide an equal
-port number as the fetch width, such that any fetched instruction may be pre-
-dicted.
+port number as the fetch width, such that any fetched instruction may be predicted.
 
-##### exec_core
+`RAS` and `BTB` implement the target predictors. Both are quite simple modules and are documented in-code.
+
+##### exec_core (ExecCore.bsv)
 
 The execution core executes instructions and provides their results. Additionally,
 instruction reordering happens here. The execution core consists of multiple
-units. The issue stage distributes instructions to the Reservation Stations (RSs) re-
-quired by Tomasulo’s algorithm. Each RS is associated with one FU for result
+units. The issue stage distributes instructions to the Reservation Stations (RSs) required by Tomasulo’s algorithm. Each RS is associated with one FU for result
 calculation. Some FUs require further signaling, e.g. the memory and CSR units.
 The Reorder Buffer (ROB) brings all instructions back into program order to enable
-speculation. We first introduce the speculative register file as a means to store re-
-sults during speculation. Then the issue stage, RSs and FUs are introduced.
+speculation. We first introduce the speculative register file as a means to store results during speculation. Then the issue stage, RSs and FUs are introduced.
 
-###### speculative register file
+###### speculative register file (RegFileEvo.bsv)
 
 The speculative register file is part of the execution core and tracks results and
 instruction tags. The instruction tags are derived from the ROB. If a misprediction occurs, all conents of said register file are flushed. The internal state consists
@@ -187,32 +205,28 @@ instruction tag or as a value. Initially, the entire register file is tagged as 
 an instruction is issued, the destination register is tagged with the instruction tag
 and the tag is replaced with the value from the result bus as soon as it is produced.
 Reading the registers is implemented as a BSV Server interface. Holding the speculative results is
-necessary since we cannot speculatively overwrite data in the architectural reg-
-isters as the data must be restored upon misprediction. Tagging of registers is
-required such that the issue stage may keep track of which registers have a pend-
-ing write and correctly provide operands to later instructions.
+necessary since we cannot speculatively overwrite data in the architectural registers as the data must be restored upon misprediction. Tagging of registers is
+required such that the issue stage may keep track of which registers have a pending write and correctly provide operands to later instructions.
 
-###### issue stage
+###### issue stage (Issue.bsv)
 
 ![](../fig/issue.png)
 
-The issue stage distributes instructions to the correct RS and the ROB. It additionally has to check that those can accept the issued instructions. While providing instructions to the RSs, the issue stage reads the speculative register file and retrieves any results and instruction tags required
+The issue stage distributes instructions to the correct RS and the ROB. It additionally has to check that those can accept the issued instructions. While providing instructions to the RSs, the issue stage reads the speculative register file (1) and retrieves any results and instruction tags required
 for the currently issued bundle of instructions. We refer to the size of the said bundle as the issue width. The speculative destination registers are tagged by the
 issue stage with the now-issued instructions. The tag identifying an instruction is
 derived from its position in the ROB storage. The different blocks of the issue stage
-are separate BSV rules which are connected by wires. The dispatch amount logic
+are separate BSV rules which are connected by wires. The dispatch amount logic (2)
 calculates, based on free ROB slots, ready RSs and provided instructions from
 the decode stage, how many instructions will be issued. Register tags are calculated based on the ROB head pointer and the issued number of instructions and
-are written to the speculative register file. ROB entries are derived from the in-
-structions and placed in the ROB. The dependency resolution logic resolves register
-dependencies in a bundle of instructions that are issued simultaneously. If a reg-
-ister is written by an earlier instruction in the bundle and read by a later one, said
+are written to the speculative register file. ROB entries are derived from the instructions and placed in the ROB (3). The dependency resolution logic resolves register
+dependencies in a bundle of instructions that are issued simultaneously (4). If a register is written by an earlier instruction in the bundle and read by a later one, said
 logic sets the tag of the earlier instruction as the operand for the later one. The
 register reading logic reads data and tags from the register files. If the speculative register file does not contain any information, the issue stage must fall back to
-the architectural registers. The reconstruction logic combines all gathered information into instructions that are ready to issue. In essence, register numbers are
+the architectural registers. The reconstruction logic (5) combines all gathered information into instructions that are ready to issue. In essence, register numbers are
 replaced by data or tags here. The instructions are then distributed to the correct RS.
 
-###### reservation station
+###### reservation station (ReservationStation.bsv)
 
 ![](../fig/rs.png)
 
@@ -223,16 +237,24 @@ operands, it is dequeued and provided to the connected FU. Enqueue and dequeue o
 method that will never block as produced results are only valid during the cycle in which they are broadcast. Two RS implementations are provided. The BSV
 module mkReservationStation allows for full reordering while mkLinearReservationStation keeps instructions in order as is necessary for the load/
 store and CSR units. We provide options for the configuration of the RS depth per
-FU type.
+FU type. The depth refers to the number of slots and hence the number of instructions that fit into an RS.
 
-###### functional units
+###### Store Buffer (StoreBuffer.bsv)
+
+The store buffer receives
+write requests from the load/store unit and contains them in a FIFO-like manner
+until the memory arbitration logic dequeues them. It additionally provides a forwarding interface to the load/store unit. Internally, the store buffer is organized
+as FIFO. If a write request is accepted by the arbitration logic, it is additionally held in an in-flight buffer, such that the value may
+still be forwarded during write execution. The store buffer is informed of successful writes such that it may clear the in-flight buffer. The store buffer allows
+for enqueueing and dequeuing of a single request per cycle.
+
+###### functional units (unit folder)
 
 ![](../fig/fu.png)
 
 FUs provide the result calculation of instructions.
 An FU accepts incoming instructions with a blocking BSV method and provides a
-result wrapped in a BSV Maybe type with a non-blocking output method. Conse-
-quently, the result bus, a bus containing all results produced in the current clock
+result wrapped in a BSV Maybe type with a non-blocking output method (i.e. the Maybe is invalid when no result is available, and valid with the result value if there is one). Consequently, the result bus, a bus containing all results produced in the current clock
 cycle, can always be assembled. The ALU and branch units follow the presented
 simple design and hence provide a latency of one cycle. The ALU unit calculates
 integer instructions (except multiply and divide). The branch unit calculates the
@@ -250,11 +272,10 @@ sums in the first cycle and gradually add them in an addition tree structure. Ar
 first if multiple operations finish simultaneously.
 
 
-The CSR unit has a similar prganization to the simple FUs but adds an additional non-blocking
+The CSR unit has a similar organization to the simple FUs but adds an additional non-blocking
 input method to stall its execution since we do not want to replicate the CSR register file as we did with the architectural register file to store speculative results. Hence, the CSR unit is provided with the ROB tail pointer to check whether an instruction is guaranteed to execute.
 We decided against multiple CSR files as the CSRs control many system functions
-that we do not want to change speculatively, CSR instructions are relatively in-
-frequent, and the CSR file can grow large depending on the supported features.
+that we do not want to change speculatively, CSR instructions are relatively infrequent, and the CSR file can grow large depending on the supported features.
 Consequently. Additionally, the CSR unit adds a client interface to request CSR register reads. The
 CSR unit requires instructions to stay in order such that the write in the ROB is
 guaranteed to be cleared and no deadlock is possible. Consequently, the CSR unit
@@ -274,7 +295,7 @@ the data memory arbitration logic if necessary and the last stage collects the r
 
 
 
-##### backend
+##### backend (Backend.bsv)
 
 The backend evaluates, whether instructions are on the correct path and updates
 the architectural state accordingly. It consists of the commit stage as well as the
@@ -282,15 +303,15 @@ architectural state. The architectural state is composed of the registers, the C
 and the memory. To keep up with the execution core, the backend must evaluate
 an instruction amount equal to the issue width per cycle.
 
-###### Regfile
+###### Regfile (RegFileArch.bsv)
 
-The register file stores the architectural registers. Since RISC-V hard-wires the first register to zero, our implementation only
+The architectural register file stores the architectural registers. Since RISC-V hard-wires the first register to zero, our implementation only
 includes 31 registers that store 32-bit words each. Ordering between writes in a
 single cycle is provided by EHRs. The register file accepts an equal amount of
 writes as the issue width. Twice as many read ports are necessary to provide all
-issued instructions with their operands.
+issued instructions with their operands. If latch-based implementation is requested, the module imports `ArianeRegFile.bsv` based on the Ariane RISC-V core.
 
-###### CSR file
+###### CSR file (CSRFile.bsv)
 
 The CSR file is organized similarly to the register file. In addition to storing the
 CSRs, the CSR file also provides interfaces to control portions of the processor.
@@ -317,18 +338,19 @@ The CSR file also provides a hardware thread ID such that programs can distingui
 - mscratch - scratch register for exception handlers
 - mhartid - hardware thread ID register
 
-###### reorder buffer
+###### reorder buffer (ReorderBuffer.bsv)
 
 The ROB is needed to provide
 precise rollback in case of a misprediction or exception. It serializes changes to
 the architectural state which occur out of order in the dynamic execution core.
 
-The ROB is divided into ISSUEWIDTH banks. Each bank is organized like a FIFO. Hence, we may enqueue and dequeue ISSUEWIDTH instructions per cycle. A head and tail pointer store which bank needs to be enqueued/dequeued next. By rotating the input / output instruction vector, we 
+The ROB is divided into ISSUEWIDTH banks. Each bank is organized like a FIFO. Hence, we may enqueue and dequeue ISSUEWIDTH instructions per cycle. A head and tail pointer store which bank needs to be enqueued/dequeued next. By rotating the input / output instruction vector, we preserve the logical order of enqueued instructions.
+
+![](../fig/rob.png)
 
 During execution, we require unique tags to identify each instruction. We derive those
 tags from the position in the internal storage, which an instruction is occupying.
-We are hence guaranteed unique instruction identifiers during the time an in-
-struction is in flight (so after issuing but before retiring). An ROB entry contains:
+We are hence guaranteed unique instruction identifiers during the time an instruction is in flight (so after issuing but before retiring). An ROB entry contains:
 
 - destination register address
 - instruction PC
@@ -342,7 +364,7 @@ result value afterward)
 - boolean to signify if an instruction is an exception return
 - misprediction recovery information (the BHR and RAS head pointer/data)
 
-###### commit stage
+###### commit stage (Commit.bsv)
 
 The commit stage dequeues entries from the ROB and updates the architectural state. The ROB entries are checked against the local epoch register to make sure that they are on
 the correct path. Wrong-path instructions are ignored, as they shall not modify
@@ -366,18 +388,30 @@ modifies multiple CSRs. The mcause CSR is set to reflect the interrupt cause and
 mepc is set to the program counter of the excepting instruction if the exception is
 of an internal source. External exceptions are temporarily disabled during handler execution by modifying the mstatus register.
 
-###### store buffer
+### src_bus
 
-he store buffer receives
-write requests from the load/store unit and contains them in a FIFO-like manner
-until the memory arbitration logic dequeues them. It additionally provides a forwarding interface to the load/store unit. Internally, the store buffer is organized
-as FIFO. If a write request is accepted by the arbitration logic, it is additionally held in an in-flight buffer, such that the value may
-still be forwarded during write execution. The store buffer is informed of successful writes such that it may clear the in-flight buffer. The store buffer allows
-for enqueueing and dequeuing of a single request per cycle.
+This folder contains the simulation UNCORE environment of SCOoOTER. UNCORE refers to all periphery, modules and bus systems outside of the main processor core. An UNCORE enables the processor to be used for useful purposes since it enables the processor to communicate with the outside world.
+
+The main UNCORE module is `IDMemAdapter`, which instantiates the processors and periphery and connects them.
+
+`MemoryDecoder` contains helper functions to check address spaces. Basically, the functions get an address and check if this address is inside a particular memory space.
+
+`BRamImem` and `BRamDmem` wrap BRAM memories for simulation. Those memories behave like FPGA BRAM blocks and hence return a value after 1 cycle. BRamImem scales with the fetch bus width. BRamDmem stays at 32 Bit width since we do not have scaling here.
+
+`periphery` contains the periphery modules. Two adapters from the internal, simple memory bus to AXI full or lite. The RISC-V interrupt controllers CLINT and PLIC (refer to the RISC-V docu for more information). The RVController emulation to emulate TaPaSCo-RISC-V for the testbench.
+
 
 #### src_soc
 
-ASIC implementation for SCOoOTER. WIP.
+Contains sources for the FPGA / TaPaSCo integration of SCOoOTER. `DaveAXIWrapper.bsv` wraps the arbitration module with all cores as an IP with an AXI interface. That is required to import the IP into TaPaSCo.
+
+#### src_openlane
+
+Contains modules for OpenLane / Caravel ASIC design generation.
+
+`SCOoOTER_Wrapper` wraps the processor cores and ties off unused interfaces.
+`SoC_Config` holds config options for the SoC.
+`SoC_AXI` and `SoC_WB` are ASIC implementations with an external AXI or Wishbone interface. Common functionality is implemented in `SoC_Base`. `SoC_Mem` instantiates the IMEM/DMEM memory macros and peripheral components. Memories can be initialized from the external bus which, in our case, is connected to the Caravel management system. The AXI implementation is used in simulation (with `TestSoC_AXI`). The Wishbone implementation is used for Caravel. `OurWishbone` provides the Wishbone implementation. Full system simulation is possible in the Caravel repository. Refer to the Caravel documentation.
 
 #### src_test
 

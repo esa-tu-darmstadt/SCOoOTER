@@ -4,7 +4,7 @@ To gain a better understanding of the progression of data through the pipeline, 
 
 ## Generating the execution log
 
-Run your test while enabling the logging option for scoooter:
+Run your test while enabling the logging option for scoooter. E.g., from the `core` directory:
 
 ```
 make TB=CUSTOM_TB LOG=1

@@ -30,7 +30,13 @@ First, clone the SCOoOTER repository while recursing submodules:
 git clone git@gitlab.esa.informatik.tu-darmstadt.de:risc-v/scoooter.git -r
 ```
 
-Add the project to your BSVTools instance. Alternatively, the test case build script clones and setups BSVTools for you. Test cases can be built using:
+Add the project to your BSVTools instance. 
+
+```
+cd core; python3 $BSV_TOOL_PATH/bsvAdd.py
+```
+
+Alternatively, the test case build script clones and setups BSVTools for you. Test cases can be built using:
 
 ```
 ./build_test_programs.sh
@@ -68,7 +74,7 @@ source ./run_core_v
 
 ## Building IP cores
 
-IP cores are built through BSVTools. When building hardware for synthesis, we should disable generation of debug-code. This can be done by setting the IP environment variable during build.
+IP cores are built through BSVTools. When building hardware for synthesis, we should enable more optimizations that reduce debuggability but generate faster hardware. This can be done by setting the IP environment variable during build. Again, in the `core` directory, execute:
 
 ```
 make SIM_TYPE=VERILOG ip IP=1

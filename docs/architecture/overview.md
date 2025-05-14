@@ -4,9 +4,10 @@ SCOoOTER is a superscalar, speculative out-of-order processor. Additionally, SCO
 
 ## Processor core
 
-![](../fig/scooter_arch.png)
+![](../fig/pipeline.png)
 
-First, lets start with the processor core itself. SCOoOTER follows `Computer Architecture - A quantitative approach` by Hennessy and Patterson. Consequently, the testbook is a good introduction for understanding SCOoOTER.
+First, lets start with the processor core itself. SCOoOTER follows `Computer Architecture - A quantitative approach` by Hennessy and Patterson. Consequently, the textbook is a good introduction for understanding SCOoOTER.
+Before working with SCoOTER, students should gain an overview of Tomasulo's algorithm from said textbook.
 
 SCOoOTER is separated into three large components:
 
@@ -16,7 +17,7 @@ Deals with the fetching and decoding of instructions. Additionally provides the 
 
 ### Execution core
 
-Deals with the execution of instructions. The issue stage dequeues instructions from the instruction window, places them in the reorder buffer and distributes them to the reservation stations. Each reservation station passes ready instructions to the functional unit tasked with execution. An instruction is ready once all operands are available. The functional unit announces the result on the result bus, from where the reservation stations and the reorder buffer may latch the result. The reorder buffer provides instructions to the backend whenever they are ready. Two functional units are connected to the reorder buffer through a handshake interface since they must know whether an instruction is mispredicted or known to be correct-path as they alter some state: the CSR unit and the Load/Store unit.
+Deals with the execution of instructions. The issue stage dequeues instructions from the instruction window, places them in the reorder buffer and distributes them to the reservation stations. Each reservation station passes ready instructions to the functional unit tasked with execution. An instruction is ready once all operands are available. The functional unit announces the result on the result bus, from where the reservation stations and the reorder buffer may latch the result. The reorder buffer provides instructions to the backend whenever they are ready. Two functional units are connected to the reorder buffer through a handshake interface since they must know whether an instruction is mispredicted or correct-path as they alter some state: the CSR unit and the Load/Store unit.
 
 ### Backend
 
@@ -28,7 +29,7 @@ For more information on the implementation details, refer to the developer guide
 
 If multiple cores are used, main memory access must be arbitrated. In future versions, a caching system should deal with arbitration. In the meantime, the __Data Arbitration and atomic ordering Verification Engine (DAVE)__ arbitrates access. The DAVE consists of two arbitrators - one for data memory and one for instruction memory. Requests from the cores are held in a queue. Whenever the bus is free, a request gets dequeued and handled. Atomic ordering of AMO instructions is also handled here. Additionally, the link register needed for lr/sc-Instructions is implemented here (refer to the RISC-V spec for more information).
 
-![](../fig/arbit.png)
+![](../fig/arbiter.png)
 
 ## Uncore bus system
 
