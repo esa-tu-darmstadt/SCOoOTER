@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 
 import os
+import argparse
+import sys
+import json
 
 def get_next_output_path(base_dir, prefix):
     # List all directories in the base directory
@@ -29,6 +32,26 @@ def get_next_output_path(base_dir, prefix):
 
     return next_folder, next_path
 
+parser = argparse.ArgumentParser(description="SCOoOTER Caravel build flow.")
+    
+parser.add_argument(
+    'PERIOD', type=float, help="Frequency (numeric, nanoseconds)"
+)
+parser.add_argument(
+    'UTIL', type=float, help="Utilization (numeric, fraction between 0 and 1)"
+)
+parser.add_argument(
+    '--CARAVEL', action='store_true', help="Use Caravel Wrapper / Build entire SoC, not only Processor"
+)
+    
+args = parser.parse_args()
+period = args.PERIOD
+util = args.UTIL
+
+# check if SCOoOTER config is compatible
+with open("core/src/Config.bsv", "r") as cfg:
+    if args.CARAVEL and "typedef 1 IFUINST" not in cfg.read():
+        print("Caravel wrapper currently only supports IFU width of 1. Please adapt your SCOoOTER config or build processor only.")
 
 # create new output folder
 outfolder, outpath = get_next_output_path("tools/openlane_asic/caravelscoooterdexie/openlane/", "mkScoooter")
@@ -38,6 +61,30 @@ os.system("cd core && make clean && CARAVEL=1 make EFSRAM=1 SIM_TYPE=VERILOG com
 
 # copy template to new out path
 os.system(f"cp -r tools/openlane_asic/mkScoooter {outpath}")
+
+# modify template config with passed values
+topmodule = "mkScoooterCaravel" if args.CARAVEL else "mkDave"
+
+
+with open(f"{outpath}/config.json", 'r') as f:
+    data = json.load(f)
+
+    # Update key values
+    data['CLOCK_PERIOD'] = period
+    data['FP_CORE_UTIL'] = util
+    data['DESIGN_NAME'] = topmodule
+
+    # Remove specified keys if not using CARAVEL
+    if not args.CARAVEL:
+        for key in ["VERILOG_FILES_BLACKBOX", "EXTRA_GDS_FILES", "EXTRA_LEFS", "EXTRA_LIBS", "EXTRA_SPEFS", "MACRO_PLACEMENT_CFG", "FP_PDN_MACRO_HOOKS"]:
+            if key in data:
+                del data[key]
+
+    # Write back the modified JSON
+    with open(f"{outpath}/config.json", 'w') as f:
+        json.dump(data, f, indent=4)
+
+
 
 # copy verilog files to new out path
 os.system(f"cp core/build/verilog/*.v {outpath}/verilog/.")
