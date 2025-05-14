@@ -125,7 +125,7 @@ package SoC_WB;
         method Bit#(38) io_out = extend(sys.gpio_out());
         method Action io(Bit#(38) in);
             action
-                sys.gpio_in(in >> 19);
+                sys.gpio_in(truncate(in >> 19));
             endaction
         endmethod
         

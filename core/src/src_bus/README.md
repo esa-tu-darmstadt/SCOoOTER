@@ -1,6 +1,6 @@
 # BUS / Periphery
 
-This folder contains the UNCORE environment of SCOoOTER. UNCORE refers to all periphery, modules and bus systems outside of the main processor core. An UNCORE enables the processor to be used for useful purposes since it enables the processor to communicate with the outside world.
+This folder contains the simulation UNCORE environment of SCOoOTER. UNCORE refers to all periphery, modules and bus systems outside of the main processor core. An UNCORE enables the processor to be used for useful purposes since it enables the processor to communicate with the outside world.
 
 The main UNCORE module is `IDMemAdapter`, which instantiates the processors and periphery and connects them.
 

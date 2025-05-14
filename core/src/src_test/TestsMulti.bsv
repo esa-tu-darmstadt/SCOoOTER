@@ -12,6 +12,7 @@ package TestsMulti;
     import Assertions :: *;
     import Types::*;
     import TestFunctions::*;
+    import BuildList::*;
 
     // struct to store info about test
     typedef struct {
