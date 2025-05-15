@@ -7,10 +7,10 @@ variables:
 stages:
   - deps
   - build
+  - corev
   - isa
   - priv
   - multi
-  - corev
   - embench (gskewed)
   - embench (no predictor)
 
@@ -298,7 +298,7 @@ run_corev_simple:
   stage: corev
   timeout: 2d
   script:
-    - yum install -y dtc python3 python3-pip libXft
+    - yum install -y dtc python3 python3-pip libXft python3-devel
     - pushd tools/core-v-verif/bin
     - pip3 install -r requirements.txt
     - popd
@@ -318,7 +318,7 @@ run_corev_medium:
   stage: corev
   timeout: 2d
   script:
-    - yum install -y dtc python3 python3-pip libXft
+    - yum install -y dtc python3 python3-pip libXft python3-devel
     - pushd tools/core-v-verif/bin
     - pip3 install -r requirements.txt
     - popd
@@ -338,7 +338,7 @@ run_corev_high:
   stage: corev
   timeout: 2d
   script:
-    - yum install -y dtc python3 python3-pip libXft
+    - yum install -y dtc python3 python3-pip libXft python3-devel
     - pushd tools/core-v-verif/bin
     - pip3 install -r requirements.txt
     - popd
