@@ -70,6 +70,7 @@ with open(f"{outpath}/config.json", 'r') as f:
     data = json.load(f)
 
     # Update key values
+    data['CLOCK_PORT'] = "clk_i"
     data['CLOCK_PERIOD'] = period
     data['FP_CORE_UTIL'] = util
     data['DESIGN_NAME'] = topmodule
