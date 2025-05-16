@@ -11,7 +11,7 @@ set -e
 
 # build SCOOOTER pe
 pushd core
-make SIM_TYPE=VERILOG ip
+make SOC=1 SIM_TYPE=VERILOG ip
 popd
 
 # clean previous TaPaSCo builds and patch tapasco-riscv accordingly

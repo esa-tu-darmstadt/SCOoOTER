@@ -8,10 +8,8 @@ MAIN_MODULE=src_core/Dave
 TESTBENCH_FILE=src/src_test/Testbench.bsv
 
 ifeq ($(SOC), 1)
-	TOP_MODULE=mkSocTop
-	TESTBENCH_MODULE=mkSocTop
-	MAIN_MODULE=src_soc/SocTop
-	TESTBENCH_FILE=src/src_soc/SocTop.bsv
+	TOP_MODULE=mkDaveAXIWrapper
+	MAIN_MODULE=src_soc/DaveAXIWrapper
 endif
 
 ifeq ($(CARAVEL), 1)

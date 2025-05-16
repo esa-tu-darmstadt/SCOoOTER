@@ -22,22 +22,22 @@ interface MemMappedIFC#(numeric type addrwidth);
 endinterface
 
 interface DaveAXIWrapper;
-    (* prefix="m_axi_imem" *)
+    (* prefix="axi_master_fetch" *)
     interface AXI4_Lite_Master_Rd_Fab#(XLEN, TMul#(XLEN, IFUINST)) imem_r;
-    (* prefix="m_axi_imem" *)
+    (* prefix="axi_master_fetch" *)
     interface AXI4_Lite_Master_Wr_Fab#(XLEN, TMul#(XLEN, IFUINST)) imem_w;
 
-    (* prefix="m_axi_dmem" *)
+    (* prefix="axi_master_data" *)
     interface AXI4_Lite_Master_Rd_Fab#(XLEN, XLEN) dmem_r;
-    (* prefix="m_axi_dmem" *)
+    (* prefix="axi_master_data" *)
     interface AXI4_Lite_Master_Wr_Fab#(XLEN, XLEN) dmem_w;
 
     (* always_ready, always_enabled *)
-    method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
+    method Action sw_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b);
     (* always_ready, always_enabled *)
-    method Action timer_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
+    method Action timer_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b);
     (* always_ready, always_enabled *)
-    method Action ext_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) in);
+    method Action ext_int(Vector#(NUM_CPU, Vector#(NUM_THREADS, Bool)) b);
 
     `ifdef EVA_BR
         method UInt#(XLEN) correct_pred_br;
