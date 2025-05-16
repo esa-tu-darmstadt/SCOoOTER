@@ -70,14 +70,14 @@ with open(f"{outpath}/config.json", 'r') as f:
     data = json.load(f)
 
     # Update key values
-    data['CLOCK_PORT'] = "clk_i"
     data['CLOCK_PERIOD'] = period
     data['FP_CORE_UTIL'] = util
     data['DESIGN_NAME'] = topmodule
 
     # Remove specified keys if not using CARAVEL
     if not args.CARAVEL:
-        for key in ["VERILOG_FILES_BLACKBOX", "EXTRA_GDS_FILES", "EXTRA_LEFS", "EXTRA_LIBS", "EXTRA_SPEFS", "MACRO_PLACEMENT_CFG", "FP_PDN_MACRO_HOOKS"]:
+        data['CLOCK_PORT'] = "clk_i"
+        for key in ["VERILOG_FILES_BLACKBOX", "EXTRA_GDS_FILES", "EXTRA_LEFS", "EXTRA_LIBS", "EXTRA_SPEFS", "MACRO_PLACEMENT_CFG", "FP_PDN_MACRO_HOOKS", "FP_PIN_ORDER_CFG"]:
             if key in data:
                 del data[key]
 
