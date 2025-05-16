@@ -88,6 +88,7 @@ with open(f"{outpath}/config.json", 'r') as f:
 
 
 # copy verilog files to new out path
+os.system(f"mkdir -p {outpath}/verilog/")
 os.system(f"cp core/build/verilog/*.v {outpath}/verilog/.")
 
 # modify verilog file
