@@ -1,6 +1,6 @@
 ![](logo.svg)
 
-Speculative Configurable Out-of-Order Teaching_Enabled RISC-V (SCOoOTER) is a processor creation framework aimed at educational usage.
+Speculative Configurable Out-of-Order Teaching-Enhanced RISC-V (SCOoOTER) is a processor creation framework aimed at educational usage.
 SCOoOTER is built with clean easy to understand interfaces such that students can start extending or exchanging parts easily.
 SCOoOTER has various configuration options, simulation and implementation targets to facilitate exploration of different design choices.
 
