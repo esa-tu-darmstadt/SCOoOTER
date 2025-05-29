@@ -30,4 +30,4 @@
 	url = ../../Bluespec/bluesky130ram.git
 [submodule "tools/openlane_asic/caravel"]
 	path = tools/openlane_asic/caravel
-	url = https://github.com/chipfoundry/caravel.git
+	url = https://github.com/chipfoundry/caravel_user_project.git
