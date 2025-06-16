@@ -22,9 +22,6 @@
 [submodule "core/libraries/BlueSRAM"]
 	path = core/libraries/BlueSRAM
 	url = git@gitlab.esa.informatik.tu-darmstadt.de:asic/bluesram.git
-[submodule "tools/openlane_asic/caravelscoooterdexie"]
-	path = tools/openlane_asic/caravelscoooterdexie
-	url = ../SHMoDaCo/caravelscoooterdexie.git
 [submodule "core/libraries/bluesky130ram"]
 	path = core/libraries/bluesky130ram
 	url = ../../Bluespec/bluesky130ram.git
