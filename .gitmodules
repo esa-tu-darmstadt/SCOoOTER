@@ -28,3 +28,6 @@
 [submodule "tools/openlane_asic/caravel"]
 	path = tools/openlane_asic/caravel
 	url = https://github.com/chipfoundry/caravel_user_project.git
+[submodule "tools/openlane_asic/ip/EF_SRAM_1024x32"]
+	path = tools/openlane_asic/ip/EF_SRAM_1024x32
+	url = https://github.com/efabless/EF_SRAM_1024x32

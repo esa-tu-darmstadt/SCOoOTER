@@ -98,7 +98,7 @@ vpwrpc
 `endif
 
 
-EF_SRAM_1024x32_wrapper wrapped_inst
+EF_SRAM_1024x32 wrapped_inst
 (
     .DO(DO),
     .ScanOutCC(ScanOutCC),
