@@ -19,12 +19,9 @@
 [submodule "tools/tapasco-integration/tapasco-riscv"]
 	path = tools/tapasco-integration/tapasco-riscv
 	url = https://github.com/esa-tu-darmstadt/tapasco-riscv
-[submodule "core/libraries/BlueSRAM"]
-	path = core/libraries/BlueSRAM
-	url = git@gitlab.esa.informatik.tu-darmstadt.de:asic/bluesram.git
 [submodule "core/libraries/bluesky130ram"]
 	path = core/libraries/bluesky130ram
-	url = ../../Bluespec/bluesky130ram.git
+	url = https://github.com/esa-tu-darmstadt/BlueSky130RAM.git
 [submodule "tools/openlane_asic/caravel"]
 	path = tools/openlane_asic/caravel
 	url = https://github.com/chipfoundry/caravel_user_project.git
