@@ -212,7 +212,7 @@ module mkPLIC(PLICIFC#(num_periphery, prio_levels)) provisos (
                     end
 
                     // src enable bits
-                    if (addr >= 'h2000 && addr < 200000) begin
+                    if (addr >= 'h2000 && addr < 'h200000) begin
                         UInt#(hart_id_width) idx = truncate(addr >> 7);
                         read_val <= extend({enable_reg[idx], 1'h0});
                     end
